@@ -190,9 +190,9 @@ QQC2.Page {
                         text: aboutPage.upToDateShown ? i18n("Sugo is up to date.")
                               : !UpdateChecker.canInstall ? i18n("Look for a newer version on GitHub.")
                               : AppSettings.updateChannel === "nightly"
-                                ? (AppSettings.autoInstallUpdates ? i18n("Sugo installs every nightly build by itself.")
+                                ? (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new nightly builds by itself.")
                                                                   : i18n("Updates come from the nightly builds."))
-                                : (AppSettings.autoInstallUpdates ? i18n("Sugo installs new releases by itself.")
+                                : (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new releases by itself.")
                                                                   : i18n("Updates come from the stable releases."))
                         color: aboutPage.upToDateShown ? Theme.positive : Theme.muted
                         font.pixelSize: Theme.fontBody

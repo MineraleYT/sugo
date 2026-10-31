@@ -439,9 +439,9 @@ QQC2.Page {
                     }
                 }
                 SettingRow {
-                    title: i18n("Install updates automatically")
-                    description: i18n("Sugo looks for a new version every few hours, installs it, and offers to restart. Turned off, it only looks when you ask, in About.")
-                    SettingSwitch { setting: "autoInstallUpdates" }
+                    title: i18n("Check for updates automatically")
+                    description: i18n("Sugo looks for a new version every few hours and tells you; it downloads it only when you click Install. Turned off, it only looks when you ask, in About.")
+                    SettingSwitch { setting: "autoCheckUpdates" }
                 }
             }
 

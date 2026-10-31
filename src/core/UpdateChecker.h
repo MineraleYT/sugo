@@ -27,9 +27,10 @@ class QSaveFile;
  *       "sha256": "<64 hex digits>", "size": 45939192, "page": "https://github.com/MineraleYT/sugo/releases/tag/nightly" }
  *
  * The feed is newer when its version is (compareVersions(); nightly versions are the next
- * release's pre-releases, so they sit between two releases). An AppImage downloads the file next
- * to itself, checks its size and SHA-256, and only then puts it in its own place; the new version
- * starts with launchUpdated() after the program quits. Other packages (Flatpak, a distribution's,
+ * release's pre-releases, so they sit between two releases). When asked to install it
+ * (installUpdate(); never by itself), an AppImage downloads the file next to itself, checks its
+ * size and SHA-256, and only then puts it in its own place; the new version starts with
+ * launchUpdated() after the program quits. Other packages (Flatpak, a distribution's,
  * a build from source) only say that an update exists, with a link to it, and only check when asked.
  */
 class UpdateChecker : public QObject
@@ -65,8 +66,8 @@ public:
     explicit UpdateChecker(QObject *parent = nullptr);
     ~UpdateChecker() override;
 
-    /// Follows the update channel and the automatic installs of `settings`; an AppImage with
-    /// automatic installs on then checks a minute after the start and every six hours.
+    /// Follows the update channel and the automatic checks of `settings`; an AppImage with
+    /// automatic checks on looks a minute after the start and every six hours.
     void attach(AppSettings *settings);
 
     Status status() const { return m_status; }
@@ -82,8 +83,8 @@ public:
     /// "stable" or "nightly"; anything else reads as "stable". Only an AppImage follows nightly.
     QString channel() const;
     void setChannel(const QString &channel);
-    /// Install updates as soon as a check finds them (AppImage only).
-    void setAutoInstall(bool enabled) { m_autoInstall = enabled; }
+    /// Look for updates by itself (AppImage only); what it finds is installed only when asked.
+    void setAutoCheck(bool enabled) { m_autoCheck = enabled; }
 
     Q_INVOKABLE void checkForUpdates();
     /// Downloads and puts in place the update a check found.
@@ -142,7 +143,7 @@ private:
     QPointer<QNetworkReply> m_reply; ///< The request in flight; replies of older requests are ignored.
 
     QString m_channel = QStringLiteral("stable");
-    bool m_autoInstall = false;
+    bool m_autoCheck = false;
     bool m_restartOnQuit = false;
     QString m_appImagePath;
     QUrl m_feedUrlOverride;

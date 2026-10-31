@@ -195,14 +195,22 @@ Rectangle {
             Layout.fillHeight: true
         }
 
+        // The AppImage's update, one step at a time: found, downloading, installed.
         NavItem {
+            readonly property bool found: UpdateChecker.canInstall && UpdateChecker.status === UpdateChecker.UpdateAvailable
+            readonly property bool downloading: UpdateChecker.status === UpdateChecker.Downloading
+            readonly property bool installed: UpdateChecker.status === UpdateChecker.ReadyToRestart
             Layout.fillWidth: true
-            visible: UpdateChecker.status === UpdateChecker.ReadyToRestart
-            text: i18n("Restart to update")
-            iconName: "refresh"
-            dotColor: Theme.brand
-            Accessible.description: i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
-            onClicked: sidebar.restartRequested()
+            visible: found || downloading || installed
+            enabled: !downloading
+            text: installed ? i18n("Restart to update")
+                  : downloading ? i18n("Downloading update… %1%", Math.round(UpdateChecker.progress * 100))
+                  : i18n("Install update")
+            iconName: installed ? "refresh" : "download"
+            dotColor: downloading ? "transparent" : Theme.brand
+            Accessible.description: installed ? i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
+                                              : i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+            onClicked: installed ? sidebar.restartRequested() : UpdateChecker.installUpdate()
         }
         NavItem {
             Layout.fillWidth: true

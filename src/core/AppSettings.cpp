@@ -40,7 +40,7 @@ const char kFirstRunCompleted[] = "FirstRunCompleted";
 const char kPromptTaskNote[] = "PromptTaskNote";
 const char kColorScheme[] = "ColorScheme";
 const char kUpdateChannel[] = "UpdateChannel";
-const char kAutoInstallUpdates[] = "AutoInstallUpdates";
+const char kAutoCheckUpdates[] = "AutoCheckUpdates";
 
 QString validColorScheme(const QString &scheme)
 {
@@ -112,7 +112,7 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_colorScheme = validColorScheme(settings.value(QLatin1String(kColorScheme), QStringLiteral("system")).toString());
     applyColorScheme();
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QStringLiteral("stable");
-    m_autoInstallUpdates = settings.value(QLatin1String(kAutoInstallUpdates), true).toBool();
+    m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), true).toBool();
 
     // The program may have moved since the entry was written (new install prefix).
     if (m_autostart) {
@@ -384,14 +384,14 @@ void AppSettings::setUpdateChannel(const QString &channel)
     Q_EMIT updateChannelChanged();
 }
 
-void AppSettings::setAutoInstallUpdates(bool enabled)
+void AppSettings::setAutoCheckUpdates(bool enabled)
 {
-    if (m_autoInstallUpdates == enabled) {
+    if (m_autoCheckUpdates == enabled) {
         return;
     }
-    m_autoInstallUpdates = enabled;
-    store(kAutoInstallUpdates, enabled);
-    Q_EMIT autoInstallUpdatesChanged();
+    m_autoCheckUpdates = enabled;
+    store(kAutoCheckUpdates, enabled);
+    Q_EMIT autoCheckUpdatesChanged();
 }
 
 void AppSettings::applyColorScheme()

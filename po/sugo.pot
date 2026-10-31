@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-31 01:41+0100\n"
+"POT-Creation-Date: 2026-10-31 02:25+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,101 +18,312 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/core/PresetSettings.cpp:12
-msgid "Silence notifications while working"
+#: src/stats/StatsModel.cpp:185
+msgctxt ""
+"QDate::toString() format of the first day of a week within one month, e.g. "
+"\"5\" in \"5 – 11 October 2026\""
+msgid "d"
 msgstr ""
 
-#: src/core/PresetSettings.cpp:13
+#: src/stats/StatsModel.cpp:189
+msgctxt ""
+"QDate::toString() format of the last day of a week within one month, e.g. "
+"\"11 October 2026\" in \"5 – 11 October 2026\""
+msgid "d MMMM yyyy"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:194
+msgctxt ""
+"QDate::toString() format of the first day of a week spanning two months, "
+"e.g. \"28 Sep\" in \"28 Sep – 4 Oct 2026\""
+msgid "d MMM"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:198
+msgctxt ""
+"QDate::toString() format of the last day of a week spanning two months, e.g. "
+"\"4 Oct 2026\" in \"28 Sep – 4 Oct 2026\""
+msgid "d MMM yyyy"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:203
+msgctxt ""
+"QDate::toString() format of either day of a week spanning two years, e.g. "
+"\"29 Dec 2025\""
+msgid "d MMM yyyy"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:207
+msgctxt "@title week range: %1 first day, %2 last day"
+msgid "%1 – %2"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:211
+msgctxt "@title %1 month name, %2 year"
+msgid "%1 %2"
+msgstr ""
+
+#: src/stats/StatsModel.cpp:362
 msgid ""
-"Turns off all system notifications for the whole work phase and turns them "
-"back on during the break."
+"%1:00 %2 – %3:00 %4\n"
+"Work: %5\n"
+"Breaks: %6"
 msgstr ""
 
-#: src/core/PresetSettings.cpp:17
-msgid "Auto-start mode"
+#: src/stats/StatsModel.cpp:368
+msgid ""
+"%1:00 – %2:00\n"
+"Work: %3\n"
+"Breaks: %4"
 msgstr ""
 
-#: src/core/PresetSettings.cpp:18
-msgid "Choose whether breaks, work phases, or neither start automatically."
+#: src/stats/StatsModel.cpp:377 src/stats/StatsModel.cpp:383
+msgid ""
+"%1\n"
+"Work: %2\n"
+"Breaks: %3"
 msgstr ""
 
-#: src/core/PresetSettings.cpp:24
-msgid "Play a sound when a phase ends"
+#: src/stats/StatsModel.cpp:402
+msgctxt "clock hour"
+msgid "%1:00"
 msgstr ""
 
-#: src/core/PresetSettings.cpp:29
-msgid "Show a notification when a phase ends"
+#: src/stats/StatsModel.cpp:440
+msgid ""
+"%1\n"
+"Work: %2"
 msgstr ""
 
-#: src/core/SilenceController.cpp:61
-msgid "A focus session is in progress"
+#: src/stats/StatsModel.cpp:504
+msgid "Untitled Timer"
 msgstr ""
 
-#: src/core/TrayController.cpp:251 src/core/TrayController.cpp:295
-msgid "Hide Window"
+#: src/stats/StatsModel.cpp:506
+msgid "Uncategorized"
 msgstr ""
 
-#: src/core/TrayController.cpp:251 src/core/TrayController.cpp:295
-msgid "Show Window"
+#: src/stats/StatsModel.cpp:508
+msgid "Without note"
 msgstr ""
 
-#: src/core/TrayController.cpp:277
-msgid "Statistics"
+#: src/stats/StatsModel.cpp:529
+msgid "0m"
 msgstr ""
 
-#: src/core/TrayController.cpp:280
-msgid "Settings"
+#: src/stats/StatsModel.cpp:537
+msgid "%1h %2m"
 msgstr ""
 
-#: src/core/TrayController.cpp:283
-msgid "Timer"
+#: src/stats/StatsModel.cpp:539
+msgid "%1h"
 msgstr ""
 
-#: src/core/TrayController.cpp:286 src/platform/KRunnerService.cpp:67
-msgid "Stop"
+#: src/stats/StatsModel.cpp:542
+#, c-format
+msgid "%1m"
 msgstr ""
 
-#: src/core/TrayController.cpp:289 src/core/PhaseNotifier.cpp:130
-#: src/platform/KRunnerService.cpp:66
-msgid "Skip"
+#: src/stats/StatsModel.cpp:544
+#, c-format
+msgid "%1s"
 msgstr ""
 
-#: src/core/TrayController.cpp:292
-msgid "Quit"
-msgstr ""
-
-#: src/core/TrayController.cpp:406 src/platform/KRunnerService.cpp:65
-msgid "Resume"
-msgstr ""
-
-#: src/core/TrayController.cpp:408 src/platform/KRunnerService.cpp:63
+#: src/platform/KRunnerService.cpp:63 src/core/TrayController.cpp:408
 msgid "Start"
 msgstr ""
 
-#: src/core/TrayController.cpp:408
-msgid "Start break"
-msgstr ""
-
-#: src/core/TrayController.cpp:410 src/platform/KRunnerService.cpp:64
+#: src/platform/KRunnerService.cpp:64 src/core/TrayController.cpp:410
 msgid "Pause"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:24 src/core/PresetModel.cpp:90
-#: src/platform/KRunnerService.cpp:95
+#: src/platform/KRunnerService.cpp:65 src/core/TrayController.cpp:406
+msgid "Resume"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:66 src/core/TrayController.cpp:289
+#: src/core/PhaseNotifier.cpp:130
+msgid "Skip"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:67 src/core/TrayController.cpp:286
+msgid "Stop"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:85
+msgid "Sugo: control from other programs is turned off"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:86
+msgid "Open Sugo to change this in its settings"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:95 src/core/TrayPresenter.cpp:24
+#: src/core/PresetModel.cpp:90
 msgid "Work"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:26 src/platform/KRunnerService.cpp:97
+#: src/platform/KRunnerService.cpp:97 src/core/TrayPresenter.cpp:26
 msgid "Short break"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:28 src/platform/KRunnerService.cpp:99
+#: src/platform/KRunnerService.cpp:99 src/core/TrayPresenter.cpp:28
 msgid "Long break"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:42 src/core/TrayPresenter.cpp:68 src/main.cpp:72
-#: src/main.cpp:76
+#: src/platform/KRunnerService.cpp:105
+msgid "Start Pomodoro Timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:105 src/platform/KRunnerService.cpp:206
+msgid "Preset: %1"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:110
+msgid "Pause Pomodoro Timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:110 src/platform/KRunnerService.cpp:115
+msgid "%1 remaining"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:115
+msgid "Resume Pomodoro Timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:120
+msgid "Stop Pomodoro Timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:120
+msgid "Reset session"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:125
+msgid "Skip to Next Phase"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:126
+msgid "Advance to the next work or break phase"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:138
+msgid "Start %1-minute timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:139
+msgid "Start custom focus session"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:142
+msgid "Choose between 1 and %1 minutes"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:143
+msgid "A custom focus session lasts 1 to %1 minutes."
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:159
+msgid "Start preset %1"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:160
+msgid "%1 minute of work"
+msgid_plural "%1 minutes of work"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/platform/KRunnerService.cpp:180
+msgid "Sugo: Paused (%1 left)"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:181
+msgid "Click to resume %1"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:186
+msgid "Sugo: %1 (%2 left)"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:187
+msgid "Click to pause timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:193
+msgid "Skip to next phase"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:199
+msgid "Stop timer"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:205
+msgid "Start Pomodoro (%1 min)"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:211
+msgid "Open Sugo Window"
+msgstr ""
+
+#: src/platform/DBusTimerService.cpp:22
+msgid "Control by other programs is turned off in Sugo's settings."
+msgstr ""
+
+#: src/main.cpp:72 src/main.cpp:76 src/core/TrayPresenter.cpp:42
+#: src/core/TrayPresenter.cpp:68
 msgid "Sugo"
+msgstr ""
+
+#: src/main.cpp:78
+msgid "A Pomodoro timer with time statistics"
+msgstr ""
+
+#: src/main.cpp:79
+msgid "© 2026 Sugo contributors"
+msgstr ""
+
+#: src/main.cpp:87
+msgid "Start hidden in the system tray (used by the login entry)"
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:329
+msgid "No release has been published on this channel yet."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:343
+msgid "Failed to parse release information."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:350
+msgid "No version information found in release."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:367
+msgid "The update information is incomplete."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:389
+msgid "Cannot write the update next to %1: %2"
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:413
+msgid "The update is larger than announced."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:420
+msgid "Cannot write the update: %1"
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:443
+msgid "Could not download the update: %1"
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:448
+msgid "The downloaded update is damaged; it was not installed."
+msgstr ""
+
+#: src/core/UpdateChecker.cpp:457
+msgid "Cannot install the update: %1"
 msgstr ""
 
 #: src/core/TrayPresenter.cpp:43
@@ -148,6 +359,240 @@ msgctxt ""
 "@item:inmenu Tray menu status line: %1 is the phase (e.g. Work), %2 the time "
 "left (e.g. 12:30), %3 the name of the timer"
 msgid "%1 · %2 · %3"
+msgstr ""
+
+#: src/core/TrayController.cpp:251 src/core/TrayController.cpp:295
+msgid "Hide Window"
+msgstr ""
+
+#: src/core/TrayController.cpp:251 src/core/TrayController.cpp:295
+msgid "Show Window"
+msgstr ""
+
+#: src/core/TrayController.cpp:277
+msgid "Statistics"
+msgstr ""
+
+#: src/core/TrayController.cpp:280
+msgid "Settings"
+msgstr ""
+
+#: src/core/TrayController.cpp:283
+msgid "Timer"
+msgstr ""
+
+#: src/core/TrayController.cpp:292
+msgid "Quit"
+msgstr ""
+
+#: src/core/TrayController.cpp:408
+msgid "Start break"
+msgstr ""
+
+#: src/core/SilenceController.cpp:61
+msgid "A focus session is in progress"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:12
+msgid "Silence notifications while working"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:13
+msgid ""
+"Turns off all system notifications for the whole work phase and turns them "
+"back on during the break."
+msgstr ""
+
+#: src/core/PresetSettings.cpp:17
+msgid "Auto-start mode"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:18
+msgid "Choose whether breaks, work phases, or neither start automatically."
+msgstr ""
+
+#: src/core/PresetSettings.cpp:24
+msgid "Play a sound when a phase ends"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:29
+msgid "Show a notification when a phase ends"
+msgstr ""
+
+#: src/core/PresetModel.cpp:34
+msgctxt "duration in minutes"
+msgid "%1 min"
+msgid_plural "%1 min"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/core/PresetModel.cpp:37
+msgctxt "duration in seconds"
+msgid "%1 s"
+msgid_plural "%1 s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/core/PresetModel.cpp:39
+msgctxt "duration in minutes and seconds"
+msgid "%1 min %2 s"
+msgstr ""
+
+#: src/core/PresetModel.cpp:89
+msgid "Pomodoro"
+msgstr ""
+
+#: src/core/PresetModel.cpp:146
+msgid "Timer / Pomodoro"
+msgstr ""
+
+#: src/core/PresetModel.cpp:147
+msgid "Tomato"
+msgstr ""
+
+#: src/core/PresetModel.cpp:148
+msgid "Focus / Target"
+msgstr ""
+
+#: src/core/PresetModel.cpp:149
+msgid "Study / Reading"
+msgstr ""
+
+#: src/core/PresetModel.cpp:150
+msgid "Sprint / Speed"
+msgstr ""
+
+#: src/core/PresetModel.cpp:151
+msgid "Writing / Notes"
+msgstr ""
+
+#: src/core/PresetModel.cpp:152
+msgid "Coding / Execution"
+msgstr ""
+
+#: src/core/PresetModel.cpp:153
+msgid "Tasks / Checklist"
+msgstr ""
+
+#: src/core/PresetModel.cpp:154
+msgid "Research"
+msgstr ""
+
+#: src/core/PresetModel.cpp:155
+msgid "Goal / Milestone"
+msgstr ""
+
+#: src/core/PresetModel.cpp:156
+msgid "Favorite"
+msgstr ""
+
+#: src/core/PresetModel.cpp:157
+msgid "Break / Rest"
+msgstr ""
+
+#: src/core/PresetModel.cpp:235
+msgctxt "%1 work duration, %2 break duration"
+msgid "%1 work, %2 break"
+msgstr ""
+
+#: src/core/PresetModel.cpp:444
+msgid "New Timer"
+msgstr ""
+
+#: src/core/PresetModel.cpp:487
+msgid "%1 (copy)"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:19
+msgid "%1 second"
+msgid_plural "%1 seconds"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/core/PhaseNotifier.cpp:21
+msgid "%1 minute"
+msgid_plural "%1 minutes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/core/PhaseNotifier.cpp:85
+msgid "Work session finished"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:87
+msgid "Long break started: %1."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:88
+msgid "Time for a long break: %1."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:90
+msgid "Short break started: %1."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:91
+msgid "Time for a short break: %1."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:94
+msgid "The next work session has started."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:94
+msgid "Time to start the next work session."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:97
+msgid "Break is over"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:98
+msgid "Work session started."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:98
+msgid "Time to get back to work."
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:109
+msgid "Log Task"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:110
+msgid "What did you accomplish?"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:111
+msgid "Save"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:130
+msgid "Skip Break"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:133
+msgid "Pause Work"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:133
+msgid "Pause Break"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:143
+msgid "Start Long Break"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:146
+msgid "Start Short Break"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:149
+msgid "Start Work"
+msgstr ""
+
+#: src/core/PhaseNotifier.cpp:164
+msgid "View"
 msgstr ""
 
 #: src/core/Diagnostics.cpp:270
@@ -233,90 +678,6 @@ msgstr ""
 
 #: src/core/DataManager.cpp:340
 msgid "Backup restored."
-msgstr ""
-
-#: src/core/PresetModel.cpp:34
-msgctxt "duration in minutes"
-msgid "%1 min"
-msgid_plural "%1 min"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PresetModel.cpp:37
-msgctxt "duration in seconds"
-msgid "%1 s"
-msgid_plural "%1 s"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PresetModel.cpp:39
-msgctxt "duration in minutes and seconds"
-msgid "%1 min %2 s"
-msgstr ""
-
-#: src/core/PresetModel.cpp:89
-msgid "Pomodoro"
-msgstr ""
-
-#: src/core/PresetModel.cpp:146
-msgid "Timer / Pomodoro"
-msgstr ""
-
-#: src/core/PresetModel.cpp:147
-msgid "Tomato"
-msgstr ""
-
-#: src/core/PresetModel.cpp:148
-msgid "Focus / Target"
-msgstr ""
-
-#: src/core/PresetModel.cpp:149
-msgid "Study / Reading"
-msgstr ""
-
-#: src/core/PresetModel.cpp:150
-msgid "Sprint / Speed"
-msgstr ""
-
-#: src/core/PresetModel.cpp:151
-msgid "Writing / Notes"
-msgstr ""
-
-#: src/core/PresetModel.cpp:152
-msgid "Coding / Execution"
-msgstr ""
-
-#: src/core/PresetModel.cpp:153
-msgid "Tasks / Checklist"
-msgstr ""
-
-#: src/core/PresetModel.cpp:154
-msgid "Research"
-msgstr ""
-
-#: src/core/PresetModel.cpp:155
-msgid "Goal / Milestone"
-msgstr ""
-
-#: src/core/PresetModel.cpp:156
-msgid "Favorite"
-msgstr ""
-
-#: src/core/PresetModel.cpp:157
-msgid "Break / Rest"
-msgstr ""
-
-#: src/core/PresetModel.cpp:235
-msgctxt "%1 work duration, %2 break duration"
-msgid "%1 work, %2 break"
-msgstr ""
-
-#: src/core/PresetModel.cpp:444
-msgid "New Timer"
-msgstr ""
-
-#: src/core/PresetModel.cpp:487
-msgid "%1 (copy)"
 msgstr ""
 
 #: src/core/CalendarSync.cpp:182
@@ -460,98 +821,6 @@ msgid ""
 "login was refused."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:19
-msgid "%1 second"
-msgid_plural "%1 seconds"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PhaseNotifier.cpp:21
-msgid "%1 minute"
-msgid_plural "%1 minutes"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PhaseNotifier.cpp:85
-msgid "Work session finished"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:87
-msgid "Long break started: %1."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:88
-msgid "Time for a long break: %1."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:90
-msgid "Short break started: %1."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:91
-msgid "Time for a short break: %1."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:94
-msgid "The next work session has started."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:94
-msgid "Time to start the next work session."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:97
-msgid "Break is over"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:98
-msgid "Work session started."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:98
-msgid "Time to get back to work."
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:109
-msgid "Log Task"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:110
-msgid "What did you accomplish?"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:111
-msgid "Save"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:130
-msgid "Skip Break"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:133
-msgid "Pause Work"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:133
-msgid "Pause Break"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:143
-msgid "Start Long Break"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:146
-msgid "Start Short Break"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:149
-msgid "Start Work"
-msgstr ""
-
-#: src/core/PhaseNotifier.cpp:164
-msgid "View"
-msgstr ""
-
 #: src/core/AppSettings.cpp:218
 msgid "Could not set up starting Sugo at login."
 msgstr ""
@@ -560,376 +829,260 @@ msgstr ""
 msgid "Could not remove the entry that starts Sugo at login."
 msgstr ""
 
-#: src/core/UpdateChecker.cpp:328
-msgid "No release has been published on this channel yet."
+#: src/qml/pages/WelcomePage.qml:15
+msgid "Welcome"
 msgstr ""
 
-#: src/core/UpdateChecker.cpp:342
-msgid "Failed to parse release information."
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:349
-msgid "No version information found in release."
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:366
-msgid "The update information is incomplete."
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:390
-msgid "Cannot write the update next to %1: %2"
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:414
-msgid "The update is larger than announced."
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:421
-msgid "Cannot write the update: %1"
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:444
-msgid "Could not download the update: %1"
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:449
-msgid "The downloaded update is damaged; it was not installed."
-msgstr ""
-
-#: src/core/UpdateChecker.cpp:458
-msgid "Cannot install the update: %1"
-msgstr ""
-
-#: src/platform/DBusTimerService.cpp:22
-msgid "Control by other programs is turned off in Sugo's settings."
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:85
-msgid "Sugo: control from other programs is turned off"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:86
-msgid "Open Sugo to change this in its settings"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:105
-msgid "Start Pomodoro Timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:105 src/platform/KRunnerService.cpp:206
-msgid "Preset: %1"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:110
-msgid "Pause Pomodoro Timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:110 src/platform/KRunnerService.cpp:115
-msgid "%1 remaining"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:115
-msgid "Resume Pomodoro Timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:120
-msgid "Stop Pomodoro Timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:120
-msgid "Reset session"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:125
-msgid "Skip to Next Phase"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:126
-msgid "Advance to the next work or break phase"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:138
-msgid "Start %1-minute timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:139
-msgid "Start custom focus session"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:142
-msgid "Choose between 1 and %1 minutes"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:143
-msgid "A custom focus session lasts 1 to %1 minutes."
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:159
-msgid "Start preset %1"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:160
-msgid "%1 minute of work"
-msgid_plural "%1 minutes of work"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/platform/KRunnerService.cpp:180
-msgid "Sugo: Paused (%1 left)"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:181
-msgid "Click to resume %1"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:186
-msgid "Sugo: %1 (%2 left)"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:187
-msgid "Click to pause timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:193
-msgid "Skip to next phase"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:199
-msgid "Stop timer"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:205
-msgid "Start Pomodoro (%1 min)"
-msgstr ""
-
-#: src/platform/KRunnerService.cpp:211
-msgid "Open Sugo Window"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:185
-msgctxt ""
-"QDate::toString() format of the first day of a week within one month, e.g. "
-"\"5\" in \"5 – 11 October 2026\""
-msgid "d"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:189
-msgctxt ""
-"QDate::toString() format of the last day of a week within one month, e.g. "
-"\"11 October 2026\" in \"5 – 11 October 2026\""
-msgid "d MMMM yyyy"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:194
-msgctxt ""
-"QDate::toString() format of the first day of a week spanning two months, "
-"e.g. \"28 Sep\" in \"28 Sep – 4 Oct 2026\""
-msgid "d MMM"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:198
-msgctxt ""
-"QDate::toString() format of the last day of a week spanning two months, e.g. "
-"\"4 Oct 2026\" in \"28 Sep – 4 Oct 2026\""
-msgid "d MMM yyyy"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:203
-msgctxt ""
-"QDate::toString() format of either day of a week spanning two years, e.g. "
-"\"29 Dec 2025\""
-msgid "d MMM yyyy"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:207
-msgctxt "@title week range: %1 first day, %2 last day"
-msgid "%1 – %2"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:211
-msgctxt "@title %1 month name, %2 year"
-msgid "%1 %2"
-msgstr ""
-
-#: src/stats/StatsModel.cpp:362
+#: src/qml/pages/WelcomePage.qml:319
 msgid ""
-"%1:00 %2 – %3:00 %4\n"
-"Work: %5\n"
-"Breaks: %6"
+"A calm Pomodoro timer. Focus in rounds, rest in between, and see where your "
+"time goes."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:368
+#: src/qml/pages/WelcomePage.qml:331
+msgid "No account, no tracking: everything stays on this computer."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:373
+msgctxt "a duration in minutes"
+msgid "%1 min"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:378 src/qml/pages/PresetEditPage.qml:28
+#: src/qml/components/Sidebar.qml:143
+msgid "Timers"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:379
+msgid "Work in rounds, rest in between"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:380
 msgid ""
-"%1:00 – %2:00\n"
-"Work: %3\n"
-"Breaks: %4"
+"A timer alternates focus and short breaks, with a longer break every few "
+"rounds. You start with a classic Pomodoro that keeps notifications quiet "
+"while you work; add your own from the sidebar."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:377 src/stats/StatsModel.cpp:383
+#: src/qml/pages/WelcomePage.qml:404
+msgid "The cycle of the timer in use"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:438
+msgid "focus"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:439
+msgid "break"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:441 src/qml/Main.qml:175
+msgid "long break"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:524
+msgctxt "work and break minutes of a timer"
+msgid "%1 / %2 min"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:543
+msgid "Live tray icon"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:544
+msgid "The minutes left, right in the panel."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:566
+msgid "Quiet while you work"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:567
+msgid "Notifications can wait for the break."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:594
+msgid "Set up"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:595
+msgid "Make it yours"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:596
 msgid ""
-"%1\n"
-"Work: %2\n"
-"Breaks: %3"
+"A few choices to start with. You can change all of them later in Settings."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:402
-msgctxt "clock hour"
-msgid "%1:00"
+#: src/qml/pages/WelcomePage.qml:614
+msgid "Protect weekend streaks"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:440
-msgid ""
-"%1\n"
-"Work: %2"
+#: src/qml/pages/WelcomePage.qml:615
+msgid "A weekend without sessions does not end your streak."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:504
-msgid "Untitled Timer"
+#: src/qml/pages/WelcomePage.qml:623
+msgid "Show an icon in the tray"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:506
-msgid "Uncategorized"
+#: src/qml/pages/WelcomePage.qml:624
+msgid "While a timer runs, it shows the phase and the minutes left."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:508
-msgid "Without note"
+#: src/qml/pages/WelcomePage.qml:633
+msgid "Keep running in the tray"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:529
-msgid "0m"
+#: src/qml/pages/WelcomePage.qml:634
+msgid "Closing the window leaves the timer running."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:537
-msgid "%1h %2m"
+#: src/qml/pages/WelcomePage.qml:642
+msgid "Start at login"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:539
-msgid "%1h"
+#: src/qml/pages/WelcomePage.qml:643
+msgid "Sugo is ready as soon as you log in."
 msgstr ""
 
-#: src/stats/StatsModel.cpp:542
-#, c-format
-msgid "%1m"
+#: src/qml/pages/WelcomePage.qml:706
+msgid "You're all set"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:544
-#, c-format
-msgid "%1s"
+#: src/qml/pages/WelcomePage.qml:718
+msgid "Your timer is ready. Sessions and streaks will show up in Statistics."
 msgstr ""
 
-#: src/main.cpp:78
-msgid "A Pomodoro timer with time statistics"
-msgstr ""
-
-#: src/main.cpp:79
-msgid "© 2026 Sugo contributors"
-msgstr ""
-
-#: src/main.cpp:87
-msgid "Start hidden in the system tray (used by the login entry)"
-msgstr ""
-
-#: src/qml/components/ConfirmDialog.qml:15
-msgid "OK"
-msgstr ""
-
-#: src/qml/components/ConfirmDialog.qml:16 src/qml/pages/PresetEditPage.qml:215
-#: src/qml/pages/AppSettingsPage.qml:802
-msgid "Cancel"
-msgstr ""
-
-#: src/qml/components/CommandPalette.qml:74 src/qml/components/Sidebar.qml:100
-msgid "Search"
-msgstr ""
-
-#: src/qml/components/CommandPalette.qml:82
-msgid "Search pages, timers and commands…"
-msgstr ""
-
-#: src/qml/components/CommandPalette.qml:88
+#: src/qml/pages/WelcomePage.qml:732 src/qml/pages/TimerPage.qml:411
+#: src/qml/Main.qml:696
 msgctxt "keyboard key"
-msgid "Esc"
+msgid "Space"
 msgstr ""
 
-#: src/qml/components/CommandPalette.qml:155
-msgid "Nothing found"
+#: src/qml/pages/WelcomePage.qml:734
+msgid "starts and pauses"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:53
-msgctxt "phase · time"
-msgid "%1 · paused at %2"
-msgstr ""
-
-#: src/qml/components/TopBar.qml:54
-msgctxt "phase · time"
-msgid "%1 · %2 left"
-msgstr ""
-
-#: src/qml/components/TopBar.qml:86
-msgid "Menu"
-msgstr ""
-
-#: src/qml/components/TopBar.qml:94 src/qml/pages/WelcomePage.qml:841
-msgid "Back"
-msgstr ""
-
-#: src/qml/components/WindowButtons.qml:41
-msgid "Minimize"
-msgstr ""
-
-#: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:180
-msgid "Restore"
-msgstr ""
-
-#: src/qml/components/WindowButtons.qml:41
-msgid "Maximize"
-msgstr ""
-
-#: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:1251
-msgid "Close"
-msgstr ""
-
-#: src/qml/components/Sidebar.qml:122 src/qml/pages/WelcomePage.qml:743
+#: src/qml/pages/WelcomePage.qml:743 src/qml/components/Sidebar.qml:122
 msgctxt "keyboard shortcut"
 msgid "Ctrl K"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:129 src/qml/pages/TimerPage.qml:13
-#: src/qml/pages/AppSettingsPage.qml:20 src/qml/Main.qml:691
+#: src/qml/pages/WelcomePage.qml:745
+msgid "finds anything"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:778
+msgid "Skip Tour"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:801
+msgctxt "@action:button welcome tour"
+msgid "Step %1 of %2"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:841 src/qml/components/TopBar.qml:94
+msgid "Back"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:862 src/qml/pages/StatsPage.qml:173
+msgid "Next"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:13 src/qml/pages/AppSettingsPage.qml:20
+#: src/qml/components/Sidebar.qml:129 src/qml/Main.qml:691
 msgid "Focus"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:143 src/qml/pages/PresetEditPage.qml:28
-#: src/qml/pages/WelcomePage.qml:378
-msgid "Timers"
+#: src/qml/pages/TimerPage.qml:62
+msgid "Skip This Work Session?"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:176 src/qml/Main.qml:708
-msgctxt "minutes, short"
-msgid "%1m"
+#: src/qml/pages/TimerPage.qml:62
+msgid "Stop This Work Session?"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:186 src/qml/Main.qml:698
-msgid "New timer"
+#: src/qml/pages/TimerPage.qml:63
+msgid ""
+"The rest of this work session is skipped and it is saved as interrupted."
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:201
-msgid "Restart to update"
+#: src/qml/pages/TimerPage.qml:64
+msgid "The work session ends now and is saved as interrupted."
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:204
-msgid "Sugo %1 is installed; it starts after the restart."
+#: src/qml/pages/TimerPage.qml:67
+msgid "Keep Working"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:216 src/qml/pages/AboutPage.qml:10
-#: src/qml/Main.qml:694
-msgid "About"
+#: src/qml/pages/TimerPage.qml:88
+msgid "Work %1"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:219
-msgid "Update available"
+#: src/qml/pages/TimerPage.qml:132
+msgid "Ready to focus"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:132
+msgid "Time for a break"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:135
+msgid "Paused"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:139
+msgctxt "focusing · category"
+msgid "Focusing · %1"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:139
+msgid "Focusing"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:217
+msgid "The timer was paused because the computer went to sleep."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:218
+msgid "The timer was paused because your screen was locked."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:231 src/qml/pages/AppSettingsPage.qml:1204
+#: src/qml/pages/AboutPage.qml:181
+msgid "Dismiss"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:280
+msgctxt "time left"
+msgid "%1 minutes %2 seconds left"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:371
+msgctxt "the phase after this one, its minutes"
+msgid "Next: %1 · %2 min"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:414
+msgid "pause"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:414
+msgid "start"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:421
+msgctxt "keyboard key"
+msgid "S"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:425
+msgid "skip"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:445
+msgid "Notifications silenced until the break"
 msgstr ""
 
 #: src/qml/pages/StatsPage.qml:19
@@ -992,10 +1145,6 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
-#: src/qml/pages/StatsPage.qml:173 src/qml/pages/WelcomePage.qml:862
-msgid "Next"
-msgstr ""
-
 #: src/qml/pages/StatsPage.qml:180
 msgid "Today"
 msgstr ""
@@ -1046,102 +1195,6 @@ msgstr[1] ""
 
 #: src/qml/pages/StatsPage.qml:438
 msgid "Best %1"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:62
-msgid "Skip This Work Session?"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:62
-msgid "Stop This Work Session?"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:63
-msgid ""
-"The rest of this work session is skipped and it is saved as interrupted."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:64
-msgid "The work session ends now and is saved as interrupted."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:67
-msgid "Keep Working"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:88
-msgid "Work %1"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:132
-msgid "Ready to focus"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:132
-msgid "Time for a break"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:135
-msgid "Paused"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:139
-msgctxt "focusing · category"
-msgid "Focusing · %1"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:139
-msgid "Focusing"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:217
-msgid "The timer was paused because the computer went to sleep."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:218
-msgid "The timer was paused because your screen was locked."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:231 src/qml/pages/AboutPage.qml:181
-#: src/qml/pages/AppSettingsPage.qml:1204
-msgid "Dismiss"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:280
-msgctxt "time left"
-msgid "%1 minutes %2 seconds left"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:371
-msgctxt "the phase after this one, its minutes"
-msgid "Next: %1 · %2 min"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:411 src/qml/pages/WelcomePage.qml:732
-#: src/qml/Main.qml:696
-msgctxt "keyboard key"
-msgid "Space"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:414
-msgid "pause"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:414
-msgid "start"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:421
-msgctxt "keyboard key"
-msgid "S"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:425
-msgid "skip"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:445
-msgid "Notifications silenced until the break"
 msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:81
@@ -1215,6 +1268,11 @@ msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:208
 msgid "Unsaved changes"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:215 src/qml/pages/AppSettingsPage.qml:802
+#: src/qml/components/ConfirmDialog.qml:16
+msgid "Cancel"
 msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:220
@@ -1360,239 +1418,6 @@ msgstr ""
 msgid "Reset to Defaults"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:15
-msgid "Welcome"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:319
-msgid ""
-"A calm Pomodoro timer. Focus in rounds, rest in between, and see where your "
-"time goes."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:331
-msgid "No account, no tracking: everything stays on this computer."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:373
-msgctxt "a duration in minutes"
-msgid "%1 min"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:379
-msgid "Work in rounds, rest in between"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:380
-msgid ""
-"A timer alternates focus and short breaks, with a longer break every few "
-"rounds. You start with a classic Pomodoro that keeps notifications quiet "
-"while you work; add your own from the sidebar."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:404
-msgid "The cycle of the timer in use"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:438
-msgid "focus"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:439
-msgid "break"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:441 src/qml/Main.qml:175
-msgid "long break"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:524
-msgctxt "work and break minutes of a timer"
-msgid "%1 / %2 min"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:543
-msgid "Live tray icon"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:544
-msgid "The minutes left, right in the panel."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:566
-msgid "Quiet while you work"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:567
-msgid "Notifications can wait for the break."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:594
-msgid "Set up"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:595
-msgid "Make it yours"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:596
-msgid ""
-"A few choices to start with. You can change all of them later in Settings."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:614
-msgid "Protect weekend streaks"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:615
-msgid "A weekend without sessions does not end your streak."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:623
-msgid "Show an icon in the tray"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:624
-msgid "While a timer runs, it shows the phase and the minutes left."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:633
-msgid "Keep running in the tray"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:634
-msgid "Closing the window leaves the timer running."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:642
-msgid "Start at login"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:643
-msgid "Sugo is ready as soon as you log in."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:706
-msgid "You're all set"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:718
-msgid "Your timer is ready. Sessions and streaks will show up in Statistics."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:734
-msgid "starts and pauses"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:745
-msgid "finds anything"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:778
-msgid "Skip Tour"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:801
-msgctxt "@action:button welcome tour"
-msgid "Step %1 of %2"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:115
-msgid "Version %1"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:129 src/qml/pages/AppSettingsPage.qml:421
-msgid "Updates"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:135
-msgid "A newer version (%1) of Sugo is available."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:139
-msgid "Install"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:144
-msgid "View Release"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:152
-msgid "Downloading Sugo %1… %2%"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:158
-msgid "Sugo %1 is installed. It starts after a restart."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:161
-msgid "Restart Now"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:171
-msgid "Could not update Sugo: %1"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:174
-msgid "Open Releases Page"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:190
-msgid "Sugo is up to date."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:191
-msgid "Look for a newer version on GitHub."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:193
-msgid "Sugo installs every nightly build by itself."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:194
-msgid "Updates come from the nightly builds."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:195
-msgid "Sugo installs new releases by itself."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:196
-msgid "Updates come from the stable releases."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:204
-msgid "Checking for updates…"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:204
-msgid "Check for Updates"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:216
-msgid "Links"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:223
-msgid "Report a bug"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:228
-msgid "Project website"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:235
-msgid "License & credits"
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:247
-msgid "Licensed under GNU General Public License, version 3 or later."
-msgstr ""
-
-#: src/qml/pages/AboutPage.qml:248
-msgid "Sugo is an independent, open source project."
-msgstr ""
-
 #: src/qml/pages/AppSettingsPage.qml:18
 msgid "General"
 msgstr ""
@@ -1649,6 +1474,11 @@ msgid ""
 "contents of the selected backup."
 msgstr ""
 
+#: src/qml/pages/AppSettingsPage.qml:180
+#: src/qml/components/WindowButtons.qml:41
+msgid "Restore"
+msgstr ""
+
 #: src/qml/pages/AppSettingsPage.qml:377
 msgid "Appearance"
 msgstr ""
@@ -1692,6 +1522,10 @@ msgid ""
 "When started at login, Sugo opens in the tray without showing its window."
 msgstr ""
 
+#: src/qml/pages/AppSettingsPage.qml:421 src/qml/pages/AboutPage.qml:129
+msgid "Updates"
+msgstr ""
+
 #: src/qml/pages/AppSettingsPage.qml:425 src/qml/pages/AppSettingsPage.qml:437
 msgid "Update channel"
 msgstr ""
@@ -1720,13 +1554,14 @@ msgid "Nightly"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:442
-msgid "Install updates automatically"
+msgid "Check for updates automatically"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:443
 msgid ""
-"Sugo looks for a new version every few hours, installs it, and offers to "
-"restart. Turned off, it only looks when you ask, in About."
+"Sugo looks for a new version every few hours and tells you; it downloads it "
+"only when you click Install. Turned off, it only looks when you ask, in "
+"About."
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:450
@@ -2129,6 +1964,185 @@ msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1249
 msgid "All personal details and usernames have been redacted."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1251
+#: src/qml/components/WindowButtons.qml:41
+msgid "Close"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:10 src/qml/components/Sidebar.qml:224
+#: src/qml/Main.qml:694
+msgid "About"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:115
+msgid "Version %1"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:135
+msgid "A newer version (%1) of Sugo is available."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:139
+msgid "Install"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:144
+msgid "View Release"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:152
+msgid "Downloading Sugo %1… %2%"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:158
+msgid "Sugo %1 is installed. It starts after a restart."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:161
+msgid "Restart Now"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:171
+msgid "Could not update Sugo: %1"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:174
+msgid "Open Releases Page"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:190
+msgid "Sugo is up to date."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:191
+msgid "Look for a newer version on GitHub."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:193
+msgid "Sugo looks for new nightly builds by itself."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:194
+msgid "Updates come from the nightly builds."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:195
+msgid "Sugo looks for new releases by itself."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:196
+msgid "Updates come from the stable releases."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:204
+msgid "Checking for updates…"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:204
+msgid "Check for Updates"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:216
+msgid "Links"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:223
+msgid "Report a bug"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:228
+msgid "Project website"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:235
+msgid "License & credits"
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:247
+msgid "Licensed under GNU General Public License, version 3 or later."
+msgstr ""
+
+#: src/qml/pages/AboutPage.qml:248
+msgid "Sugo is an independent, open source project."
+msgstr ""
+
+#: src/qml/components/WindowButtons.qml:41
+msgid "Minimize"
+msgstr ""
+
+#: src/qml/components/WindowButtons.qml:41
+msgid "Maximize"
+msgstr ""
+
+#: src/qml/components/TopBar.qml:53
+msgctxt "phase · time"
+msgid "%1 · paused at %2"
+msgstr ""
+
+#: src/qml/components/TopBar.qml:54
+msgctxt "phase · time"
+msgid "%1 · %2 left"
+msgstr ""
+
+#: src/qml/components/TopBar.qml:86
+msgid "Menu"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:100 src/qml/components/CommandPalette.qml:74
+msgid "Search"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:176 src/qml/Main.qml:708
+msgctxt "minutes, short"
+msgid "%1m"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:186 src/qml/Main.qml:698
+msgid "New timer"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:206
+msgid "Restart to update"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:207
+#, javascript-format
+msgid "Downloading update… %1%"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:208
+msgid "Install update"
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:211
+msgid "Sugo %1 is installed; it starts after the restart."
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:212
+msgid "Sugo %1 is available."
+msgstr ""
+
+#: src/qml/components/Sidebar.qml:227
+msgid "Update available"
+msgstr ""
+
+#: src/qml/components/ConfirmDialog.qml:15
+msgid "OK"
+msgstr ""
+
+#: src/qml/components/CommandPalette.qml:82
+msgid "Search pages, timers and commands…"
+msgstr ""
+
+#: src/qml/components/CommandPalette.qml:88
+msgctxt "keyboard key"
+msgid "Esc"
+msgstr ""
+
+#: src/qml/components/CommandPalette.qml:155
+msgid "Nothing found"
 msgstr ""
 
 #: src/qml/Main.qml:64

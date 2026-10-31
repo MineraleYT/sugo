@@ -139,8 +139,8 @@ void UpdateChecker::attach(AppSettings *settings)
 {
     const auto follow = [this, settings]() {
         setChannel(settings->updateChannel());
-        setAutoInstall(settings->autoInstallUpdates());
-        if (canInstall() && m_autoInstall) {
+        setAutoCheck(settings->autoCheckUpdates());
+        if (canInstall() && m_autoCheck) {
             if (!m_scheduleTimer.isActive()) {
                 m_scheduleTimer.start(kFirstCheckDelayMs);
             }
@@ -150,10 +150,10 @@ void UpdateChecker::attach(AppSettings *settings)
     };
     follow();
     connect(settings, &AppSettings::updateChannelChanged, this, follow);
-    connect(settings, &AppSettings::autoInstallUpdatesChanged, this, follow);
-    // A new channel is looked at straight away (by hand when the installs are not automatic).
+    connect(settings, &AppSettings::autoCheckUpdatesChanged, this, follow);
+    // A new channel is looked at straight away (by hand when the checks are not automatic).
     connect(settings, &AppSettings::updateChannelChanged, this, [this]() {
-        if (canInstall() && m_autoInstall && m_status != Status::Downloading && m_status != Status::ReadyToRestart) {
+        if (canInstall() && m_autoCheck && m_status != Status::Downloading && m_status != Status::ReadyToRestart) {
             reset();
             checkForUpdates();
         }
@@ -370,10 +370,8 @@ void UpdateChecker::handleFeed(const QByteArray &data)
         m_expectedSha256 = hash.toLatin1();
         m_expectedSize = size;
     }
+    // Never downloaded unasked: installUpdate() waits for the user's click.
     setStatus(Status::UpdateAvailable);
-    if (canInstall() && m_autoInstall) {
-        installUpdate();
-    }
 }
 
 void UpdateChecker::installUpdate()

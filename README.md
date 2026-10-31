@@ -36,7 +36,7 @@
 - **Task notes**: jot down what you did when a work session ends, from the notification or an in-app prompt.
 - **Calendar events (optional)**: log in with Nextcloud, or use any CalDAV calendar, and every finished work session becomes an event.
 - **Desktop integration**: a tray icon with a live countdown and a menu to control the timer, native notifications with actions, KRunner commands, start at login, and a D-Bus interface for scripts and shortcuts.
-- **Private**: everything lives in a local SQLite database, with one-click backup and restore. Sugo sends no data about you: the AppImage downloads its updates from GitHub (you can turn that off), and the other packages only look for one when you ask; the calendar sync is off until you set it up.
+- **Private**: everything lives in a local SQLite database, with one-click backup and restore. Sugo sends no data about you: the AppImage looks for updates on GitHub (you can turn that off) and downloads them when you ask, and the other packages only look for one when you ask; the calendar sync is off until you set it up.
 
 See the [user guide](docs/USAGE.md) for the details of each feature.
 
@@ -55,7 +55,7 @@ One file that runs on any recent x86_64 Linux and keeps itself up to date:
    ./Sugo-x86_64.AppImage
    ```
 
-Sugo then installs new releases by itself and offers to restart. In Settings → General → Updates you can turn that off, or choose the **Nightly** channel: a build of every change, published as the [nightly pre-release](https://github.com/MineraleYT/sugo/releases/tag/nightly).
+Sugo then tells you when a new release is out: **Install update** downloads it, **Restart to update** starts it. In Settings → General → Updates you can turn the automatic check off, or choose the **Nightly** channel: a build of every change, published as the [nightly pre-release](https://github.com/MineraleYT/sugo/releases/tag/nightly).
 
 ### Flatpak
 

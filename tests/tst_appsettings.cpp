@@ -434,22 +434,22 @@ private Q_SLOTS:
         {
             const auto settings = make();
             QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
-            QVERIFY(settings->autoInstallUpdates());
+            QVERIFY(settings->autoCheckUpdates());
             QSignalSpy channelSpy(settings.get(), &AppSettings::updateChannelChanged);
-            QSignalSpy autoSpy(settings.get(), &AppSettings::autoInstallUpdatesChanged);
+            QSignalSpy autoSpy(settings.get(), &AppSettings::autoCheckUpdatesChanged);
             settings->setUpdateChannel(QStringLiteral("nightly"));
             settings->setUpdateChannel(QStringLiteral("nightly"));
             QCOMPARE(channelSpy.count(), 1);
             settings->setUpdateChannel(QStringLiteral("beta")); // unknown: stable
             QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
             settings->setUpdateChannel(QStringLiteral("nightly"));
-            settings->setAutoInstallUpdates(false);
+            settings->setAutoCheckUpdates(false);
             QCOMPARE(autoSpy.count(), 1);
         }
         QCOMPARE(stored("UpdateChannel"), QStringLiteral("nightly"));
         const auto reloaded = make();
         QCOMPARE(reloaded->updateChannel(), QStringLiteral("nightly"));
-        QVERIFY(!reloaded->autoInstallUpdates());
+        QVERIFY(!reloaded->autoCheckUpdates());
     }
 
     void trayAvailabilityChangesUpdateDependentProperties()

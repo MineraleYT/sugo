@@ -181,7 +181,7 @@ Inside the Flatpak the same files live under `~/.var/app/io.github.mineraleyt.su
 
 **What leaves your computer.** Nothing about you:
 
-- **Updates**: the AppImage downloads a small file from GitHub every few hours to see whether a newer Sugo exists, and then the new version itself (see [Updates](#updates-and-diagnostics); you can turn this off). The other packages only look when you press **Check for Updates**. Either way the request carries only the program version.
+- **Updates**: the AppImage downloads a small file from GitHub every few hours to see whether a newer Sugo exists (see [Updates](#updates-and-diagnostics); you can turn this off), and the new version itself only when you click **Install update**. The other packages only look when you press **Check for Updates**. Either way the request carries only the program version.
 - **Calendar sync**, if you turn it on, sends the information described [above](#good-to-know) to the server you chose.
 
 There is no telemetry.
@@ -190,8 +190,8 @@ There is no telemetry.
 
 ## Updates and diagnostics
 
-- **The AppImage updates itself.** A minute after it starts, and every six hours, it looks for a newer version on its channel, downloads it next to itself, checks that the file is complete and intact (its size and SHA-256 checksum), and only then puts it in place of the old one. The sidebar then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo. A failed or damaged download changes nothing.
-- **Settings → General → Updates** (AppImage only) chooses the channel: **Stable**, the tested releases, or **Nightly**, a build of every change on the main branch, newer and sometimes with new bugs. Going back from Nightly to Stable keeps the nightly build until a newer release comes out. Turn off **Install updates automatically** and Sugo only looks when you ask, and installs with **About → Install**.
+- **The AppImage updates itself, when you say so.** A minute after it starts, and every six hours, it looks for a newer version on its channel; when there is one, the sidebar shows **Install update**. Nothing is downloaded before you click it. Sugo then downloads the new version next to itself, checks that the file is complete and intact (its size and SHA-256 checksum), and only then puts it in place of the old one. The sidebar then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo. A failed or damaged download changes nothing.
+- **Settings → General → Updates** (AppImage only) chooses the channel: **Stable**, the tested releases, or **Nightly**, a build of every change on the main branch, newer and sometimes with new bugs. Going back from Nightly to Stable keeps the nightly build until a newer release comes out. Turn off **Check for updates automatically** and Sugo only looks when you ask, with **About → Check for Updates**.
 - **About → Check for Updates** tells you whether a newer version exists; the AppImage can install it from there, the other packages link to the release (a Flatpak or a distribution's package is updated the way it was installed). A successful check with nothing new shows a green check on the button for a few seconds.
 - **Settings → Advanced → Troubleshooting & Diagnostics** can copy or export a report with the version, your environment and the latest log lines. Your home directory, user name, passwords and addresses with credentials are replaced with placeholders. Attach it to a bug report.
 

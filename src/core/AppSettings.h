@@ -76,8 +76,8 @@ class AppSettings : public QObject
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged FINAL)
     /// "stable" (releases) or "nightly" (a build of every change), for the AppImage's updates.
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
-    /// The AppImage looks for updates by itself and installs them (see UpdateChecker).
-    Q_PROPERTY(bool autoInstallUpdates READ autoInstallUpdates WRITE setAutoInstallUpdates NOTIFY autoInstallUpdatesChanged FINAL)
+    /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
+    Q_PROPERTY(bool autoCheckUpdates READ autoCheckUpdates WRITE setAutoCheckUpdates NOTIFY autoCheckUpdatesChanged FINAL)
 
 
     /// The close button really keeps the program running: tray icon on, tray present, option set.
@@ -150,8 +150,8 @@ public:
 
     QString updateChannel() const { return m_updateChannel; }
     void setUpdateChannel(const QString &channel);
-    bool autoInstallUpdates() const { return m_autoInstallUpdates; }
-    void setAutoInstallUpdates(bool enabled);
+    bool autoCheckUpdates() const { return m_autoCheckUpdates; }
+    void setAutoCheckUpdates(bool enabled);
     /// Installs the chosen colour scheme as the application palette (needs a GUI application).
     void applyColorScheme();
 
@@ -193,7 +193,7 @@ Q_SIGNALS:
     void promptTaskNoteChanged();
     void colorSchemeChanged();
     void updateChannelChanged();
-    void autoInstallUpdatesChanged();
+    void autoCheckUpdatesChanged();
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
@@ -229,6 +229,6 @@ private:
     bool m_promptTaskNote = true;
     QString m_colorScheme = QStringLiteral("dark");
     QString m_updateChannel = QStringLiteral("stable");
-    bool m_autoInstallUpdates = true;
+    bool m_autoCheckUpdates = true;
     bool m_launchedInBackground = false;
 };

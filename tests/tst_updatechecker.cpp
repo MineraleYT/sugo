@@ -238,7 +238,7 @@ private Q_SLOTS:
         LocalRelease release;
         UpdateChecker checker;
         release.setUp(checker, false);
-        checker.setAutoInstall(true);
+        checker.setAutoCheck(true);
         checker.checkForUpdates();
         QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
         QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.0"));
@@ -280,16 +280,19 @@ private Q_SLOTS:
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 
-    void autoInstallGoesStraightToTheRestart()
+    void automaticChecksNeverDownload()
     {
         qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
         LocalRelease release;
         UpdateChecker checker;
         release.setUp(checker);
-        checker.setAutoInstall(true);
+        checker.setAutoCheck(true);
         checker.checkForUpdates();
-        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::ReadyToRestart, 10000);
-        QCOMPARE(readFile(release.appImage), release.newContent);
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QTest::qWait(300);
+        QCOMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(readFile(release.appImage), release.oldContent);
+        QVERIFY(release.leftovers().isEmpty());
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 
