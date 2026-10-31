@@ -28,8 +28,6 @@ public:
 
     void attach(TimerEngine *engine, AppSettings *settings);
 
-    bool isInhibited() const { return m_cookie != 0; }
-
 public Q_SLOTS:
     void inhibit();
     void release();

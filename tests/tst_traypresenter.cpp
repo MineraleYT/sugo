@@ -35,7 +35,6 @@ private Q_SLOTS:
         QVERIFY(s.toolTipTitle.contains(QStringLiteral("Work")));
         QVERIFY(s.toolTipText.contains(QStringLiteral("24:12")));
         QVERIFY(s.toolTipText.contains(QStringLiteral("Deep study")));
-        QVERIFY(s.title.contains(QStringLiteral("Work")));
         QCOMPARE(s.badgeMinutes, 25); // rounded up: 24:12 left is still "25" until it drops below 24:01
     }
 
@@ -59,7 +58,6 @@ private Q_SLOTS:
     {
         const TrayStatus s = describeTray(State::Paused, Phase::Work, 10 * 60, QStringLiteral("Default"));
         QVERIFY(s.toolTipTitle.contains(QStringLiteral("paused")));
-        QVERIFY(s.title.contains(QStringLiteral("paused")));
         QVERIFY(s.toolTipText.contains(QStringLiteral("10:00")));
         QCOMPARE(s.badgeMinutes, 10); // the time is frozen but still worth seeing
     }
@@ -78,11 +76,10 @@ private Q_SLOTS:
         QCOMPARE(pendingBreak.badgeMinutes, -1);
     }
 
-    void everyStateHasANonEmptyTitleAndTooltip()
+    void everyStateHasANonEmptyTooltip()
     {
         for (const State state : {State::Idle, State::Working, State::ShortBreak, State::LongBreak, State::Paused}) {
             const TrayStatus s = describeTray(state, Phase::Work, 100, QStringLiteral("x"));
-            QVERIFY(!s.title.isEmpty());
             QVERIFY(!s.toolTipTitle.isEmpty());
             QVERIFY(!s.toolTipText.isEmpty());
         }

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-31 03:32+0100\n"
+"POT-Creation-Date: 2026-10-31 03:50+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,32 +17,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
-
-#: src/core/PresetSettings.cpp:12
-msgid "Silence notifications while working"
-msgstr ""
-
-#: src/core/PresetSettings.cpp:13
-msgid ""
-"Turns off all system notifications for the whole work phase and turns them "
-"back on during the break."
-msgstr ""
-
-#: src/core/PresetSettings.cpp:17
-msgid "Auto-start mode"
-msgstr ""
-
-#: src/core/PresetSettings.cpp:18
-msgid "Choose whether breaks, work phases, or neither start automatically."
-msgstr ""
-
-#: src/core/PresetSettings.cpp:24
-msgid "Play a sound when a phase ends"
-msgstr ""
-
-#: src/core/PresetSettings.cpp:29
-msgid "Show a notification when a phase ends"
-msgstr ""
 
 #: src/core/SilenceController.cpp:61
 msgid "A focus session is in progress"
@@ -72,7 +46,7 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: src/core/TrayController.cpp:289 src/core/PhaseNotifier.cpp:130
+#: src/core/TrayController.cpp:289 src/core/PhaseNotifier.cpp:129
 #: src/platform/KRunnerService.cpp:66
 msgid "Skip"
 msgstr ""
@@ -97,7 +71,7 @@ msgstr ""
 msgid "Pause"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:24 src/core/PresetModel.cpp:90
+#: src/core/TrayPresenter.cpp:24 src/core/PresetModel.cpp:64
 #: src/platform/KRunnerService.cpp:95
 msgid "Work"
 msgstr ""
@@ -110,40 +84,31 @@ msgstr ""
 msgid "Long break"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:42 src/core/TrayPresenter.cpp:68 src/main.cpp:73
-#: src/main.cpp:77
-msgid "Sugo"
-msgstr ""
-
-#: src/core/TrayPresenter.cpp:43
+#: src/core/TrayPresenter.cpp:42
 msgid "Sugo: ready"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:44
+#: src/core/TrayPresenter.cpp:43
 msgid ""
 "Next: %1, %2\n"
 "%3"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:47
-msgid "Sugo: paused"
-msgstr ""
-
-#: src/core/TrayPresenter.cpp:48 src/core/TrayPresenter.cpp:66
+#: src/core/TrayPresenter.cpp:46 src/core/TrayPresenter.cpp:63
 msgid "%1 (paused)"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:49 src/core/TrayPresenter.cpp:55
+#: src/core/TrayPresenter.cpp:47 src/core/TrayPresenter.cpp:52
 msgid ""
 "%1 left\n"
 "%2"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:53
-msgid "Sugo: %1"
+#: src/core/TrayPresenter.cpp:65 src/main.cpp:73 src/main.cpp:77
+msgid "Sugo"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:71
+#: src/core/TrayPresenter.cpp:68
 msgctxt ""
 "@item:inmenu Tray menu status line: %1 is the phase (e.g. Work), %2 the time "
 "left (e.g. 12:30), %3 the name of the timer"
@@ -235,90 +200,6 @@ msgstr ""
 msgid "Backup restored."
 msgstr ""
 
-#: src/core/PresetModel.cpp:34
-msgctxt "duration in minutes"
-msgid "%1 min"
-msgid_plural "%1 min"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PresetModel.cpp:37
-msgctxt "duration in seconds"
-msgid "%1 s"
-msgid_plural "%1 s"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/core/PresetModel.cpp:39
-msgctxt "duration in minutes and seconds"
-msgid "%1 min %2 s"
-msgstr ""
-
-#: src/core/PresetModel.cpp:89
-msgid "Pomodoro"
-msgstr ""
-
-#: src/core/PresetModel.cpp:146
-msgid "Timer / Pomodoro"
-msgstr ""
-
-#: src/core/PresetModel.cpp:147
-msgid "Tomato"
-msgstr ""
-
-#: src/core/PresetModel.cpp:148
-msgid "Focus / Target"
-msgstr ""
-
-#: src/core/PresetModel.cpp:149
-msgid "Study / Reading"
-msgstr ""
-
-#: src/core/PresetModel.cpp:150
-msgid "Sprint / Speed"
-msgstr ""
-
-#: src/core/PresetModel.cpp:151
-msgid "Writing / Notes"
-msgstr ""
-
-#: src/core/PresetModel.cpp:152
-msgid "Coding / Execution"
-msgstr ""
-
-#: src/core/PresetModel.cpp:153
-msgid "Tasks / Checklist"
-msgstr ""
-
-#: src/core/PresetModel.cpp:154
-msgid "Research"
-msgstr ""
-
-#: src/core/PresetModel.cpp:155
-msgid "Goal / Milestone"
-msgstr ""
-
-#: src/core/PresetModel.cpp:156
-msgid "Favorite"
-msgstr ""
-
-#: src/core/PresetModel.cpp:157
-msgid "Break / Rest"
-msgstr ""
-
-#: src/core/PresetModel.cpp:235
-msgctxt "%1 work duration, %2 break duration"
-msgid "%1 work, %2 break"
-msgstr ""
-
-#: src/core/PresetModel.cpp:444
-msgid "New Timer"
-msgstr ""
-
-#: src/core/PresetModel.cpp:487
-msgid "%1 (copy)"
-msgstr ""
-
 #: src/core/CalendarSync.cpp:182
 msgid "Focus session"
 msgstr ""
@@ -347,114 +228,114 @@ msgid ""
 "fields."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:798 src/core/CalendarSync.cpp:1325
+#: src/core/CalendarSync.cpp:766 src/core/CalendarSync.cpp:1293
 msgid "Choose a calendar first."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:951 src/core/CalendarSync.cpp:969
+#: src/core/CalendarSync.cpp:919 src/core/CalendarSync.cpp:937
 msgid "Login rejected: check username and app password"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:954 src/core/CalendarSync.cpp:1510
+#: src/core/CalendarSync.cpp:922 src/core/CalendarSync.cpp:1478
 msgid "Signed in as %1. Choose a calendar to finish."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:956
+#: src/core/CalendarSync.cpp:924
 msgid "Not configured"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:959
+#: src/core/CalendarSync.cpp:927
 msgid "Could not send events to the calendar; trying again later"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:961
+#: src/core/CalendarSync.cpp:929
 msgid "Connected as %1"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:971
+#: src/core/CalendarSync.cpp:939
 msgid "Calendar not found"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:973
+#: src/core/CalendarSync.cpp:941
 msgid "Server answered HTTP %1"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:975
+#: src/core/CalendarSync.cpp:943
 msgid "The server could not be reached"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1116
+#: src/core/CalendarSync.cpp:1084
 msgid "The calendar must be on the Nextcloud server you signed in to."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1139
+#: src/core/CalendarSync.cpp:1107
 msgid ""
 "Too many calendar events are waiting to be sent: the oldest one was dropped."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1286
+#: src/core/CalendarSync.cpp:1254
 msgid "The server refused an event (HTTP %1); it was skipped."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1334
+#: src/core/CalendarSync.cpp:1302
 msgid "Testing the connection…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1340
+#: src/core/CalendarSync.cpp:1308
 msgid "Sugo connection test"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1400
+#: src/core/CalendarSync.cpp:1368
 msgid ""
 "The connection works, but the test event could not be removed yet (%1). Sugo "
 "will try again later."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1403
+#: src/core/CalendarSync.cpp:1371
 msgid "Connection test succeeded"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1413
+#: src/core/CalendarSync.cpp:1381
 msgid "Enter the server address, user name and password first."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1420
+#: src/core/CalendarSync.cpp:1388
 msgid "Looking for calendars…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1467 src/core/CalendarSync.cpp:1508
+#: src/core/CalendarSync.cpp:1435 src/core/CalendarSync.cpp:1476
 msgid "No calendars were found at this address."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1523
+#: src/core/CalendarSync.cpp:1491
 msgid "Enter the Nextcloud address first, for example %1"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1530
+#: src/core/CalendarSync.cpp:1498
 msgid "Contacting the server…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1548
+#: src/core/CalendarSync.cpp:1516
 msgid "This does not look like a Nextcloud server."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1557 src/core/CalendarSync.cpp:1659
+#: src/core/CalendarSync.cpp:1525 src/core/CalendarSync.cpp:1627
 msgid "The server gave an unexpected answer to the login request."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1569
+#: src/core/CalendarSync.cpp:1537
 msgid "The server redirected the login to a different host; it was refused."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1578
+#: src/core/CalendarSync.cpp:1546
 msgid "Waiting for you to authorize Sugo in the browser…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1614
+#: src/core/CalendarSync.cpp:1582
 msgid "The login was not completed in time. Please try again."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1653
+#: src/core/CalendarSync.cpp:1621
 msgid ""
 "The server returned an address that does not match the one you entered; the "
 "login was refused."
@@ -472,83 +353,83 @@ msgid_plural "%1 minutes"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/core/PhaseNotifier.cpp:85
+#: src/core/PhaseNotifier.cpp:84
 msgid "Work session finished"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:87
+#: src/core/PhaseNotifier.cpp:86
 msgid "Long break started: %1."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:88
+#: src/core/PhaseNotifier.cpp:87
 msgid "Time for a long break: %1."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:90
+#: src/core/PhaseNotifier.cpp:89
 msgid "Short break started: %1."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:91
+#: src/core/PhaseNotifier.cpp:90
 msgid "Time for a short break: %1."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:94
+#: src/core/PhaseNotifier.cpp:93
 msgid "The next work session has started."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:94
+#: src/core/PhaseNotifier.cpp:93
 msgid "Time to start the next work session."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:97
+#: src/core/PhaseNotifier.cpp:96
 msgid "Break is over"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:98
+#: src/core/PhaseNotifier.cpp:97
 msgid "Work session started."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:98
+#: src/core/PhaseNotifier.cpp:97
 msgid "Time to get back to work."
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:109
+#: src/core/PhaseNotifier.cpp:108
 msgid "Log Task"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:110
+#: src/core/PhaseNotifier.cpp:109
 msgid "What did you accomplish?"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:111
+#: src/core/PhaseNotifier.cpp:110
 msgid "Save"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:130
+#: src/core/PhaseNotifier.cpp:129
 msgid "Skip Break"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:133
+#: src/core/PhaseNotifier.cpp:132
 msgid "Pause Work"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:133
+#: src/core/PhaseNotifier.cpp:132
 msgid "Pause Break"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:143
+#: src/core/PhaseNotifier.cpp:142
 msgid "Start Long Break"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:146
+#: src/core/PhaseNotifier.cpp:145
 msgid "Start Short Break"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:149
+#: src/core/PhaseNotifier.cpp:148
 msgid "Start Work"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:164
+#: src/core/PhaseNotifier.cpp:163
 msgid "View"
 msgstr ""
 
@@ -598,6 +479,92 @@ msgstr ""
 
 #: src/core/UpdateChecker.cpp:457
 msgid "Cannot install the update: %1"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:10
+msgid "Silence notifications while working"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:11
+msgid ""
+"Turns off all system notifications for the whole work phase and turns them "
+"back on during the break."
+msgstr ""
+
+#: src/core/PresetSettings.cpp:15
+msgid "Auto-start mode"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:16
+msgid "Choose whether breaks, work phases, or neither start automatically."
+msgstr ""
+
+#: src/core/PresetSettings.cpp:22
+msgid "Play a sound when a phase ends"
+msgstr ""
+
+#: src/core/PresetSettings.cpp:27
+msgid "Show a notification when a phase ends"
+msgstr ""
+
+#: src/core/PresetModel.cpp:63
+msgid "Pomodoro"
+msgstr ""
+
+#: src/core/PresetModel.cpp:77
+msgid "Timer / Pomodoro"
+msgstr ""
+
+#: src/core/PresetModel.cpp:78
+msgid "Tomato"
+msgstr ""
+
+#: src/core/PresetModel.cpp:79
+msgid "Focus / Target"
+msgstr ""
+
+#: src/core/PresetModel.cpp:80
+msgid "Study / Reading"
+msgstr ""
+
+#: src/core/PresetModel.cpp:81
+msgid "Sprint / Speed"
+msgstr ""
+
+#: src/core/PresetModel.cpp:82
+msgid "Writing / Notes"
+msgstr ""
+
+#: src/core/PresetModel.cpp:83
+msgid "Coding / Execution"
+msgstr ""
+
+#: src/core/PresetModel.cpp:84
+msgid "Tasks / Checklist"
+msgstr ""
+
+#: src/core/PresetModel.cpp:85
+msgid "Research"
+msgstr ""
+
+#: src/core/PresetModel.cpp:86
+msgid "Goal / Milestone"
+msgstr ""
+
+#: src/core/PresetModel.cpp:87
+msgid "Favorite"
+msgstr ""
+
+#: src/core/PresetModel.cpp:88
+msgid "Break / Rest"
+msgstr ""
+
+#: src/core/PresetModel.cpp:353
+msgid "New Timer"
+msgstr ""
+
+#: src/core/PresetModel.cpp:396
+msgid "%1 (copy)"
 msgstr ""
 
 #: src/platform/DBusTimerService.cpp:22
@@ -706,113 +673,113 @@ msgstr ""
 msgid "Open Sugo Window"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:185
+#: src/stats/StatsModel.cpp:175
 msgctxt ""
 "QDate::toString() format of the first day of a week within one month, e.g. "
 "\"5\" in \"5 – 11 October 2026\""
 msgid "d"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:189
+#: src/stats/StatsModel.cpp:179
 msgctxt ""
 "QDate::toString() format of the last day of a week within one month, e.g. "
 "\"11 October 2026\" in \"5 – 11 October 2026\""
 msgid "d MMMM yyyy"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:194
+#: src/stats/StatsModel.cpp:184
 msgctxt ""
 "QDate::toString() format of the first day of a week spanning two months, "
 "e.g. \"28 Sep\" in \"28 Sep – 4 Oct 2026\""
 msgid "d MMM"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:198
+#: src/stats/StatsModel.cpp:188
 msgctxt ""
 "QDate::toString() format of the last day of a week spanning two months, e.g. "
 "\"4 Oct 2026\" in \"28 Sep – 4 Oct 2026\""
 msgid "d MMM yyyy"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:203
+#: src/stats/StatsModel.cpp:193
 msgctxt ""
 "QDate::toString() format of either day of a week spanning two years, e.g. "
 "\"29 Dec 2025\""
 msgid "d MMM yyyy"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:207
+#: src/stats/StatsModel.cpp:197
 msgctxt "@title week range: %1 first day, %2 last day"
 msgid "%1 – %2"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:211
+#: src/stats/StatsModel.cpp:201
 msgctxt "@title %1 month name, %2 year"
 msgid "%1 %2"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:362
+#: src/stats/StatsModel.cpp:352
 msgid ""
 "%1:00 %2 – %3:00 %4\n"
 "Work: %5\n"
 "Breaks: %6"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:368
+#: src/stats/StatsModel.cpp:358
 msgid ""
 "%1:00 – %2:00\n"
 "Work: %3\n"
 "Breaks: %4"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:377 src/stats/StatsModel.cpp:383
+#: src/stats/StatsModel.cpp:367 src/stats/StatsModel.cpp:373
 msgid ""
 "%1\n"
 "Work: %2\n"
 "Breaks: %3"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:402
+#: src/stats/StatsModel.cpp:392
 msgctxt "clock hour"
 msgid "%1:00"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:440
+#: src/stats/StatsModel.cpp:430
 msgid ""
 "%1\n"
 "Work: %2"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:504
+#: src/stats/StatsModel.cpp:494
 msgid "Untitled Timer"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:506
+#: src/stats/StatsModel.cpp:496
 msgid "Uncategorized"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:508
+#: src/stats/StatsModel.cpp:498
 msgid "Without note"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:529
+#: src/stats/StatsModel.cpp:519
 msgid "0m"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:537
+#: src/stats/StatsModel.cpp:527
 msgid "%1h %2m"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:539
+#: src/stats/StatsModel.cpp:529
 msgid "%1h"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:542
+#: src/stats/StatsModel.cpp:532
 #, c-format
 msgid "%1m"
 msgstr ""
 
-#: src/stats/StatsModel.cpp:544
+#: src/stats/StatsModel.cpp:534
 #, c-format
 msgid "%1s"
 msgstr ""

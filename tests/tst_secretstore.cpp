@@ -307,10 +307,8 @@ private Q_SLOTS:
     void writeReadAndRemove()
     {
         SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
-        QVERIFY(store.isAvailable());
-        QCOMPARE(m_keyring->state.sessionAlgorithm, QStringLiteral("plain"));
-
         QCOMPARE(store.read(QStringLiteral("calendar-nextcloud")), std::optional<QString>(QString()));
+        QCOMPARE(m_keyring->state.sessionAlgorithm, QStringLiteral("plain"));
         QVERIFY(store.write(QStringLiteral("calendar-nextcloud"), QStringLiteral("pässword with spaces")));
         QCOMPARE(store.read(QStringLiteral("calendar-nextcloud")), std::optional<QString>(QStringLiteral("pässword with spaces")));
 
@@ -383,7 +381,6 @@ private Q_SLOTS:
     {
         m_keyring.reset();
         SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
-        QVERIFY(!store.isAvailable());
         QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
         QVERIFY(!store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
         m_keyring = std::make_unique<FakeKeyring>(m_bus.address()); // for cleanup()
@@ -394,10 +391,10 @@ private Q_SLOTS:
         m_keyring.reset();
         SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
         store.setRetryIntervalForTesting(200);
-        QVERIFY(!store.isAvailable());
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
         m_keyring = std::make_unique<FakeKeyring>(m_bus.address()); // started at login, after us
         QVERIFY(m_keyring->registered());
-        QTRY_VERIFY(store.isAvailable());
+        QTRY_VERIFY(store.read(QStringLiteral("calendar-caldav")).has_value());
         QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QString()));
     }
 };

@@ -25,8 +25,6 @@ class Database
 public:
     /// Identifies Sugo databases: "Sugo" in ASCII.
     static constexpr int kApplicationId = 0x5375676F;
-    /// The id Sugo 1.0 stamped its files with; such files are ours and get the new stamp on open.
-    static constexpr int kPreviousApplicationId = 0x6B546D74;
 
     /// `path` may be ":memory:" (tests, or fallback when the file is unusable).
     explicit Database(const QString &path);

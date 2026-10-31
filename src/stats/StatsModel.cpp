@@ -154,16 +154,6 @@ void StatsModel::setBreakdownMode(BreakdownMode mode)
     Q_EMIT statsChanged();
 }
 
-void StatsModel::setIncludeInterrupted(bool include)
-{
-    if (m_includeInterrupted == include) {
-        return;
-    }
-    m_includeInterrupted = include;
-    recompute();
-    Q_EMIT includeInterruptedChanged();
-}
-
 QString StatsModel::title() const
 {
     const QLocale &locale = m_env.locale;
@@ -326,7 +316,7 @@ void StatsModel::recompute()
 
     m_currentRecords = m_repository->between(range.startMs, range.endMs);
     m_summary = Stats::summarize(m_currentRecords, sp, m_anchorDate, m_env.firstDayOfWeek,
-                                 m_env.timeZone, m_env.locale, m_includeInterrupted, m_env.now());
+                                 m_env.timeZone, m_env.locale, m_env.now());
 
     // The period before, up to the same point when the shown one is still under way.
     {
@@ -340,7 +330,7 @@ void StatsModel::recompute()
         m_previousWorkSeconds = 0;
         const QList<SessionRecord> records = m_repository->between(previous.startMs, endMs);
         for (const SessionRecord &record : records) {
-            if (record.kind == SessionKind::Work && (record.completed || m_includeInterrupted)
+            if (record.kind == SessionKind::Work
                 && record.startedAtMs >= previous.startMs && record.startedAtMs < endMs) {
                 m_previousWorkSeconds += record.durationSec;
             }
@@ -419,7 +409,7 @@ void StatsModel::recompute()
     // Work time per day, filtered like the summary, for the year's map of days.
     QHash<QDate, qint64> workPerDay;
     for (const SessionRecord &record : std::as_const(m_currentRecords)) {
-        if (record.kind != SessionKind::Work || (!record.completed && !m_includeInterrupted)
+        if (record.kind != SessionKind::Work
             || record.startedAtMs < range.startMs || record.startedAtMs >= range.endMs) {
             continue;
         }

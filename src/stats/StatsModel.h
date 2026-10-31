@@ -68,7 +68,6 @@ public:
 
     Q_PROPERTY(Period period READ period WRITE setPeriod NOTIFY periodChanged FINAL)
     Q_PROPERTY(BreakdownMode breakdownMode READ breakdownMode WRITE setBreakdownMode NOTIFY breakdownModeChanged FINAL)
-    Q_PROPERTY(bool includeInterrupted READ includeInterrupted WRITE setIncludeInterrupted NOTIFY includeInterruptedChanged FINAL)
 
     Q_PROPERTY(QString title READ title NOTIFY periodChanged FINAL)
     Q_PROPERTY(bool isCurrent READ isCurrent NOTIFY periodChanged FINAL)
@@ -111,10 +110,7 @@ public:
     BreakdownMode breakdownMode() const { return m_breakdownMode; }
     void setBreakdownMode(BreakdownMode mode);
 
-    bool includeInterrupted() const { return m_includeInterrupted; }
-    void setIncludeInterrupted(bool include);
 
-    QDate anchorDate() const { return m_anchorDate; }
     QString title() const;
     bool isCurrent() const;
     bool canGoNext() const;
@@ -146,7 +142,6 @@ public:
 Q_SIGNALS:
     void periodChanged();
     void breakdownModeChanged();
-    void includeInterruptedChanged();
     void statsChanged();
     void streaksChanged();
     void protectWeekendStreakChanged();
@@ -168,7 +163,6 @@ private:
 
     Period m_period = Period::Week;
     BreakdownMode m_breakdownMode = BreakdownMode::ByTimer;
-    bool m_includeInterrupted = true;
     QDate m_anchorDate;
 
     StatsSummary m_summary;

@@ -172,14 +172,6 @@ int main(int argc, char *argv[])
     settings->setLaunchedInBackground(background);
     settings->applyColorScheme();
     auto *presetPersistence = new PresetPersistence(presets, &presetRepository, &services);
-    // Only mark the starter timers as created if they can really be saved; otherwise they would
-    // never be offered once the database reads fine again.
-    if (presetPersistence->isActive() && !presetRepository.presetsInitialized()) {
-        if (presets->count() == 1 && presets->currentUuid() == PresetModel::DefaultUuid) {
-            presets->addStandardPresets();
-        }
-        presetRepository.setPresetsInitialized(true);
-    }
     new TimerBinding(timer, presets, &services);
     auto *silence = engine.singletonInstance<SilenceController *>("io.github.mineraleyt.sugo", "SilenceController");
     if (!silence) {

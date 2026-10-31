@@ -83,7 +83,7 @@ private Q_SLOTS:
         custom.cyclesBeforeLong = 2;
         custom.options = {
             {PresetOption::SilenceWhileWorking, true},
-            {PresetOption::AutoStart, false},
+            {PresetOption::NotifyOnEnd, false},
             {QStringLiteral("optionFromNewerVersion"), QStringLiteral("kept")}, // unknown keys survive
         };
 
@@ -128,10 +128,10 @@ private Q_SLOTS:
     void removedOptionsDisappear()
     {
         TimerPreset p = makePreset(QStringLiteral("a"), QStringLiteral("A"));
-        p.options = {{PresetOption::AutoStart, true}, {PresetOption::SoundOnEnd, false}};
+        p.options = {{PresetOption::NotifyOnEnd, true}, {PresetOption::SoundOnEnd, false}};
         QVERIFY(repo->saveAll({builtinDefault(), p}));
 
-        p.options = {{PresetOption::AutoStart, true}};
+        p.options = {{PresetOption::NotifyOnEnd, true}};
         QVERIFY(repo->saveAll({builtinDefault(), p}));
 
         QCOMPARE(repo->loadAll().at(1).options, p.options);
@@ -140,7 +140,7 @@ private Q_SLOTS:
     void unreadableOptionsSurviveASave()
     {
         TimerPreset p = makePreset(QStringLiteral("a"), QStringLiteral("A"));
-        p.options = {{PresetOption::AutoStart, true}};
+        p.options = {{PresetOption::NotifyOnEnd, true}};
         QVERIFY(repo->saveAll({builtinDefault(), p}));
 
         // A value this version cannot read (damaged, or written by a newer version).
@@ -152,7 +152,7 @@ private Q_SLOTS:
 
         // Saving the loaded timers keeps it; a readable option the model dropped still goes.
         TimerPreset edited = loaded.at(1);
-        edited.options.remove(PresetOption::AutoStart);
+        edited.options.remove(PresetOption::NotifyOnEnd);
         QVERIFY(repo->saveAll({builtinDefault(), edited}));
         QVERIFY(query.exec(QStringLiteral("SELECT key, value FROM preset_option o JOIN preset p ON p.id = o.preset_id "
                                           "WHERE p.uuid = 'a' ORDER BY key")));
@@ -219,7 +219,7 @@ private Q_SLOTS:
             studyUuid = model.create({{QStringLiteral("name"), QStringLiteral("Study")},
                                       {QStringLiteral("category"), QStringLiteral("Uni")},
                                       {QStringLiteral("workSeconds"), 45 * 60}});
-            model.setOption(studyUuid, PresetOption::AutoStart, true);
+            model.setOption(studyUuid, PresetOption::AutoStartMode, 2);
             model.duplicate(studyUuid);
             model.update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 30 * 60}});
             model.setCurrentUuid(studyUuid);
@@ -234,7 +234,7 @@ private Q_SLOTS:
         QCOMPARE(study.value(QStringLiteral("name")).toString(), QStringLiteral("Study"));
         QCOMPARE(study.value(QStringLiteral("category")).toString(), QStringLiteral("Uni"));
         QCOMPARE(study.value(QStringLiteral("workSeconds")).toInt(), 45 * 60);
-        QVERIFY(reloaded.option(studyUuid, PresetOption::AutoStart).toBool());
+        QCOMPARE(reloaded.option(studyUuid, PresetOption::AutoStartMode).toInt(), 2);
         QCOMPARE(reloaded.get(PresetModel::DefaultUuid).value(QStringLiteral("workSeconds")).toInt(), 30 * 60);
         // The duplicate keeps its position right after its source.
         QCOMPARE(reloaded.indexOf(studyUuid), 1);
@@ -284,13 +284,13 @@ private Q_SLOTS:
             PresetModel model;
             PresetPersistence persistence(&model, repo.get());
             model.update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 99 * 60}});
-            model.setOption(PresetModel::DefaultUuid, PresetOption::AutoStart, true);
+            model.setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 2);
             model.reset(PresetModel::DefaultUuid);
         }
         PresetModel reloaded;
         PresetPersistence persistence(&reloaded, repo.get());
         QCOMPARE(reloaded.get(PresetModel::DefaultUuid).value(QStringLiteral("workSeconds")).toInt(), 25 * 60);
-        QVERIFY(!reloaded.option(PresetModel::DefaultUuid, PresetOption::AutoStart).toBool());
+        QCOMPARE(reloaded.option(PresetModel::DefaultUuid, PresetOption::AutoStartMode).toInt(), 0);
     }
 
     void unknownStoredSelectionFallsBackToDefault()
@@ -340,15 +340,6 @@ private Q_SLOTS:
 
         model.create({{QStringLiteral("name"), QStringLiteral("Edit after failed load")}});
         QCOMPARE(uuids(repo->loadAll()), (QStringList{PresetModel::DefaultUuid, QStringLiteral("mine")}));
-    }
-
-    void presetsInitializedFlagPersists()
-    {
-        QVERIFY(!repo->presetsInitialized());
-        QVERIFY(repo->setPresetsInitialized(true));
-        QVERIFY(repo->presetsInitialized());
-        QVERIFY(repo->setPresetsInitialized(false));
-        QVERIFY(!repo->presetsInitialized());
     }
 };
 

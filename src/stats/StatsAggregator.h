@@ -25,8 +25,7 @@ QDate shifted(StatsPeriod kind, const QDate &anchor, int steps);
  * Totals, chart buckets and breakdowns of `records` within the period around `anchor`.
  *
  * - A session belongs to the bucket in which it *started* (in local time), even if it ends later.
- * - Work time counts the active time (pauses excluded), including interrupted phases unless
- *   `includeInterrupted` is false, in which case those are ignored completely.
+ * - Work time counts the active time (pauses excluded), including interrupted phases.
  * - `completedWorkSessions` counts finished work phases only; an interrupted one is not a pomodoro.
  * - Records outside the period are ignored, so callers may pass a larger set.
  * - `now` marks the current bucket.
@@ -37,11 +36,7 @@ StatsSummary summarize(const QList<SessionRecord> &records,
                        Qt::DayOfWeek firstDayOfWeek,
                        const QTimeZone &timeZone,
                        const QLocale &locale,
-                       bool includeInterrupted,
                        const QDateTime &now);
-
-/// The local days on which a session started, from start instants in Unix milliseconds.
-QSet<QDate> daysOf(const QList<qint64> &startMs, const QTimeZone &timeZone);
 
 /// Consecutive days with activity ending today. A day that has not had any yet does not break
 /// the streak: it continues from yesterday until the day is over.

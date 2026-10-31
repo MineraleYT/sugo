@@ -39,18 +39,15 @@ TrayStatus describeTray(TimerEngine::State state, TimerEngine::Phase phase, int 
 
     switch (state) {
     case TimerEngine::State::Idle:
-        status.title = i18n("Sugo");
         status.toolTipTitle = i18n("Sugo: ready");
         status.toolTipText = i18n("Next: %1, %2\n%3", phaseLabel, clock, presetName);
         break;
     case TimerEngine::State::Paused:
-        status.title = i18n("Sugo: paused");
         status.toolTipTitle = i18n("%1 (paused)", phaseLabel);
         status.toolTipText = i18n("%1 left\n%2", clock, presetName);
         status.badgeMinutes = (remainingSeconds + 59) / 60;
         break;
     default:
-        status.title = i18n("Sugo: %1", phaseLabel);
         status.toolTipTitle = phaseLabel;
         status.toolTipText = i18n("%1 left\n%2", clock, presetName);
         status.badgeMinutes = (remainingSeconds + 59) / 60;

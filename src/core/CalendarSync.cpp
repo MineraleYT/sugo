@@ -377,7 +377,6 @@ CalendarSync::~CalendarSync() = default;
 
 void CalendarSync::load()
 {
-    migrateLegacyKeys();
     movePasswordsToKeyring();
     const QString group = QLatin1String(kGroup);
     m_enabled = m_config->value(settingsKey(group, kEnabled), false).toBool();
@@ -405,7 +404,7 @@ void CalendarSync::loadProviderFields()
     // No account, no reason to wake the keyring up.
     if (m_secrets && !m_username.isEmpty()) {
         if (!m_password.isEmpty()) {
-            // Kept in the file by an older version, or while no keyring answered: move it.
+            // Kept in the file while no keyring answered: move it.
             if (m_secrets->write(secretKey(), m_password)) {
                 m_passwordInKeyring = true;
                 save(kPassword, QString());
@@ -421,40 +420,9 @@ void CalendarSync::loadProviderFields()
     m_calendarName = read(kCalendarName);
 }
 
-void CalendarSync::migrateLegacyKeys()
-{
-    // Older versions kept the provider settings flat in [Calendar]; move them (once) into the
-    // subgroup of the provider that was selected.
-    static const char *const keys[] = {kServerUrl, kUsername, kPassword, kCalendarUrl, kCalendarName};
-    const QString group = QLatin1String(kGroup);
-    bool any = false;
-    for (const char *key : keys) {
-        any = any || m_config->contains(settingsKey(group, key));
-    }
-    if (!any) {
-        return;
-    }
-    QString provider = m_config->value(settingsKey(group, kProvider), kNextcloud).toString();
-    if (provider != kNextcloud && provider != kCaldav) {
-        provider = kNextcloud;
-    }
-    const QString target = group + QLatin1Char('/') + provider;
-    bool targetHasValues = false;
-    for (const char *key : keys) {
-        targetHasValues = targetHasValues || m_config->contains(settingsKey(target, key));
-    }
-    for (const char *key : keys) {
-        if (!targetHasValues && m_config->contains(settingsKey(group, key))) {
-            m_config->setValue(settingsKey(target, key), m_config->value(settingsKey(group, key)).toString());
-        }
-        m_config->remove(settingsKey(group, key));
-    }
-    Settings::sync(*m_config);
-}
-
 void CalendarSync::movePasswordsToKeyring()
 {
-    // A password kept in the file (older version, or no keyring at the time) moves to the keyring
+    // A password kept in the file (no keyring at the time) moves to the keyring
     // for every service, not only the selected one and not only with a user name: otherwise a
     // service that is not in use keeps its password readable in the settings file indefinitely.
     if (!m_secrets) {

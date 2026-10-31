@@ -24,22 +24,7 @@ int clampedInt(const QVariant &value, int low, int high, int fallback)
     return ok ? std::clamp(n, low, high) : fallback;
 }
 
-/// "25 min", "30 s", or "1 min 30 s" for durations that are not whole minutes.
-QString durationLabel(int seconds)
-{
-    seconds = std::max(0, seconds);
-    const int minutes = seconds / 60;
-    const int rest = seconds % 60;
-    if (rest == 0) {
-        return i18ncp("duration in minutes", "%1 min", "%1 min", minutes);
-    }
-    if (minutes == 0) {
-        return i18ncp("duration in seconds", "%1 s", "%1 s", rest);
-    }
-    return i18nc("duration in minutes and seconds", "%1 min %2 s", minutes, rest);
-}
-
-/// The registry entry of an option, or nothing for the legacy AutoStart key and unknown keys.
+/// The registry entry of an option, or nothing for unknown keys.
 std::optional<OptionDescriptor> descriptorFor(const QString &key)
 {
     const auto all = PresetSettings::descriptors();
@@ -60,17 +45,6 @@ QVariant coercedOption(const OptionDescriptor &desc, const QVariant &value)
     return value.toBool();
 }
 
-/// The built-in preset was once called "Default", stored in whatever language was active then.
-bool isLegacyDefaultName(const QString &name)
-{
-    if (name.isEmpty() || name == QLatin1String("Default")) {
-        return true;
-    }
-    // The translations of the languages Sugo was offered in.
-    static const QStringList translated = {QStringLiteral("Predefinito"), QStringLiteral("Standard"),
-                                           QStringLiteral("Predeterminado"), QStringLiteral("Par défaut")};
-    return translated.contains(name);
-}
 } // namespace
 
 PresetModel::PresetModel(QObject *parent)
@@ -92,49 +66,6 @@ TimerPreset PresetModel::makeDefaultPreset()
     preset.options.insert(QStringLiteral("iconName"), QStringLiteral("sugo-timer"));
     preset.options.insert(PresetOption::SilenceWhileWorking, true);
     return preset;
-}
-
-QList<TimerPreset> PresetModel::standardPresets()
-{
-    return {makeDefaultPreset()};
-}
-
-void PresetModel::addStandardPresets()
-{
-    const QList<TimerPreset> standards = standardPresets();
-    bool addedAny = false;
-    for (const auto &sp : standards) {
-        const int idx = indexOf(sp.uuid);
-        if (idx < 0) {
-            const int row = count();
-            beginInsertRows({}, row, row);
-            m_presets.append(sp);
-            endInsertRows();
-            addedAny = true;
-        } else if (sp.uuid == DefaultUuid) {
-            bool changed = false;
-            if (isLegacyDefaultName(m_presets[idx].name)) {
-                m_presets[idx].name = sp.name;
-                changed = true;
-            }
-            if (m_presets[idx].category.isEmpty()) {
-                m_presets[idx].category = sp.category;
-                changed = true;
-            }
-            if (changed) {
-                Q_EMIT dataChanged(index(idx), index(idx));
-                Q_EMIT presetChanged(DefaultUuid);
-                if (m_currentUuid == DefaultUuid) {
-                    Q_EMIT currentChanged();
-                }
-                addedAny = true;
-            }
-        }
-    }
-    if (addedAny) {
-        Q_EMIT countChanged();
-        Q_EMIT modified();
-    }
 }
 
 QVariantList PresetModel::availableIcons() const
@@ -222,18 +153,9 @@ QStringList PresetModel::applyFields(TimerPreset &preset, const QVariantMap &fie
                 adjusted.append(desc.key);
             }
             preset.options.insert(desc.key, value);
-            if (desc.key == PresetOption::AutoStartMode) {
-                preset.options.insert(PresetOption::AutoStart, value.toInt() == 2);
-            }
         }
     }
     return adjusted;
-}
-
-QString PresetModel::summaryFor(const TimerPreset &preset)
-{
-    return i18nc("%1 work duration, %2 break duration", "%1 work, %2 break",
-                 durationLabel(preset.workSeconds), durationLabel(preset.shortBreakSeconds));
 }
 
 QString PresetModel::iconNameFor(const TimerPreset &preset)
@@ -381,16 +303,6 @@ QString PresetModel::currentCategory() const
     return currentPreset().category;
 }
 
-QString PresetModel::currentSummary() const
-{
-    return summaryFor(currentPreset());
-}
-
-QString PresetModel::currentIconName() const
-{
-    return iconNameFor(currentPreset());
-}
-
 int PresetModel::indexOf(const QString &uuid) const
 {
     for (int i = 0; i < count(); ++i) {
@@ -415,9 +327,6 @@ QVariantMap PresetModel::get(const QString &uuid) const
     const TimerPreset &p = m_presets.at(row);
 
     QVariantMap options = PresetSettings::defaults();
-    if (p.options.contains(PresetOption::AutoStart) && !p.options.contains(PresetOption::AutoStartMode)) {
-        options.insert(PresetOption::AutoStartMode, p.options.value(PresetOption::AutoStart).toBool() ? 2 : 0);
-    }
     options.insert(p.options);
 
     return {
@@ -542,22 +451,11 @@ QVariant PresetModel::option(const QString &uuid, const QString &key) const
 bool PresetModel::setOption(const QString &uuid, const QString &key, const QVariant &value)
 {
     const int row = indexOf(uuid);
-    if (row < 0 || !PresetSettings::isKnown(key)) {
+    const std::optional<OptionDescriptor> descriptor = descriptorFor(key);
+    if (row < 0 || !descriptor) {
         return false;
     }
-    const std::optional<OptionDescriptor> descriptor = descriptorFor(key);
-    if (!descriptor) {
-        if (key != PresetOption::AutoStart) return false;
-        const bool bVal = value.toBool();
-        m_presets[row].options.insert(key, bVal);
-        m_presets[row].options.insert(PresetOption::AutoStartMode, bVal ? 2 : 0);
-    } else {
-        const QVariant stored = coercedOption(*descriptor, value);
-        m_presets[row].options.insert(key, stored);
-        if (key == PresetOption::AutoStartMode) {
-            m_presets[row].options.insert(PresetOption::AutoStart, stored.toInt() == 2);
-        }
-    }
+    m_presets[row].options.insert(key, coercedOption(*descriptor, value));
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {

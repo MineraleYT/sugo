@@ -22,9 +22,6 @@ public:
     QString currentUuid() const;
     bool setCurrentUuid(const QString &uuid);
 
-    bool presetsInitialized() const;
-    bool setPresetsInitialized(bool initialized);
-
 private:
     QString m_connection;
 };

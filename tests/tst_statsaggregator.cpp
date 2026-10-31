@@ -16,7 +16,6 @@ private Q_SLOTS:
     void testShifted();
     void testSummarizeEmpty();
     void testSummarizeSessions();
-    void testSummarizeInterruptedFilter();
     void testDayViewFollowsTheRealHoursOnClockChangeDays();
     void testCategoriesIgnoreSurroundingWhitespace();
     void testBreakdownOrder();
@@ -94,7 +93,7 @@ void TestStatsAggregator::testSummarizeEmpty()
     const QDate anchor(2026, 10, 3);
     const QDateTime now(anchor, QTime(12, 0), tz);
 
-    const StatsSummary summary = Stats::summarize({}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, true, now);
+    const StatsSummary summary = Stats::summarize({}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, now);
     QCOMPARE(summary.workSeconds, 0);
     QCOMPARE(summary.breakSeconds, 0);
     QCOMPARE(summary.completedWorkSessions, 0);
@@ -141,7 +140,7 @@ void TestStatsAggregator::testSummarizeSessions()
     r3.presetName = QStringLiteral("Pomodoro");
     r3.category = QStringLiteral("Study");
 
-    const StatsSummary summary = Stats::summarize({r1, r2, r3}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, true, now);
+    const StatsSummary summary = Stats::summarize({r1, r2, r3}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, now);
     QCOMPARE(summary.workSeconds, 2100);
     QCOMPARE(summary.breakSeconds, 300);
     QCOMPARE(summary.completedWorkSessions, 1);
@@ -152,26 +151,6 @@ void TestStatsAggregator::testSummarizeSessions()
     QCOMPARE(summary.buckets[9].workSeconds, 1500);
     QCOMPARE(summary.buckets[9].breakSeconds, 300);
     QCOMPARE(summary.buckets[10].workSeconds, 600);
-}
-
-void TestStatsAggregator::testSummarizeInterruptedFilter()
-{
-    const QTimeZone tz = QTimeZone::utc();
-    const QLocale locale = QLocale::c();
-    const QDate anchor(2026, 10, 3);
-    const QDateTime now(anchor, QTime(15, 0), tz);
-
-    SessionRecord r1;
-    r1.kind = SessionKind::Work;
-    r1.startedAtMs = QDateTime(anchor, QTime(9, 0), tz).toMSecsSinceEpoch();
-    r1.durationSec = 600;
-    r1.completed = false;
-
-    // With includeInterrupted = false
-    const StatsSummary summary = Stats::summarize({r1}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, false, now);
-    QCOMPARE(summary.workSeconds, 0);
-    QCOMPARE(summary.interruptedWorkSessions, 0);
-    QCOMPARE(summary.hasData(), false);
 }
 
 void TestStatsAggregator::testDayViewFollowsTheRealHoursOnClockChangeDays()
@@ -199,7 +178,7 @@ void TestStatsAggregator::testDayViewFollowsTheRealHoursOnClockChangeDays()
     {
         const QDate day(2026, 10, 25);
         const QList<SessionRecord> records = {work(utc(2026, 10, 25, 0, 30)), work(utc(2026, 10, 25, 1, 30))};
-        const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, rome, locale, true,
+        const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, rome, locale,
                                                 QDateTime(day, QTime(12, 0), rome));
         QCOMPARE(s.buckets.size(), 25);
         QCOMPARE(s.buckets[2].label, QStringLiteral("2"));
@@ -216,7 +195,7 @@ void TestStatsAggregator::testDayViewFollowsTheRealHoursOnClockChangeDays()
     {
         const QDate day(2026, 3, 29);
         const QList<SessionRecord> records = {work(utc(2026, 3, 29, 1, 30))}; // 03:30 CEST
-        const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, rome, locale, true,
+        const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, rome, locale,
                                                 QDateTime(day, QTime(23, 0), rome));
         QCOMPARE(s.buckets.size(), 23);
         QCOMPARE(s.buckets[1].label, QStringLiteral("1"));
@@ -228,7 +207,7 @@ void TestStatsAggregator::testDayViewFollowsTheRealHoursOnClockChangeDays()
     // An ordinary day keeps its 24 bars, labelled 0..23.
     {
         const QDate day(2026, 10, 3);
-        const StatsSummary s = Stats::summarize({}, StatsPeriod::Day, day, Qt::Monday, rome, locale, true,
+        const StatsSummary s = Stats::summarize({}, StatsPeriod::Day, day, Qt::Monday, rome, locale,
                                                 QDateTime(day, QTime(12, 0), rome));
         QCOMPARE(s.buckets.size(), 24);
         for (int i = 0; i < 24; ++i) {
@@ -252,7 +231,7 @@ void TestStatsAggregator::testCategoriesIgnoreSurroundingWhitespace()
         r.category = category;
         records.append(r);
     }
-    const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, tz, QLocale::c(), true,
+    const StatsSummary s = Stats::summarize(records, StatsPeriod::Day, day, Qt::Monday, tz, QLocale::c(),
                                             QDateTime(day, QTime(12, 0), tz));
     QCOMPARE(s.byCategory.size(), 1);
     QCOMPARE(s.byCategory.first().name, QStringLiteral("Study"));
@@ -281,7 +260,7 @@ void TestStatsAggregator::testBreakdownOrder()
     r2.completed = true;
     r2.presetName = QStringLiteral("Timer B");
 
-    const StatsSummary summary = Stats::summarize({r1, r2}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, true, now);
+    const StatsSummary summary = Stats::summarize({r1, r2}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, now);
     QCOMPARE(summary.byTimer.size(), 2);
     // Largest work time first
     QCOMPARE(summary.byTimer.at(0).name, QStringLiteral("Timer B"));
@@ -317,7 +296,7 @@ void TestStatsAggregator::testTimerBreakdownGroupsByPreset()
         work(13, QString(), QStringLiteral("Gone"), 100),
         work(14, QString(), QStringLiteral("Gone"), 50),
     };
-    const StatsSummary summary = Stats::summarize(records, StatsPeriod::Day, anchor, Qt::Monday, tz, QLocale::c(), true, now);
+    const StatsSummary summary = Stats::summarize(records, StatsPeriod::Day, anchor, Qt::Monday, tz, QLocale::c(), now);
     QCOMPARE(summary.byTimer.size(), 4);
     QCOMPARE(summary.byTimer.at(0).name, QStringLiteral("Renamed"));
     QCOMPARE(summary.byTimer.at(0).workSeconds, 1200);
@@ -358,7 +337,7 @@ void TestStatsAggregator::testTaskBreakdown()
     r3.completed = false;
     r3.note = QStringLiteral("   ");
 
-    const StatsSummary summary = Stats::summarize({r1, r2, r3}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, true, now);
+    const StatsSummary summary = Stats::summarize({r1, r2, r3}, StatsPeriod::Day, anchor, Qt::Monday, tz, locale, now);
     QCOMPARE(summary.byTask.size(), 3);
     QCOMPARE(summary.byTask.at(0).name, QStringLiteral("Feature development"));
     QCOMPARE(summary.byTask.at(0).workSeconds, 1500);
@@ -375,13 +354,10 @@ void TestStatsAggregator::testTaskBreakdown()
 
 void TestStatsAggregator::testStreaks()
 {
-    const QTimeZone tz = QTimeZone::utc();
     const QDate today(2026, 10, 3);
 
-    QList<qint64> starts;
-    auto addDay = [&](const QDate &d) {
-        starts.append(QDateTime(d, QTime(10, 0), tz).toMSecsSinceEpoch());
-    };
+    QSet<QDate> days;
+    auto addDay = [&](const QDate &d) { days.insert(d); };
 
     addDay(today);
     addDay(today.addDays(-1));
@@ -392,7 +368,6 @@ void TestStatsAggregator::testStreaks()
     addDay(today.addDays(-6));
     addDay(today.addDays(-7));
 
-    const QSet<QDate> days = Stats::daysOf(starts, tz);
     QCOMPARE(Stats::currentStreak(days, today), 3);
     QCOMPARE(Stats::bestStreak(days), 4);
 
@@ -403,17 +378,12 @@ void TestStatsAggregator::testStreaks()
 
 void TestStatsAggregator::testWeekendStreakProtection()
 {
-    const QTimeZone tz = QTimeZone::utc();
     const QDate friday(2026, 10, 2);
     const QDate sunday(2026, 10, 4);
     const QDate monday(2026, 10, 5);
     const QDate tuesday(2026, 10, 6);
 
-    QList<qint64> starts;
-    starts.append(QDateTime(friday, QTime(10, 0), tz).toMSecsSinceEpoch());
-    starts.append(QDateTime(monday, QTime(10, 0), tz).toMSecsSinceEpoch());
-
-    const QSet<QDate> days = Stats::daysOf(starts, tz);
+    const QSet<QDate> days = {friday, monday};
 
     // On Monday (has session): streak is 2 if protected, 1 if not
     QCOMPARE(Stats::currentStreak(days, monday, true), 2);

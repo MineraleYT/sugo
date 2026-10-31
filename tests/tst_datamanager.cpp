@@ -44,25 +44,6 @@ bool execOn(const QString &path, const QStringList &statements)
     return ok;
 }
 
-int userVersionOf(const QString &path)
-{
-    const QString name = QStringLiteral("check-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    int version = -1;
-    {
-        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
-        db.setDatabaseName(path);
-        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
-        if (db.open()) {
-            QSqlQuery query(db);
-            if (query.exec(QStringLiteral("PRAGMA user_version")) && query.next()) {
-                version = query.value(0).toInt();
-            }
-        }
-        db.close();
-    }
-    QSqlDatabase::removeDatabase(name);
-    return version;
-}
 } // namespace
 
 class DataManagerTest : public QObject
@@ -186,31 +167,6 @@ private Q_SLOTS:
         record.presetName = name;
         record.note = QStringLiteral("Backed-up note");
         return record;
-    }
-
-    void backupWithOlderSchemaIsMigratedAndRestored()
-    {
-        QVERIFY(sessions->insert(sampleRecord()));
-        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
-        QVERIFY(manager->backupDatabase(QUrl::fromLocalFile(backupPath)));
-        // Turn the backup into a schema 1 file, as Sugo 1.0 wrote it (no note column).
-        QVERIFY(execOn(backupPath, {QStringLiteral("ALTER TABLE session DROP COLUMN note"),
-                                    QStringLiteral("PRAGMA user_version = 1")}));
-        QCOMPARE(userVersionOf(backupPath), 1);
-        QVERIFY(manager->clearHistory());
-
-        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
-        QVERIFY(manager->restoreDatabase(QUrl::fromLocalFile(backupPath)));
-        QCOMPARE(failed.count(), 0);
-        const auto restored = sessions->between(0, 2000);
-        QCOMPARE(restored.size(), 1);
-        QCOMPARE(restored.first().presetName, QStringLiteral("Pomodoro"));
-        QVERIFY(restored.first().note.isEmpty());
-
-        // The user's file is read only: not migrated, no journal files left next to it.
-        QCOMPARE(userVersionOf(backupPath), 1);
-        QVERIFY(!QFile::exists(backupPath + QStringLiteral("-wal")));
-        QVERIFY(!QFile::exists(backupPath + QStringLiteral("-shm")));
     }
 
     void backupFromNewerOrForeignDatabaseIsRejected()

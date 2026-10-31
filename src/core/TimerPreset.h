@@ -33,17 +33,11 @@ struct TimerPreset {
         if (options.contains(key)) {
             return options.value(key);
         }
-        if (key == PresetOption::AutoStartMode && options.contains(PresetOption::AutoStart)) {
-            return options.value(PresetOption::AutoStart).toBool() ? 2 : 0;
-        }
         return PresetSettings::defaultValue(key);
     }
 
     bool boolOption(const QString &key) const
     {
-        if (key == PresetOption::AutoStart && options.contains(PresetOption::AutoStartMode)) {
-            return option(PresetOption::AutoStartMode).toInt() == 2;
-        }
         return option(key).toBool();
     }
 };

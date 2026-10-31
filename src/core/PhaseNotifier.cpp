@@ -74,7 +74,6 @@ void PhaseNotifier::onPhaseFinished(TimerEngine::Phase finished, TimerEngine::Ph
         if (sound && m_settings) {
             m_settings->playSoundPreview(m_settings->soundTheme(), m_settings->soundVolume());
         }
-        Q_EMIT phaseEndAnnounced(finished);
         if (!popup || !m_notifier) {
             return;
         }

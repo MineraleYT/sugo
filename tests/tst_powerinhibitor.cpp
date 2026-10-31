@@ -30,6 +30,7 @@ public:
     QStringList calls;
     uint lastCookie = 0;
     int failures = 0; ///< Inhibit calls to refuse.
+    int held = 0;     ///< Cookies handed out and not given back yet.
 
 public Q_SLOTS:
     uint Inhibit(const QString &application, const QString &reason)
@@ -42,11 +43,15 @@ public Q_SLOTS:
             return 0;
         }
         lastCookie = 42;
+        ++held;
         return lastCookie;
     }
     void UnInhibit(uint cookie)
     {
         calls << QStringLiteral("UnInhibit:%1").arg(cookie);
+        if (cookie == lastCookie && held > 0) {
+            --held;
+        }
     }
 };
 
@@ -77,6 +82,8 @@ private:
 
     QDBusConnection serverBus() const { return QDBusConnection(QStringLiteral("power-test-server")); }
     QDBusConnection clientBus() const { return QDBusConnection(QStringLiteral("power-test-client")); }
+    /// The screen saver holds an inhibition of ours.
+    bool screenInhibited() const { return server.held > 0; }
 
 private Q_SLOTS:
     void initTestCase()
@@ -118,12 +125,13 @@ private Q_SLOTS:
         inhibitor = std::make_unique<PowerInhibitor>(clientBus());
         inhibitor->attach(engine.get(), settings.get());
         server.calls.clear();
+        server.held = 0;
     }
 
     void cleanup()
     {
         // The release on destruction is asynchronous: let it land before the next test starts.
-        const bool wasInhibited = inhibitor && inhibitor->isInhibited();
+        const bool wasInhibited = inhibitor && screenInhibited();
         const int before = server.calls.size();
         inhibitor.reset();
         if (wasInhibited) {
@@ -136,18 +144,18 @@ private Q_SLOTS:
     void inhibitsOnlyWhileWorkIsRunningAndReleasesCookie()
     {
         engine->start();
-        QTRY_VERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(screenInhibited());
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo")}));
 
         engine->pause();
-        QTRY_VERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY(!screenInhibited());
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
         QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
 
         engine->resume();
-        QTRY_VERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(screenInhibited());
         settings->setKeepScreenAwake(false);
-        QTRY_VERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY(!screenInhibited());
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 4, 3000);
         QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
     }
@@ -158,7 +166,7 @@ private Q_SLOTS:
         engine->pause(); // before Inhibit() has answered
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("UnInhibit:42")}));
-        QVERIFY(!inhibitor->isInhibited());
+        QVERIFY(!screenInhibited());
     }
 
     void aCookieStillOnItsWayAtQuitIsHandedBack()
@@ -177,7 +185,7 @@ private Q_SLOTS:
         engine->resume();
         settings->setKeepScreenAwake(false);
         settings->setKeepScreenAwake(true);
-        QTRY_VERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(screenInhibited());
         QTest::qWait(100);
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo")}));
 
@@ -189,20 +197,29 @@ private Q_SLOTS:
     void aRestartedScreenSaverIsAskedAgain()
     {
         engine->start();
-        QTRY_VERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(screenInhibited());
 
         QVERIFY(serverBus().unregisterService(kService));
-        QTRY_VERIFY(!inhibitor->isInhibited());
+        server.held = 0;    // a new screen saver knows no cookies of the old one
+        QTest::qWait(200); // the owner change reaches the client
         QVERIFY(serverBus().registerService(kService));
-        QTRY_VERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(screenInhibited());
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("Inhibit:Sugo")}));
+
+        // The old cookie was dropped, not kept: stopping hands back the new one, once.
+        engine->stop();
+        QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 3, 3000);
+        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
+        QTest::qWait(100);
+        QCOMPARE(server.calls.size(), 3);
+        QVERIFY(!screenInhibited());
     }
 
     void aFailedInhibitIsRetriedWhileStillWanted()
     {
         server.failures = 1;
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(inhibitor->isInhibited(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(screenInhibited(), 5000);
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("Inhibit:Sugo")}));
     }
 
@@ -212,7 +229,7 @@ private Q_SLOTS:
         engine->start();
         QTest::qWait(4500);
         QCOMPARE(server.calls.size(), 4); // the request and three retries
-        QVERIFY(!inhibitor->isInhibited());
+        QVERIFY(!screenInhibited());
         server.failures = 0;
     }
 
@@ -234,7 +251,7 @@ private Q_SLOTS:
         engine->start();
         QTest::qWait(100);
         QVERIFY(server.calls.isEmpty());
-        QVERIFY(!inhibitor->isInhibited());
+        QVERIFY(!screenInhibited());
     }
 };
 

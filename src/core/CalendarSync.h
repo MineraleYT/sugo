@@ -177,11 +177,10 @@ private:
     struct LeftoverTest {
         QString uid;
         QString account;
-        QString url; ///< Where it was put; empty if saved by an older version (then eventUrl(uid)).
+        QString url; ///< Where it was put; if missing, eventUrl(uid).
     };
 
     void load();
-    void migrateLegacyKeys();
     void movePasswordsToKeyring();
     void loadProviderFields();
     void switchProvider(const QString &provider);

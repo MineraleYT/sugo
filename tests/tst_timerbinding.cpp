@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "FakeClock.h"
 #include "PresetModel.h"
 #include "TimerBinding.h"
 #include "TimerEngine.h"
@@ -14,9 +15,33 @@ class TimerBindingTest : public QObject
     Q_OBJECT
 
 private:
+    FakeClock clock;
     std::unique_ptr<TimerEngine> engine;
     std::unique_ptr<PresetModel> presets;
     std::unique_ptr<TimerBinding> binding;
+
+    /// The engine's auto-start mode, as it behaves: whether a break, then work, start by
+    /// themselves when the phase before ends. Leaves the engine reset.
+    TimerEngine::AutoStartMode autoStartBehaviour()
+    {
+        engine->reset();
+        engine->start();
+        clock.advanceSeconds(engine->workSeconds());
+        engine->refresh();
+        const bool breakStarted = engine->isRunning();
+        if (!breakStarted) {
+            engine->start();
+        }
+        clock.advanceSeconds(engine->shortBreakSeconds());
+        engine->refresh();
+        const bool workStarted = engine->isRunning();
+        engine->reset();
+        if (workStarted) {
+            // Work alone starting by itself is no mode at all: matches none of them.
+            return breakStarted ? TimerEngine::AutoStartMode::All : static_cast<TimerEngine::AutoStartMode>(-1);
+        }
+        return breakStarted ? TimerEngine::AutoStartMode::BreaksOnly : TimerEngine::AutoStartMode::Manual;
+    }
 
 private Q_SLOTS:
     void initTestCase()
@@ -25,7 +50,8 @@ private Q_SLOTS:
 
     void init()
     {
-        engine = std::make_unique<TimerEngine>();
+        clock = FakeClock();
+        engine = std::make_unique<TimerEngine>(&clock, nullptr);
         presets = std::make_unique<PresetModel>();
         binding = std::make_unique<TimerBinding>(engine.get(), presets.get());
     }
@@ -36,7 +62,7 @@ private Q_SLOTS:
         QCOMPARE(engine->shortBreakSeconds(), 5 * 60);
         QCOMPARE(engine->longBreakSeconds(), 15 * 60);
         QCOMPARE(engine->cyclesBeforeLong(), 4);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::Manual);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::Manual);
     }
 
     void selectingPresetConfiguresEngine()
@@ -48,7 +74,7 @@ private Q_SLOTS:
             {QStringLiteral("longBreakSeconds"), 30 * 60},
             {QStringLiteral("cyclesBeforeLong"), 2},
         });
-        presets->setOption(uuid, PresetOption::AutoStart, true);
+        presets->setOption(uuid, PresetOption::AutoStartMode, 2);
 
         presets->setCurrentUuid(uuid);
 
@@ -56,7 +82,7 @@ private Q_SLOTS:
         QCOMPARE(engine->shortBreakSeconds(), 10 * 60);
         QCOMPARE(engine->longBreakSeconds(), 30 * 60);
         QCOMPARE(engine->cyclesBeforeLong(), 2);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::All);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::All);
         QCOMPARE(engine->remainingSeconds(), 50 * 60); // idle display follows the preset
     }
 
@@ -65,8 +91,8 @@ private Q_SLOTS:
         presets->update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 30 * 60}});
         QCOMPARE(engine->workSeconds(), 30 * 60);
 
-        presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStart, true);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::All);
+        presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 2);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::All);
     }
 
     void editingOtherPresetLeavesEngineAlone()
@@ -108,13 +134,13 @@ private Q_SLOTS:
     void autoStartModeAppliesToEngine()
     {
         presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 1);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::BreaksOnly);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::BreaksOnly);
 
         presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 2);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::All);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::All);
 
         presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 0);
-        QCOMPARE(engine->autoStartMode(), TimerEngine::AutoStartMode::Manual);
+        QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::Manual);
     }
 };
 

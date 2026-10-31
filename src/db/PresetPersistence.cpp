@@ -32,7 +32,6 @@ PresetPersistence::PresetPersistence(PresetModel *model, PresetRepository *repos
         return;
     }
 
-    m_active = true;
     // Connect only after loading, so loading never writes back.
     connect(model, &PresetModel::modified, this, &PresetPersistence::savePresets);
     connect(model, &PresetModel::currentChanged, this, &PresetPersistence::saveSelection);

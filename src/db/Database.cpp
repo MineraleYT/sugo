@@ -59,25 +59,14 @@ CREATE TABLE session (
     completed    INTEGER NOT NULL,
     preset_id    INTEGER REFERENCES preset(id) ON DELETE SET NULL,
     preset_name  TEXT    NOT NULL,
-    category     TEXT    NOT NULL DEFAULT ''
+    category     TEXT    NOT NULL DEFAULT '',
+    note         TEXT    NOT NULL DEFAULT ''
 ))"),
             QStringLiteral("CREATE INDEX idx_session_started ON session(started_at)"),
             QStringLiteral("CREATE INDEX idx_session_kind_started ON session(kind, started_at)"),
         },
-        // Version 2: Task notes support
-        {
-            QStringLiteral("ALTER TABLE session ADD COLUMN note TEXT NOT NULL DEFAULT ''"),
-        },
     };
     return list;
-}
-
-/// Tables a database written by Sugo before application_id was introduced contains.
-const QStringList &ownTables()
-{
-    static const QStringList tables = {
-        QStringLiteral("meta"), QStringLiteral("preset"), QStringLiteral("preset_option"), QStringLiteral("session")};
-    return tables;
 }
 
 bool run(QSqlDatabase &db, const QString &sql, QString *error)
@@ -245,18 +234,16 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
         return isCorruptionError(error.nativeErrorCode()) ? Ownership::Corrupt : Ownership::Unknown;
     };
 
-    QStringList tables;
+    bool hasTables = false;
     {
         QSqlQuery query(db);
-        if (!query.exec(QStringLiteral("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"))) {
+        if (!query.exec(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1"))) {
             return failed(query.lastError());
         }
-        while (query.next()) {
-            tables.append(query.value(0).toString());
-        }
+        hasTables = query.next();
     }
 
-    if (tables.isEmpty()) {
+    if (!hasTables) {
         return Ownership::Ours; // new or empty file: ours to initialise
     }
 
@@ -275,15 +262,8 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
         return failed(idQuery.lastError());
     }
     const int applicationId = idQuery.value(0).toInt();
-    if (applicationId == kApplicationId || applicationId == kPreviousApplicationId) {
+    if (applicationId == kApplicationId) {
         return Ownership::Ours;
-    }
-    if (applicationId == 0) {
-        // Written by Sugo before the id existed? Accept only if it has all our tables.
-        const bool allTables = std::all_of(ownTables().cbegin(), ownTables().cend(), [&](const QString &t) {
-            return tables.contains(t);
-        });
-        return allTables ? Ownership::Ours : Ownership::Foreign;
     }
     return Ownership::Foreign;
 }
@@ -338,6 +318,12 @@ bool Database::migrate(QSqlDatabase &db)
         return false;
     }
 
+    // Stamp before the first table exists, so a file Sugo began to fill always reads as ours.
+    if (pragmaInt(db, QStringLiteral("application_id")) != kApplicationId
+        && !run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error)) {
+        return false;
+    }
+
     for (int version = current; version < latestSchemaVersion(); ++version) {
         if (!db.transaction()) {
             m_error = db.lastError().text();
@@ -361,11 +347,6 @@ bool Database::migrate(QSqlDatabase &db)
             m_error = db.lastError().text();
             return false;
         }
-    }
-
-    // Stamp the file as ours (also adopts databases created before the stamp existed).
-    if (pragmaInt(db, QStringLiteral("application_id")) != kApplicationId) {
-        return run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error);
     }
     return true;
 }

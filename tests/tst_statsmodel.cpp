@@ -42,6 +42,8 @@ private Q_SLOTS:
 
 private:
     void insertWork(const QDateTime &start, bool completed = true);
+    /// The days of the shown period, as the page lists them.
+    QList<QDate> shownDays() const;
 
     std::unique_ptr<Database> m_db;
     std::unique_ptr<SessionRepository> m_repo;
@@ -76,24 +78,24 @@ void TestStatsModel::cleanup()
 void TestStatsModel::testNavigation()
 {
     m_model->setPeriod(StatsModel::Period::Day);
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 3));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
     QVERIFY(m_model->isCurrent());
     QVERIFY(!m_model->canGoNext()); // Cannot go into future
 
     m_model->previousPeriod();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 2));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 2)});
     QVERIFY(!m_model->isCurrent());
     QVERIFY(m_model->canGoNext());
 
     m_model->nextPeriod();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 3));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
     QVERIFY(m_model->isCurrent());
 
     m_model->previousPeriod();
     m_model->previousPeriod();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 1));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 1)});
     m_model->today();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 3));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
 }
 
 void TestStatsModel::testReactiveUpdateOnRecord()
@@ -196,22 +198,26 @@ void TestStatsModel::testPreviousPeriodComparesTheSameStretch()
     insertWork(at(9, 26, 11));        // last Saturday 11:00: counted
     insertWork(at(9, 26, 13));        // last Saturday 13:00: after the same point
     insertWork(at(9, 27, 10));        // last Sunday: after the same point
-    insertWork(at(9, 23, 9), false);  // interrupted: only with includeInterrupted
+    insertWork(at(9, 23, 9), false);  // interrupted: its time counts too
     insertWork(at(10, 1, 10));        // this week
     m_model->setPeriod(StatsModel::Period::Week);
-    m_model->setIncludeInterrupted(false);
     m_model->refresh();
     QCOMPARE(m_model->workSeconds(), 1500);
-    QCOMPARE(m_model->previousWorkSeconds(), 3000);
-
-    m_model->setIncludeInterrupted(true);
     QCOMPARE(m_model->previousWorkSeconds(), 3600);
-    m_model->setIncludeInterrupted(false);
 
     // A past week compares with the whole week before it.
     m_model->previousPeriod();
-    QCOMPARE(m_model->workSeconds(), 6000);
+    QCOMPARE(m_model->workSeconds(), 6600);
     QCOMPARE(m_model->previousWorkSeconds(), 0);
+}
+
+QList<QDate> TestStatsModel::shownDays() const
+{
+    QList<QDate> result;
+    for (const QVariant &day : m_model->days()) {
+        result.append(day.toMap().value(QStringLiteral("date")).toDate());
+    }
+    return result;
 }
 
 void TestStatsModel::insertWork(const QDateTime &start, bool completed)
@@ -247,7 +253,7 @@ void TestStatsModel::testDateRolloverMovesTodayAlong()
     *now = QDateTime(QDate(2026, 10, 4), QTime(0, 0, 30), QTimeZone::utc());
     m_model->checkDateChange();
     QCOMPARE(periodSpy.count(), 1);
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 4));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 4)});
     QVERIFY(m_model->isCurrent());
     QCOMPARE(m_model->currentStreak(), 1); // the new day has not broken the streak yet
     QCOMPARE(m_model->completedWorkSessions(), 0);
@@ -261,18 +267,19 @@ void TestStatsModel::testDateRolloverKeepsAPastPeriod()
     m_model->setEnvironment(env);
     m_model->setPeriod(StatsModel::Period::Day);
     m_model->previousPeriod();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 2));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 2)});
 
     *now = QDateTime(QDate(2026, 10, 4), QTime(0, 1), QTimeZone::utc());
     m_model->checkDateChange();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 2)); // the user looked back on purpose
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 2)}); // the user looked back on purpose
 
     // The week view of the old today still contains the new today: it follows along.
     m_model->setPeriod(StatsModel::Period::Week);
     m_model->today();
     *now = QDateTime(QDate(2026, 10, 5), QTime(0, 1), QTimeZone::utc());
     m_model->checkDateChange();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 5));
+    QCOMPARE(shownDays().first(), QDate(2026, 10, 5)); // the week of the new today, Monday first
+    QCOMPARE(shownDays().last(), QDate(2026, 10, 11));
     QVERIFY(m_model->isCurrent());
 }
 
@@ -285,14 +292,14 @@ void TestStatsModel::testRolloverIsNoticedAfterAnEarlierRefresh()
     env.now = [now]() { return *now; };
     m_model->setEnvironment(env);
     m_model->setPeriod(StatsModel::Period::Day);
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 3));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
 
     *now = QDateTime(QDate(2026, 10, 4), QTime(0, 0, 30), QTimeZone::utc());
     m_model->refresh();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 3));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
 
     m_model->checkDateChange();
-    QCOMPARE(m_model->anchorDate(), QDate(2026, 10, 4));
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 4)});
     QVERIFY(m_model->isCurrent());
 }
 
@@ -421,9 +428,6 @@ void TestStatsModel::testDays()
     QCOMPARE(days.at(1).toMap().value(QStringLiteral("workSeconds")).toLongLong(), 3000);
     QCOMPARE(days.at(3).toMap().value(QStringLiteral("workSeconds")).toLongLong(), 600);
     QVERIFY(days.at(5).toMap().value(QStringLiteral("isToday")).toBool());
-
-    m_model->setIncludeInterrupted(false);
-    QCOMPARE(m_model->days().at(3).toMap().value(QStringLiteral("workSeconds")).toLongLong(), 0);
 
     m_model->setPeriod(StatsModel::Period::Year);
     QCOMPARE(m_model->days().size(), 365);

@@ -93,16 +93,6 @@ bool SessionRepository::updateNote(qint64 sessionId, const QString &note)
     return true;
 }
 
-qint64 SessionRepository::lastSessionId() const
-{
-    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    QSqlQuery query(db);
-    if (query.exec(QStringLiteral("SELECT id FROM session WHERE kind = 'work' ORDER BY id DESC LIMIT 1")) && query.next()) {
-        return query.value(0).toLongLong();
-    }
-    return 0;
-}
-
 QStringList SessionRepository::recentNotes(int limit) const
 {
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
@@ -185,22 +175,6 @@ bool SessionRepository::deleteAll()
         return false;
     }
     return true;
-}
-
-QList<qint64> SessionRepository::completedWorkStarts() const
-{
-    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    QSqlQuery query(db);
-    query.prepare(QStringLiteral("SELECT started_at FROM session WHERE kind = 'work' AND completed = 1 ORDER BY started_at, id"));
-    QList<qint64> result;
-    if (!query.exec()) {
-        qCWarning(lcSessionRepo) << query.lastError().text();
-        return result;
-    }
-    while (query.next()) {
-        result.append(query.value(0).toLongLong());
-    }
-    return result;
 }
 
 QList<qint64> SessionRepository::completedWorkStartsAfter(qint64 afterId, qint64 *maxId) const

@@ -51,8 +51,6 @@ Q_SIGNALS:
     void taskNoteSubmitted(qint64 sessionId, const QString &note);
     /// The notification was clicked and there is nothing more specific to do: show the window.
     void showWindowRequested(const QString &activationToken);
-    /// The end of `finished` was announced (sound and/or popup), now that notifications are back.
-    void phaseEndAnnounced(TimerEngine::Phase finished);
 
 private Q_SLOTS:
     void onPhaseFinished(TimerEngine::Phase finished, TimerEngine::Phase next);

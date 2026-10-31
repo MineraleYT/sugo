@@ -76,11 +76,6 @@ SecretServiceStore::SecretServiceStore(const QDBusConnection &bus, const QString
     registerSecretServiceTypes();
 }
 
-bool SecretServiceStore::isAvailable()
-{
-    return ensureSession();
-}
-
 bool SecretServiceStore::ensureSession()
 {
     if (!m_session.path().isEmpty()) {

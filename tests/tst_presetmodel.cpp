@@ -146,7 +146,6 @@ private Q_SLOTS:
         });
 
         QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 1);
-        QCOMPARE(model->option(uuid, PresetOption::AutoStart).toBool(), false);
         QCOMPARE(model->option(uuid, PresetOption::SilenceWhileWorking).toBool(), true);
         QCOMPARE(model->option(uuid, PresetOption::SoundOnEnd).toBool(), false);
         QCOMPARE(model->option(uuid, PresetOption::NotifyOnEnd).toBool(), true);
@@ -157,7 +156,6 @@ private Q_SLOTS:
             {PresetOption::SilenceWhileWorking, false}
         }));
         QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 2);
-        QCOMPARE(model->option(uuid, PresetOption::AutoStart).toBool(), true);
         QCOMPARE(model->option(uuid, PresetOption::SilenceWhileWorking).toBool(), false);
     }
 
@@ -224,23 +222,23 @@ private Q_SLOTS:
         // A timer of one's own: the default timer has silencing switched on.
         const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("Mine")}});
         QVERIFY(model->option(uuid, PresetOption::SoundOnEnd).toBool());          // default on
-        QVERIFY(!model->option(uuid, PresetOption::AutoStart).toBool());          // default off
+        QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 0); // default off
         QVERIFY(!model->option(uuid, PresetOption::SilenceWhileWorking).toBool());
 
         QSignalSpy presetChanged(model.get(), &PresetModel::presetChanged);
-        QVERIFY(model->setOption(uuid, PresetOption::AutoStart, true));
-        QVERIFY(model->option(uuid, PresetOption::AutoStart).toBool());
+        QVERIFY(model->setOption(uuid, PresetOption::AutoStartMode, 2));
+        QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 2);
         QCOMPARE(presetChanged.count(), 1);
 
         const QVariantMap options = model->get(uuid).value(QStringLiteral("options")).toMap();
-        QVERIFY(options.value(PresetOption::AutoStart).toBool());
+        QCOMPARE(options.value(PresetOption::AutoStartMode).toInt(), 2);
         QVERIFY(options.contains(PresetOption::NotifyOnEnd)); // defaults merged in
     }
 
     void unknownOptionIsRejected()
     {
         QVERIFY(!model->setOption(PresetModel::DefaultUuid, QStringLiteral("bogus"), true));
-        QVERIFY(!model->setOption(QStringLiteral("missing"), PresetOption::AutoStart, true));
+        QVERIFY(!model->setOption(QStringLiteral("missing"), PresetOption::AutoStartMode, 2));
     }
 
     void everyDescriptorHasLabelAndDefault()
@@ -269,24 +267,21 @@ private Q_SLOTS:
     {
         const QString uuid = PresetModel::DefaultUuid;
         model->update(uuid, {{QStringLiteral("workSeconds"), 99 * 60}, {QStringLiteral("name"), QStringLiteral("X")}});
-        model->setOption(uuid, PresetOption::AutoStart, true);
+        model->setOption(uuid, PresetOption::AutoStartMode, 2);
 
         QVERIFY(model->reset(uuid));
         const QVariantMap d = model->get(uuid);
         QCOMPARE(d.value(QStringLiteral("workSeconds")).toInt(), 25 * 60);
-        QVERIFY(!model->option(uuid, PresetOption::AutoStart).toBool());
+        QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 0);
 
         const QString custom = model->create({});
         QVERIFY(!model->reset(custom));
     }
 
-    void rolesExposeSummaryAndBuiltinFlag()
+    void rolesExposeBuiltinFlag()
     {
         const QModelIndex idx = model->index(0);
         QVERIFY(model->data(idx, PresetModel::BuiltinRole).toBool());
-        const QString summary = model->currentSummary();
-        QVERIFY(summary.contains(QStringLiteral("25")));
-        QVERIFY(summary.contains(QStringLiteral("5")));
         QVERIFY(model->roleNames().values().contains("uuid"));
         QVERIFY(model->roleNames().values().contains("iconName"));
         QVERIFY(model->roleNames().values().contains("workMinutes"));
@@ -295,7 +290,6 @@ private Q_SLOTS:
     void newUsersStartWithOnePomodoroThatSilences()
     {
         QCOMPARE(model->count(), 1);
-        QCOMPARE(PresetModel::standardPresets().size(), 1);
         const TimerPreset preset = model->currentPreset();
         QCOMPARE(preset.uuid, PresetModel::DefaultUuid);
         QCOMPARE(preset.workSeconds, 25 * 60);
@@ -309,10 +303,6 @@ private Q_SLOTS:
         QCOMPARE(model->uuidAt(0), PresetModel::DefaultUuid);
         QVERIFY(model->uuidAt(1).isEmpty());
         QVERIFY(model->uuidAt(-1).isEmpty());
-
-        // Nothing else is added, now or later.
-        model->addStandardPresets();
-        QCOMPARE(model->count(), 1);
 
         // Reset to defaults brings the silencing back.
         model->setOption(PresetModel::DefaultUuid, PresetOption::SilenceWhileWorking, false);
@@ -331,7 +321,7 @@ private Q_SLOTS:
         model->setCurrentUuid(deepWork);
         QCOMPARE(model->currentPreset().workSeconds, 50 * 60);
         QCOMPARE(model->currentName(), QStringLiteral("Deep Work"));
-        QCOMPARE(model->currentIconName(), QStringLiteral("sugo-focus"));
+        QCOMPARE(model->data(model->index(model->currentIndex()), PresetModel::IconNameRole).toString(), QStringLiteral("sugo-focus"));
     }
 
     void customIconCanBeSelectedAndOverridesDefault()
@@ -365,46 +355,6 @@ private Q_SLOTS:
         QCOMPARE(PresetModel::iconSource(QStringLiteral("games-highscores")), QStringLiteral("games-highscores"));
     }
 
-    void legacyAutoStartOptionMapsToAutoStartMode()
-    {
-        TimerPreset legacy;
-        legacy.uuid = QStringLiteral("legacy-preset");
-        legacy.name = QStringLiteral("Legacy");
-        legacy.options.insert(PresetOption::AutoStart, true);
-
-        model->setPresets({legacy}, legacy.uuid);
-        // option(AutoStartMode) must return 2 (All) when legacy AutoStart was true
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStartMode).toInt(), 2);
-        // get() options must contain AutoStartMode = 2
-        const QVariantMap opts = model->get(legacy.uuid).value(QStringLiteral("options")).toMap();
-        QCOMPARE(opts.value(PresetOption::AutoStartMode).toInt(), 2);
-
-        // Setting AutoStartMode to 0 (Manual) updates legacy AutoStart to false
-        model->setOption(legacy.uuid, PresetOption::AutoStartMode, 0);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStartMode).toInt(), 0);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStart).toBool(), false);
-
-        // Setting AutoStartMode to 1 (BreaksOnly)
-        model->setOption(legacy.uuid, PresetOption::AutoStartMode, 1);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStartMode).toInt(), 1);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStart).toBool(), false);
-
-        // Setting AutoStartMode to 2 (All) updates legacy AutoStart to true
-        model->setOption(legacy.uuid, PresetOption::AutoStartMode, 2);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStartMode).toInt(), 2);
-        QCOMPARE(model->option(legacy.uuid, PresetOption::AutoStart).toBool(), true);
-    }
-
-    void summariesShowSecondsForSubMinuteDurations()
-    {
-        const QString uuid = model->create({{QStringLiteral("workSeconds"), 30}, {QStringLiteral("shortBreakSeconds"), 90}});
-        model->setCurrentUuid(uuid);
-        const QString summary = model->currentSummary();
-        QVERIFY2(!summary.startsWith(QStringLiteral("0 min")), qPrintable(summary));
-        QVERIFY2(summary.contains(QStringLiteral("30")), qPrintable(summary));
-        QVERIFY2(summary.contains(QStringLiteral("1 min 30")), qPrintable(summary));
-    }
-
     void setOptionNotifiesTheRow()
     {
         QSignalSpy changed(model.get(), &QAbstractItemModel::dataChanged);
@@ -423,21 +373,6 @@ private Q_SLOTS:
 
         model->update(uuid, {{PresetOption::AutoStartMode, 42}});
         QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 2);
-    }
-
-    void legacyDefaultNameIsRenamed()
-    {
-        TimerPreset legacy;
-        legacy.uuid = PresetModel::DefaultUuid;
-        legacy.name = QStringLiteral("Default");
-        model->setPresets({legacy}, legacy.uuid);
-        model->addStandardPresets();
-        QCOMPARE(model->currentName(), PresetModel::standardPresets().first().name);
-
-        // A user's own name is kept.
-        model->update(PresetModel::DefaultUuid, {{QStringLiteral("name"), QStringLiteral("Mine")}});
-        model->addStandardPresets();
-        QCOMPARE(model->currentName(), QStringLiteral("Mine"));
     }
 };
 

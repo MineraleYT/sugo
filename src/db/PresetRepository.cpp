@@ -16,7 +16,6 @@ Q_LOGGING_CATEGORY(lcPresetRepo, "sugo.db.presets")
 namespace
 {
 const QString kCurrentKey = QStringLiteral("currentPresetUuid");
-const QString kPresetsInitializedKey = QStringLiteral("presets_initialized");
 
 // QSqlQuery binds a null QString (e.g. a default-constructed one) as SQL NULL, which the
 // NOT NULL text columns reject. Bind empty text instead.
@@ -233,33 +232,6 @@ bool PresetRepository::setCurrentUuid(const QString &uuid)
                                  "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
     query.addBindValue(kCurrentKey);
     query.addBindValue(uuid);
-    if (!query.exec()) {
-        qCWarning(lcPresetRepo) << query.lastError().text();
-        return false;
-    }
-    return true;
-}
-
-bool PresetRepository::presetsInitialized() const
-{
-    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    QSqlQuery query(db);
-    query.prepare(QStringLiteral("SELECT value FROM meta WHERE key = ?"));
-    query.addBindValue(kPresetsInitializedKey);
-    if (query.exec() && query.next()) {
-        return query.value(0).toString() == QStringLiteral("1");
-    }
-    return false;
-}
-
-bool PresetRepository::setPresetsInitialized(bool initialized)
-{
-    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
-    QSqlQuery query(db);
-    query.prepare(QStringLiteral("INSERT INTO meta (key, value) VALUES (?, ?) "
-                                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
-    query.addBindValue(kPresetsInitializedKey);
-    query.addBindValue(initialized ? QStringLiteral("1") : QStringLiteral("0"));
     if (!query.exec()) {
         qCWarning(lcPresetRepo) << query.lastError().text();
         return false;

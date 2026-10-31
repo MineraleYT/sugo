@@ -379,9 +379,8 @@ private Q_SLOTS:
         sessions->insert(r1);
 
         SessionRecord r2 = makeRecord(2000);
-        sessions->insert(r2);
-
-        const qint64 lastId = sessions->lastSessionId();
+        qint64 lastId = 0;
+        QVERIFY(sessions->insert(r2, &lastId));
         QVERIFY(lastId > 0);
         QVERIFY(sessions->updateNote(lastId, QStringLiteral("Task 2 updated")));
 
@@ -453,7 +452,7 @@ private Q_SLOTS:
         QCOMPARE(sessions->completedWorkStartsAfter(maxId, &next), (QList<qint64>{4000}));
         QVERIFY(next > maxId);
         QVERIFY(sessions->completedWorkStartsAfter(next).isEmpty());
-        QCOMPARE(sessions->completedWorkStarts(), (QList<qint64>{1000, 4000}));
+        QCOMPARE(sessions->completedWorkStartsAfter(0), (QList<qint64>{1000, 4000}));
     }
 
     void lastWorkSessionIdFollowsTheEndedWorkPhase()

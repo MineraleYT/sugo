@@ -47,17 +47,11 @@ public:
     /// The volume the player uses now: the preview's while one plays, else volume().
     int playbackVolume() const { return m_previewing ? m_previewVolume : m_volume; }
 
-    /// True while the sound plays or fades in; false as soon as it starts fading out.
-    bool isPlaying() const { return m_isPlaying; }
-
     Q_INVOKABLE void preview(int mode, int volume);
-    Q_INVOKABLE void stopPreview();
+    void stopPreview();
 
 public Q_SLOTS:
     void updatePlayback();
-
-Q_SIGNALS:
-    void isPlayingChanged();
 
 private Q_SLOTS:
     void feedAudio();
@@ -66,7 +60,6 @@ private:
     void play();
     void startPlayback();
     void stopPlayback();
-    void setPlaying(bool playing);
     void onPlayerStarted();
     void onPlayerFailed();
     void discardProcess();
@@ -79,7 +72,6 @@ private:
     int m_previewMode = 0;
     int m_volume = 30;
     int m_previewVolume = 30; ///< Kept apart, so a preview never changes the work-phase volume.
-    bool m_isPlaying = false;
     bool m_previewing = false;
 
     QPointer<QProcess> m_process; ///< The current player, starting or running; null when stopped.

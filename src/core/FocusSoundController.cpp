@@ -146,9 +146,6 @@ void FocusSoundController::play()
         // Wanted again while fading out: fade back in on the same player.
         m_stopping = false;
         m_stopTimer.stop();
-        if (m_process->state() == QProcess::Running) {
-            setPlaying(true);
-        }
     }
 }
 
@@ -212,7 +209,6 @@ void FocusSoundController::onPlayerStarted()
     std::fill(std::begin(m_pink), std::end(m_pink), 0.0f);
     m_gain = 0.0f;
     m_playClock.start();
-    setPlaying(true);
 
     feedAudio(); // fills the initial lead
     m_feedTimer.start();
@@ -248,15 +244,6 @@ void FocusSoundController::stopPlayback()
         return;
     }
     m_stopping = true;
-    setPlaying(false);
-}
-
-void FocusSoundController::setPlaying(bool playing)
-{
-    if (m_isPlaying != playing) {
-        m_isPlaying = playing;
-        Q_EMIT isPlayingChanged();
-    }
 }
 
 void FocusSoundController::discardProcess()
@@ -275,7 +262,6 @@ void FocusSoundController::discardProcess()
             process->kill();
         }
     }
-    setPlaying(false);
 }
 
 void FocusSoundController::feedAudio()

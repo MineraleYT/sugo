@@ -66,19 +66,10 @@ public:
 
     QString currentName() const;
     QString currentCategory() const;
-    QString currentSummary() const;
-    QString currentIconName() const;
 
     /// C++ access for the engine binding and the notifier.
     TimerPreset currentPreset() const;
     const QList<TimerPreset> &presets() const { return m_presets; }
-
-    /// The timers a new user starts with: the default Pomodoro alone.
-    static QList<TimerPreset> standardPresets();
-
-    /// Adds any of the starting timers that is missing, and gives a default timer still named as
-    /// in old versions ("Default", translated or not) its current name.
-    Q_INVOKABLE void addStandardPresets();
 
     /// Curated list of selectable symbolic icons for timers.
     Q_INVOKABLE QVariantList availableIcons() const;
@@ -129,7 +120,6 @@ private:
     static TimerPreset makeDefaultPreset();
     /// Returns the keys whose value was out of range or unreadable and had to be adjusted.
     static QStringList applyFields(TimerPreset &preset, const QVariantMap &fields);
-    static QString summaryFor(const TimerPreset &preset);
     static QString iconNameFor(const TimerPreset &preset);
 
     QList<TimerPreset> m_presets;

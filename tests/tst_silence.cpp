@@ -102,7 +102,7 @@ private Q_SLOTS:
     void workEndReleasesAndTheNextWorkPhaseSilencesAgain()
     {
         enableSilenceOnDefaultTimer();
-        QVERIFY(presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStart, true));
+        QVERIFY(presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 2));
 
         engine->start();
         QVERIFY(inhibitor->isInhibited());
@@ -142,7 +142,7 @@ private Q_SLOTS:
                                                {QStringLiteral("workSeconds"), 50 * 60},
                                                {QStringLiteral("shortBreakSeconds"), 10 * 60}});
         presets->setOption(study, PresetOption::SilenceWhileWorking, true);
-        presets->setOption(study, PresetOption::AutoStart, true);
+        presets->setOption(study, PresetOption::AutoStartMode, 2);
         presets->setCurrentUuid(study);
 
         engine->start();

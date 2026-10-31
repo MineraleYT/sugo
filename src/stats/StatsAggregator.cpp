@@ -130,7 +130,6 @@ StatsSummary summarize(const QList<SessionRecord> &records,
                        Qt::DayOfWeek firstDayOfWeek,
                        const QTimeZone &timeZone,
                        const QLocale &locale,
-                       bool includeInterrupted,
                        const QDateTime &now)
 {
     const PeriodRange range = rangeFor(kind, anchor, firstDayOfWeek, timeZone);
@@ -157,9 +156,6 @@ StatsSummary summarize(const QList<SessionRecord> &records,
 
     for (const SessionRecord &record : records) {
         if (record.startedAtMs < range.startMs || record.startedAtMs >= range.endMs) {
-            continue;
-        }
-        if (!record.completed && !includeInterrupted) {
             continue;
         }
 
@@ -214,15 +210,6 @@ StatsSummary summarize(const QList<SessionRecord> &records,
     summary.byCategory = toList(byCategory);
     summary.byTask = toList(byTask);
     return summary;
-}
-
-QSet<QDate> daysOf(const QList<qint64> &startMs, const QTimeZone &timeZone)
-{
-    QSet<QDate> days;
-    for (const qint64 ms : startMs) {
-        days.insert(QDateTime::fromMSecsSinceEpoch(ms, timeZone).date());
-    }
-    return days;
 }
 
 int currentStreak(const QSet<QDate> &days, const QDate &today, bool protectWeekends)

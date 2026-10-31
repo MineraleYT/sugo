@@ -223,7 +223,7 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
             int version = -1;
             if (query.exec(QStringLiteral("PRAGMA application_id")) && query.next()) appId = query.value(0).toInt();
             if (query.exec(QStringLiteral("PRAGMA user_version")) && query.next()) version = query.value(0).toInt();
-            if ((appId != Database::kApplicationId && appId != Database::kPreviousApplicationId) || version < 1) {
+            if (appId != Database::kApplicationId || version < 1) {
                 *error = i18n("This file is not a Sugo database.");
             } else if (version > Database::latestSchemaVersion()) {
                 *error = i18n("This backup was created by a newer version of Sugo.");

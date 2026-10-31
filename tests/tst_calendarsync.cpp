@@ -58,7 +58,6 @@ public:
     std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
     std::shared_ptr<bool> available = std::make_shared<bool>(true);
 
-    bool isAvailable() override { return *available; }
     std::optional<QString> read(const QString &key) override
     {
         if (!*available) {
@@ -1423,85 +1422,6 @@ private Q_SLOTS:
         m_sync->setProvider(QStringLiteral("nextcloud"));
         QCOMPARE(provider.count(), 0);
         QCOMPARE(cals.count(), 0);
-    }
-
-    void migratesLegacyFlatConfig_data()
-    {
-        QTest::addColumn<QString>("provider");
-        QTest::addColumn<QString>("other");
-        QTest::newRow("caldav") << QStringLiteral("caldav") << QStringLiteral("nextcloud");
-        QTest::newRow("nextcloud") << QStringLiteral("nextcloud") << QStringLiteral("caldav");
-        QTest::newRow("no provider") << QString() << QStringLiteral("caldav");
-    }
-
-    void migratesLegacyFlatConfig()
-    {
-        QFETCH(QString, provider);
-        QFETCH(QString, other);
-        m_sync.reset();
-        {
-            DiskGroup g = diskGroup();
-            if (!provider.isEmpty()) {
-                g.writeEntry("Provider", provider);
-            }
-            g.writeEntry("Enabled", true);
-            g.writeEntry("IncludeNote", true);
-            g.writeEntry("ServerUrl", "https://old.example.org/");
-            g.writeEntry("Username", "carol");
-            g.writeEntry("AppPassword", "legacy-pw");
-            g.writeEntry("CalendarUrl", "https://old.example.org/cal/x");
-            g.writeEntry("CalendarName", "Old");
-            g.sync();
-        }
-        const QString active = provider.isEmpty() ? QStringLiteral("nextcloud") : provider;
-        auto check = [&](CalendarSync *s) {
-            QCOMPARE(s->provider(), active);
-            QVERIFY(s->enabled());
-            QVERIFY(s->includeNote());
-            QCOMPARE(s->serverUrl(), QStringLiteral("https://old.example.org"));
-            QCOMPARE(s->username(), QStringLiteral("carol"));
-            QVERIFY(s->hasPassword());
-            QCOMPARE(s->calendarUrl(), QStringLiteral("https://old.example.org/cal/x"));
-            QCOMPARE(s->calendarName(), QStringLiteral("Old"));
-            const DiskGroup shared = diskGroup();
-            for (const char *key : {"ServerUrl", "Username", "AppPassword", "CalendarUrl", "CalendarName"}) {
-                QVERIFY2(!shared.hasKey(key), key);
-            }
-            QVERIFY(shared.readEntry("Enabled", false));
-            QVERIFY(shared.readEntry("IncludeNote", false));
-            QCOMPARE(diskGroup(active).readEntry("Username", QString()), QStringLiteral("carol"));
-            QCOMPARE(diskGroup(active).readEntry("AppPassword", QString()), QStringLiteral("legacy-pw"));
-            QCOMPARE(diskGroup(active).readEntry("CalendarName", QString()), QStringLiteral("Old"));
-            QVERIFY(!diskGroup(other).hasKey("Username"));
-            QVERIFY(!diskGroup(other).hasKey("AppPassword"));
-        };
-        m_sync = makeSync();
-        check(m_sync.get());
-        // Idempotent: loading again changes nothing.
-        m_sync = makeSync();
-        check(m_sync.get());
-        m_sync->setProvider(other);
-        QVERIFY(m_sync->username().isEmpty());
-        QVERIFY(!m_sync->hasPassword());
-        m_sync = makeSync();
-        QCOMPARE(m_sync->provider(), other);
-        m_sync->setProvider(active);
-        QCOMPARE(m_sync->username(), QStringLiteral("carol"));
-    }
-
-    void migrationKeepsExistingSubgroup()
-    {
-        m_sync.reset();
-        {
-            DiskGroup g = diskGroup();
-            g.writeEntry("Provider", "caldav");
-            g.writeEntry("Username", "flat");
-            g.group(QStringLiteral("caldav")).writeEntry("Username", "already");
-            g.sync();
-        }
-        m_sync = makeSync();
-        QCOMPARE(m_sync->username(), QStringLiteral("already"));
-        QVERIFY(!diskGroup().hasKey("Username"));
     }
 
     void disconnectWipesOnlyActiveProvider()

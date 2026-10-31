@@ -122,7 +122,6 @@ public:
     void setLongBreakSeconds(int seconds);
     int cyclesBeforeLong() const { return m_cyclesBeforeLong; }
     void setCyclesBeforeLong(int cycles);
-    AutoStartMode autoStartMode() const { return m_autoStartMode; }
     void setAutoStartMode(AutoStartMode mode);
     void setAutoStartModeInt(int mode);
 
@@ -136,7 +135,7 @@ public Q_SLOTS:
     void skip();
     /// Runs one Work phase of `seconds` (at least 1) instead of the preset's work length.
     /// An active phase is ended first (saved as interrupted). Later phases use the normal durations.
-    Q_INVOKABLE void startCustomWork(int seconds);
+    void startCustomWork(int seconds);
     /// Back to a fresh Work phase with the cycle count cleared (e.g. after switching preset).
     /// An active phase is stopped first (saved as interrupted).
     void reset();

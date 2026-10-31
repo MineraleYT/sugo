@@ -3,8 +3,6 @@
 
 #include "Localization.h"
 
-#include <algorithm>
-
 QList<OptionDescriptor> PresetSettings::descriptors()
 {
     return {
@@ -31,18 +29,6 @@ QList<OptionDescriptor> PresetSettings::descriptors()
          true,
          QStringLiteral("bool")},
     };
-}
-
-bool PresetSettings::isKnown(const QString &key)
-{
-    // Kept readable for presets saved before AutoStartMode existed.
-    if (key == PresetOption::AutoStart) {
-        return true;
-    }
-    const auto all = descriptors();
-    return std::any_of(all.cbegin(), all.cend(), [&](const OptionDescriptor &d) {
-        return d.key == key;
-    });
 }
 
 QVariant PresetSettings::defaultValue(const QString &key)

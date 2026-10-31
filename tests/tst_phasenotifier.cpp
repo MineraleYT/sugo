@@ -160,7 +160,6 @@ private Q_SLOTS:
     void aReleaseThatNeverCompletesDoesNotSwallowTheAnnouncement()
     {
         inhibitor->deferReleases = true; // the desktop never confirms
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
         QElapsedTimer waited;
         waited.start();
         endWorkWhileSilenced();
@@ -168,45 +167,42 @@ private Q_SLOTS:
 
         // Held back while the release may still come...
         QTest::qWait(100);
-        QCOMPARE(announced.count(), 0);
+        QCOMPARE(notifications->shown.size(), 0);
         // ...and sent anyway once the timeout is over.
-        QTRY_COMPARE_WITH_TIMEOUT(announced.count(), 1, 2000);
+        QTRY_COMPARE_WITH_TIMEOUT(notifications->shown.size(), 1, 2000);
         QVERIFY(waited.elapsed() >= 300);
-        QCOMPARE(announced.first().first().value<TimerEngine::Phase>(), TimerEngine::Phase::Work);
+        QCOMPARE(notifications->last().title, QStringLiteral("Work session finished"));
 
         // A release that finally arrives later does not announce it a second time.
         inhibitor->completeRelease();
         QTest::qWait(50);
-        QCOMPARE(announced.count(), 1);
+        QCOMPARE(notifications->shown.size(), 1);
     }
 
     void aConfirmedReleaseAnnouncesAtOnce()
     {
         inhibitor->deferReleases = true;
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
         endWorkWhileSilenced();
-        QCOMPARE(announced.count(), 0);
+        QCOMPARE(notifications->shown.size(), 0);
         inhibitor->completeRelease();
-        QCOMPARE(announced.count(), 1); // no need to wait for the timeout
+        QCOMPARE(notifications->shown.size(), 1); // no need to wait for the timeout
     }
 
     void withNothingSilencedItIsAnnouncedStraightAway()
     {
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
         engine->start();
         clock.advanceSeconds(25 * 60);
         engine->refresh();
-        QCOMPARE(announced.count(), 1);
+        QCOMPARE(notifications->shown.size(), 1);
     }
 
     void withoutAnyInhibitorSupportItIsAnnouncedStraightAway()
     {
         inhibitor->available = false; // like the no-op fallback: nothing is ever held
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
         engine->start();
         clock.advanceSeconds(25 * 60);
         engine->refresh();
-        QCOMPARE(announced.count(), 1);
+        QCOMPARE(notifications->shown.size(), 1);
     }
 
     void theEndOfWorkOffersToStartOrSkipTheBreak()
@@ -281,22 +277,28 @@ private Q_SLOTS:
 
     void withNotificationsOffOnlyTheSoundIsLeft()
     {
+        withSettings();
+        QStringList played;
+        settings->setSoundPlayerForTesting([&played](const QString &sound, int) { played.append(sound); });
+        settings->setPreAlarmEnabled(false);
         const QString uuid = useTimer();
         presets->setOption(uuid, PresetOption::NotifyOnEnd, false);
-        presets->setOption(uuid, PresetOption::SoundOnEnd, true); // no settings: nothing is played
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
+        presets->setOption(uuid, PresetOption::SoundOnEnd, true);
         endWork();
-        QCOMPARE(announced.count(), 1);
+        QCOMPARE(played, QStringList{settings->soundTheme()});
         QVERIFY(notifications->shown.isEmpty());
     }
 
     void withNeitherNotificationNorSoundNothingHappens()
     {
+        withSettings();
+        QStringList played;
+        settings->setSoundPlayerForTesting([&played](const QString &sound, int) { played.append(sound); });
+        settings->setPreAlarmEnabled(false);
         const QString uuid = useTimer();
         presets->setOption(uuid, PresetOption::NotifyOnEnd, false);
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
         endWork();
-        QCOMPARE(announced.count(), 0);
+        QVERIFY(played.isEmpty());
         QVERIFY(notifications->shown.isEmpty());
     }
 
@@ -361,10 +363,15 @@ private Q_SLOTS:
 
     void withoutANotifierTheEndIsStillAnnounced()
     {
-        notifier = std::make_unique<PhaseNotifier>(engine.get(), presets.get(), inhibitor.get(), nullptr);
-        QSignalSpy announced(notifier.get(), &PhaseNotifier::phaseEndAnnounced);
+        withSettings();
+        QStringList played;
+        settings->setSoundPlayerForTesting([&played](const QString &sound, int) { played.append(sound); });
+        settings->setPreAlarmEnabled(false);
+        notifier = std::make_unique<PhaseNotifier>(engine.get(), presets.get(), inhibitor.get(), nullptr, settings.get());
+        const QString uuid = useTimer();
+        presets->setOption(uuid, PresetOption::SoundOnEnd, true);
         endWork();
-        QCOMPARE(announced.count(), 1);
+        QCOMPARE(played, QStringList{settings->soundTheme()});
     }
 };
 

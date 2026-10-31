@@ -175,6 +175,12 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QStringLiteral("stable");
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), true).toBool();
 
+    // Left behind by versions that had a daily goal.
+    if (m_config->contains(QStringLiteral("DailyGoal"))) {
+        m_config->remove(QStringLiteral("DailyGoal"));
+        Settings::sync(*m_config);
+    }
+
     // The program may have moved since the entry was written (new install prefix).
     if (m_autostart) {
         m_autostart->repair();

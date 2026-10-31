@@ -12,7 +12,6 @@
 namespace PresetOption
 {
 inline const QString SilenceWhileWorking = QStringLiteral("silenceWhileWorking");
-inline const QString AutoStart = QStringLiteral("autoStart");
 inline const QString AutoStartMode = QStringLiteral("autoStartMode");
 inline const QString SoundOnEnd = QStringLiteral("soundOnEnd");
 inline const QString NotifyOnEnd = QStringLiteral("notifyOnEnd");
@@ -39,7 +38,6 @@ class PresetSettings
 {
 public:
     static QList<OptionDescriptor> descriptors();
-    static bool isKnown(const QString &key);
     static QVariant defaultValue(const QString &key);
     static QVariantMap defaults();
 };

@@ -7,7 +7,6 @@
 
 /// What the tray icon should say for a given timer state.
 struct TrayStatus {
-    QString title;         ///< Short, e.g. for task-manager style listings.
     QString toolTipTitle;
     QString toolTipText;
     int badgeMinutes = -1; ///< Minutes to draw on the icon while a phase runs or is paused; -1 = none.

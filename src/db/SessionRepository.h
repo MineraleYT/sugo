@@ -38,21 +38,14 @@ public:
     /// Updates the task note for an existing session.
     bool updateNote(qint64 sessionId, const QString &note);
 
-    /// ID of the newest work session, or 0. Not necessarily the one that just ended: prefer
-    /// SessionRecorder::lastWorkSessionId() to attach a note to a finished phase.
-    qint64 lastSessionId() const;
-
     /// Recent unique non-empty task notes (trimmed), most recently used first.
     QStringList recentNotes(int limit = 5) const;
 
     /// Sessions that started in [fromMs, toMs), oldest first.
     QList<SessionRecord> between(qint64 fromMs, qint64 toMs) const;
 
-    /// Started timestamps (Unix ms) of completed work sessions, oldest first.
-    QList<qint64> completedWorkStarts() const;
-
-    /// Like completedWorkStarts(), but only rows with an id greater than `afterId`, so callers
-    /// can keep a cache up to date. `maxId` (if given) receives the highest id seen, or
+    /// Started timestamps (Unix ms) of completed work sessions with an id greater than `afterId`,
+    /// oldest first, so callers can keep a cache up to date. `maxId` (if given) receives the highest id seen, or
     /// `afterId` when there are no new rows.
     QList<qint64> completedWorkStartsAfter(qint64 afterId, qint64 *maxId = nullptr) const;
 

@@ -39,8 +39,6 @@ class SecretStore
 public:
     virtual ~SecretStore() = default;
 
-    /// False when no keyring answers; the caller then keeps the secret somewhere else.
-    virtual bool isAvailable() = 0;
     /// The stored secret, an empty string if there is none, or nothing on failure.
     virtual std::optional<QString> read(const QString &key) = 0;
     /// Stores `secret` under `key`; an empty secret removes it. False on failure.
@@ -60,7 +58,6 @@ class SecretServiceStore final : public SecretStore
 public:
     explicit SecretServiceStore(const QDBusConnection &bus, const QString &applicationId);
 
-    bool isAvailable() override;
     std::optional<QString> read(const QString &key) override;
     bool write(const QString &key, const QString &secret) override;
 

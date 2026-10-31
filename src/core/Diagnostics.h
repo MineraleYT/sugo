@@ -42,7 +42,7 @@ public:
     Q_INVOKABLE void copyToClipboard() const;
 
     /// Returns the concatenated recent logs (already redacted).
-    Q_INVOKABLE QString recentLogs() const;
+    QString recentLogs() const;
 
     /// Redacts personal paths (the home directory, /home/<name>), the user name and the
     /// user part of user@host from text.

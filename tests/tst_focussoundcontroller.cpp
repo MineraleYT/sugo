@@ -4,7 +4,6 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +24,55 @@ private:
     FakeClock clock;
     std::unique_ptr<TimerEngine> engine;
     std::unique_ptr<FocusSoundController> sounds;
+
+    QString capture() const { return dir.filePath(QStringLiteral("audio.raw")); }
+
+    /// The process ids of the players started so far, oldest first.
+    QList<qint64> startedPlayers() const
+    {
+        QFile file(dir.filePath(QStringLiteral("audio.raw.pids")));
+        QList<qint64> pids;
+        if (file.open(QIODevice::ReadOnly)) {
+            for (const QByteArray &line : file.readAll().split('\n')) {
+                if (!line.isEmpty()) pids.append(line.toLongLong());
+            }
+        }
+        return pids;
+    }
+
+    /// The process exists and has not ended (a zombie not yet reaped counts as ended).
+    static bool isRunning(qint64 pid)
+    {
+        QFile stat(QStringLiteral("/proc/%1/stat").arg(pid));
+        if (!stat.open(QIODevice::ReadOnly)) return false;
+        const QByteArray line = stat.readAll();
+        const qsizetype end = line.lastIndexOf(')');
+        return end >= 0 && line.size() > end + 2 && line.at(end + 2) != 'Z' && line.at(end + 2) != 'X';
+    }
+
+    bool playerRunning() const
+    {
+        const QList<qint64> pids = startedPlayers();
+        return !pids.isEmpty() && isRunning(pids.last());
+    }
+
+    /// A player is running and has been fed audio.
+    bool soundPlaying() const { return playerRunning() && QFileInfo(capture()).size() > 0; }
+
+    QByteArray capturedAudio() const
+    {
+        QFile file(capture());
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+    }
+
+    /// The loudest of the samples [from, to) of mono s16 audio.
+    static int loudest(const QByteArray &raw, qsizetype from, qsizetype to)
+    {
+        const auto *samples = reinterpret_cast<const qint16 *>(raw.constData());
+        int peak = 0;
+        for (qsizetype i = from; i < to; ++i) peak = std::max(peak, std::abs(int(samples[i])));
+        return peak;
+    }
 
 private Q_SLOTS:
     void initTestCase()
@@ -74,22 +122,20 @@ private Q_SLOTS:
     void audioStartsForWorkAndStopsWhenPaused()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
-        const QString capture = dir.filePath(QStringLiteral("audio.raw"));
-        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(capture).size() > 0, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
 
         engine->pause();
-        QTRY_VERIFY(!sounds->isPlaying());
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000); // faded out, then ended
         engine->resume();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(startedPlayers().size() == 2 && soundPlaying(), 3000);
         engine->stop();
-        QTRY_VERIFY(!sounds->isPlaying());
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
     }
 
     void quittingWhilePlayingEndsThePlayerFirst()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
         // The destructor runs after the event loop: nothing would delete the killed player later.
         QTest::failOnWarning(QRegularExpression(QStringLiteral("Destroyed while process")));
         sounds.reset();
@@ -98,43 +144,34 @@ private Q_SLOTS:
     void changingModeOffStopsPlayback()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
         sounds->setMode(static_cast<int>(FocusSoundController::Mode::Off));
-        QTRY_VERIFY(!sounds->isPlaying());
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
     }
 
     void changingModeWhilePlayingKeepsThePlayer()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
-        QSignalSpy playing(sounds.get(), &FocusSoundController::isPlayingChanged);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
         sounds->setMode(static_cast<int>(FocusSoundController::Mode::Rain));
         engine->pause();
         engine->resume();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
         sounds->setMode(static_cast<int>(FocusSoundController::Mode::ClockTick));
-        QTest::qWait(100);
-        QVERIFY(sounds->isPlaying());
-        QCOMPARE(playing.count(), 2); // only the pause/resume, not the mode changes
+        QTest::qWait(2500); // longer than a whole fade-out: a player being stopped would be gone
+        QVERIFY(playerRunning());
+        QCOMPARE(startedPlayers().size(), 1); // the mode changes did not restart it
     }
 
     void aPlayerThatDiesWhileWorkingIsRestarted()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
-        const QString pids = dir.filePath(QStringLiteral("audio.raw.pids"));
-        const auto startedPlayers = [&pids]() {
-            QFile file(pids);
-            return file.open(QIODevice::ReadOnly) ? file.readAll().split('\n').size() - 1 : 0;
-        };
-        QTRY_COMPARE(startedPlayers(), 1);
-        QFile file(pids);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QProcess::execute(QStringLiteral("kill"), {QStringLiteral("-KILL"), QString::fromLatin1(file.readAll().trimmed())}), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
+        QCOMPARE(startedPlayers().size(), 1);
+        const qint64 first = startedPlayers().first();
+        QCOMPARE(QProcess::execute(QStringLiteral("kill"), {QStringLiteral("-KILL"), QString::number(first)}), 0);
 
-        QTRY_VERIFY(!sounds->isPlaying());
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 5000);
-        QTRY_COMPARE(startedPlayers(), 2);
+        QTRY_VERIFY(!isRunning(first));
+        QTRY_VERIFY_WITH_TIMEOUT(startedPlayers().size() == 2 && soundPlaying(), 5000);
     }
 
     void keepsHalfASecondBufferedAhead()
@@ -148,7 +185,7 @@ private Q_SLOTS:
     void previewNeverChangesTheWorkPhaseVolume()
     {
         engine->start(); // playing at the work volume (45)
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
         sounds->preview(static_cast<int>(FocusSoundController::Mode::Rain), 90);
         QCOMPARE(sounds->playbackVolume(), 90);
         QCOMPARE(sounds->volume(), 45);
@@ -159,42 +196,51 @@ private Q_SLOTS:
         sounds->stopPreview();
         QCOMPARE(sounds->volume(), 60);
         QCOMPARE(sounds->playbackVolume(), 60);
-        QVERIFY(sounds->isPlaying()); // the work phase goes on with its sound
+        // The work phase goes on with its sound: the player is not stopped.
+        QTest::qWait(2500); // longer than a whole fade-out
+        QVERIFY(playerRunning());
+        QCOMPARE(startedPlayers().size(), 1);
     }
 
     void soundFadesInFromSilence()
     {
         engine->start();
-        const QString capture = dir.filePath(QStringLiteral("audio.raw"));
-        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(capture).size() >= 44100, 3000);
-        QFile file(capture);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        const QByteArray raw = file.read(44100);
-        const auto *samples = reinterpret_cast<const qint16 *>(raw.constData());
-        const auto loudest = [samples](int from, int to) {
-            int peak = 0;
-            for (int i = from; i < to; ++i) peak = std::max(peak, std::abs(int(samples[i])));
-            return peak;
-        };
-        QVERIFY(loudest(0, 100) < 50);         // starts nearly silent
-        QVERIFY(loudest(20000, 22050) > 1000); // and grows (white noise at 45 %, a quarter in)
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(capture()).size() >= 44100, 3000);
+        const QByteArray raw = capturedAudio().left(44100);
+        QVERIFY(loudest(raw, 0, 100) < 50);         // starts nearly silent
+        QVERIFY(loudest(raw, 20000, 22050) > 1000); // and grows (white noise at 45 %, a quarter in)
+    }
+
+    void pausingFadesOutBeforeTheEnd()
+    {
+        engine->start();
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
+        QTest::qWait(2500); // fully faded in
+        engine->pause();
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
+
+        // 1.5 s of fade-out (66150 samples) at the end of what the player got.
+        const QByteArray raw = capturedAudio();
+        const qsizetype n = raw.size() / 2;
+        QVERIFY(n > 90000);
+        QVERIFY(loudest(raw, n - 90000, n - 80000) > 3000); // full volume before the pause
+        const int fading = loudest(raw, n - 12000, n - 10000);
+        QVERIFY(fading > 50 && fading < 3000);              // getting quieter
+        QVERIFY(loudest(raw, n - 100, n) < 50);             // silent at the end
     }
 
     void resumingDuringTheFadeOutKeepsThePlayer()
     {
         engine->start();
-        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
         QTest::qWait(300); // let it fade in a little, so there is something to fade out
-        const QString pids = dir.filePath(QStringLiteral("audio.raw.pids"));
         engine->pause();
-        QVERIFY(!sounds->isPlaying());
         engine->resume();
-        QVERIFY(sounds->isPlaying());
         QTest::qWait(2500); // longer than a whole fade-out
-        QVERIFY(sounds->isPlaying());
-        QFile file(pids);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(file.readAll().count('\n'), 1); // still the first player
+        QVERIFY(playerRunning());
+        QCOMPARE(startedPlayers().size(), 1); // still the first player
+        const QByteArray raw = capturedAudio();
+        QVERIFY(loudest(raw, raw.size() / 2 - 2205, raw.size() / 2) > 1000); // faded back in, not out
     }
 
     void invalidModesAreClamped()
