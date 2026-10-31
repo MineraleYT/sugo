@@ -99,3 +99,7 @@ private:
 /// XDG autostart on Linux, the Background portal inside a Flatpak sandbox, unsupported on
 /// other platforms.
 std::unique_ptr<Autostart> createAutostart();
+
+/// The program a login entry starts: the AppImage file when running from one ($APPIMAGE), else
+/// this executable.
+QString autostartProgram();

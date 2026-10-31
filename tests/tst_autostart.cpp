@@ -75,6 +75,15 @@ class AutostartTest : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void anAppImageStartsItsFileNotItsMount()
+    {
+        qunsetenv("APPIMAGE");
+        QCOMPARE(autostartProgram(), QCoreApplication::applicationFilePath());
+        qputenv("APPIMAGE", "/home/someone/Applications/Sugo-x86_64.AppImage");
+        QCOMPARE(autostartProgram(), QStringLiteral("/home/someone/Applications/Sugo-x86_64.AppImage"));
+        qunsetenv("APPIMAGE");
+    }
+
     void enablingWritesAValidEntry()
     {
         QTemporaryDir tmp;

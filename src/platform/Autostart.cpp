@@ -291,6 +291,13 @@ bool PortalAutostart::setEnabled(bool enabled)
     return storeState(enabled);
 }
 
+QString autostartProgram()
+{
+    // An AppImage runs from a mount that is gone once it quits: the login entry starts the file.
+    const QString appImage = qEnvironmentVariable("APPIMAGE");
+    return appImage.isEmpty() ? QCoreApplication::applicationFilePath() : appImage;
+}
+
 std::unique_ptr<Autostart> createAutostart()
 {
 #ifdef Q_OS_LINUX
@@ -307,7 +314,7 @@ std::unique_ptr<Autostart> createAutostart()
                                           QGuiApplication::desktopFileName(),
                                           QStringLiteral("Sugo"),
                                           QStringLiteral("Pomodoro timer"),
-                                          QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--background")});
+                                          QStringList{autostartProgram(), QStringLiteral("--background")});
 #else
     return std::make_unique<UnsupportedAutostart>();
 #endif
