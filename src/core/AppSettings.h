@@ -80,6 +80,8 @@ class AppSettings : public QObject
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
     /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
     Q_PROPERTY(bool autoCheckUpdates READ autoCheckUpdates WRITE setAutoCheckUpdates NOTIFY autoCheckUpdatesChanged FINAL)
+    /// Sugo's debug messages are recorded (in the diagnostic report). Applied by Diagnostics.
+    Q_PROPERTY(bool verboseLogging READ verboseLogging WRITE setVerboseLogging NOTIFY verboseLoggingChanged FINAL)
 
 
     /// The close button really keeps the program running: tray icon on, tray present, option set.
@@ -154,6 +156,8 @@ public:
     void setUpdateChannel(const QString &channel);
     bool autoCheckUpdates() const { return m_autoCheckUpdates; }
     void setAutoCheckUpdates(bool enabled);
+    bool verboseLogging() const { return m_verboseLogging; }
+    void setVerboseLogging(bool verbose);
     /// Puts every preference back to its default, through the setters (so views are told and the
     /// file is updated). Kept: whether the welcome tour was seen, the login entry (it lives on
     /// disk, outside the settings file) and everything that is not a preference of this class
@@ -205,6 +209,7 @@ Q_SIGNALS:
     void colorSchemeChanged();
     void updateChannelChanged();
     void autoCheckUpdatesChanged();
+    void verboseLoggingChanged();
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
@@ -234,6 +239,7 @@ private:
         static constexpr QLatin1String colorScheme{"system"};
         static constexpr QLatin1String updateChannel{"stable"};
         static constexpr bool autoCheckUpdates = true;
+        static constexpr bool verboseLogging = false;
     };
 
     void store(const char *key, bool value);
@@ -265,5 +271,6 @@ private:
     QString m_colorScheme = QString(Defaults::colorScheme);
     QString m_updateChannel = QString(Defaults::updateChannel);
     bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
+    bool m_verboseLogging = Defaults::verboseLogging;
     bool m_launchedInBackground = false;
 };

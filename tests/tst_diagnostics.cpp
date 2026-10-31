@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Localization.h"
+#include <QLoggingCategory>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +26,11 @@ private Q_SLOTS:
     void init()
     {
         Diagnostics::clearLogs();
+    }
+
+    void cleanup()
+    {
+        Diagnostics::setVerboseLogging(false);
     }
 
     void testRedaction()
@@ -70,6 +76,63 @@ private Q_SLOTS:
         QCOMPARE(lines.size(), 120);
         QVERIFY(lines.first().contains(QStringLiteral("Message number 30")));
         QVERIFY(lines.last().contains(QStringLiteral("Message number 149")));
+    }
+
+    void verboseLoggingKeepsMoreLines()
+    {
+        QCOMPARE(Diagnostics::logCapacity(), 120);
+        Diagnostics::setVerboseLogging(true);
+        QVERIFY(Diagnostics::verboseLogging());
+        QCOMPARE(Diagnostics::logCapacity(), 500);
+        for (int i = 0; i < 600; ++i) {
+            Diagnostics::addLogEntry(QStringLiteral("DEBUG"), QStringLiteral("cat"), QStringLiteral("Message number %1").arg(i));
+        }
+        QStringList lines = Diagnostics().recentLogs().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        QCOMPARE(lines.size(), 500);
+        QVERIFY(lines.first().contains(QStringLiteral("Message number 100")));
+
+        // Back to normal: the buffer shrinks to the newest lines.
+        Diagnostics::setVerboseLogging(false);
+        lines = Diagnostics().recentLogs().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        QCOMPARE(lines.size(), 120);
+        QVERIFY(lines.first().contains(QStringLiteral("Message number 480")));
+        QVERIFY(lines.last().contains(QStringLiteral("Message number 599")));
+    }
+
+    void verboseLoggingLetsSugoDebugMessagesThrough()
+    {
+        if (!qEnvironmentVariableIsEmpty("QT_LOGGING_RULES") || !qEnvironmentVariableIsEmpty("QT_LOGGING_CONF")) {
+            QSKIP("The environment sets its own logging rules, which win over these.");
+        }
+        const QLoggingCategory category("sugo.test.verbose");
+        Diagnostics::setVerboseLogging(true);
+        QVERIFY(category.isDebugEnabled());
+        Diagnostics::setVerboseLogging(false);
+        QVERIFY(!category.isDebugEnabled());
+    }
+
+    void reportStatesVerboseLogging()
+    {
+        QTemporaryDir configDir;
+        AppSettings settings(Settings::open(configDir.filePath(QStringLiteral("settings.conf"))), nullptr, false);
+        Diagnostics diag;
+        diag.attach(&settings, nullptr);
+        QVERIFY(diag.generateReport().contains(QStringLiteral("- Verbose Logging: Off")));
+
+        // The setting is followed while attached.
+        settings.setVerboseLogging(true);
+        QVERIFY(Diagnostics::verboseLogging());
+        QVERIFY(diag.generateReport().contains(QStringLiteral("- Verbose Logging: On")));
+        settings.setVerboseLogging(false);
+        QVERIFY(!Diagnostics::verboseLogging());
+        QVERIFY(diag.generateReport().contains(QStringLiteral("- Verbose Logging: Off")));
+
+        // A saved choice applies as soon as Diagnostics is attached.
+        settings.setVerboseLogging(true);
+        Diagnostics::setVerboseLogging(false);
+        Diagnostics other;
+        other.attach(&settings, nullptr);
+        QVERIFY(Diagnostics::verboseLogging());
     }
 
     void testGenerateReport()

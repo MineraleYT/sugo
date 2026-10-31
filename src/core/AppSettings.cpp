@@ -46,6 +46,7 @@ const char kPromptTaskNote[] = "PromptTaskNote";
 const char kColorScheme[] = "ColorScheme";
 const char kUpdateChannel[] = "UpdateChannel";
 const char kAutoCheckUpdates[] = "AutoCheckUpdates";
+const char kVerboseLogging[] = "VerboseLogging";
 
 QString validColorScheme(const QString &scheme)
 {
@@ -174,6 +175,7 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     applyColorScheme();
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
+    m_verboseLogging = settings.value(QLatin1String(kVerboseLogging), Defaults::verboseLogging).toBool();
 
     // Left behind by versions that had a daily goal.
     if (m_config->contains(QStringLiteral("DailyGoal"))) {
@@ -461,6 +463,16 @@ void AppSettings::setAutoCheckUpdates(bool enabled)
     Q_EMIT autoCheckUpdatesChanged();
 }
 
+void AppSettings::setVerboseLogging(bool verbose)
+{
+    if (m_verboseLogging == verbose) {
+        return;
+    }
+    m_verboseLogging = verbose;
+    store(kVerboseLogging, verbose);
+    Q_EMIT verboseLoggingChanged();
+}
+
 void AppSettings::resetToDefaults()
 {
     // Through the setters: they skip what is already right, store the rest and tell the views.
@@ -482,6 +494,7 @@ void AppSettings::resetToDefaults()
     setColorScheme(QString(Defaults::colorScheme));
     setUpdateChannel(QString(Defaults::updateChannel));
     setAutoCheckUpdates(Defaults::autoCheckUpdates);
+    setVerboseLogging(Defaults::verboseLogging);
 }
 
 void AppSettings::applyColorScheme()

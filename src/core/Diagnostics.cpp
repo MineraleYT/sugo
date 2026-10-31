@@ -21,6 +21,9 @@
 #include <QSysInfo>
 #include <QTime>
 
+#include <QLoggingCategory>
+
+#include <atomic>
 #include <deque>
 
 namespace
@@ -38,6 +41,14 @@ std::deque<QString> &logBuffer()
     return *buffer;
 }
 constexpr size_t kMaxLogEntries = 120;
+// Reproducing a problem with verbose logging on produces many more lines.
+constexpr size_t kMaxVerboseLogEntries = 500;
+std::atomic<bool> s_verbose{false};
+
+size_t maxLogEntries()
+{
+    return s_verbose.load() ? kMaxVerboseLogEntries : kMaxLogEntries;
+}
 QtMessageHandler s_originalHandler = nullptr;
 
 void diagnosticsMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
@@ -69,8 +80,38 @@ Diagnostics::~Diagnostics() = default;
 
 void Diagnostics::attach(AppSettings *settings, DataManager *dataManager)
 {
+    disconnect(m_verboseConnection);
     m_settings = settings;
     m_dataManager = dataManager;
+    if (m_settings) {
+        // The saved choice applies from now on, and the setting is followed while the program runs.
+        setVerboseLogging(m_settings->verboseLogging());
+        m_verboseConnection = connect(m_settings, &AppSettings::verboseLoggingChanged, this, [this]() {
+            setVerboseLogging(m_settings->verboseLogging());
+        });
+    }
+}
+
+void Diagnostics::setVerboseLogging(bool verbose)
+{
+    // An empty rule set is Qt's default. Rules from QT_LOGGING_RULES are evaluated after
+    // these, so a developer's own rules still win.
+    QLoggingCategory::setFilterRules(verbose ? QStringLiteral("sugo.*.debug=true") : QString());
+    QMutexLocker locker(&logMutex());
+    s_verbose = verbose;
+    while (logBuffer().size() > maxLogEntries()) {
+        logBuffer().pop_front();
+    }
+}
+
+bool Diagnostics::verboseLogging()
+{
+    return s_verbose;
+}
+
+int Diagnostics::logCapacity()
+{
+    return int(maxLogEntries());
 }
 
 void Diagnostics::installLogHandler()
@@ -87,7 +128,7 @@ void Diagnostics::addLogEntry(const QString &level, const QString &category, con
     const QString line = QStringLiteral("[%1] [%2] [%3] %4").arg(time, level, category, redactedMsg);
 
     QMutexLocker locker(&logMutex());
-    if (logBuffer().size() >= kMaxLogEntries) {
+    if (logBuffer().size() >= maxLogEntries()) {
         logBuffer().pop_front();
     }
     logBuffer().push_back(line);
@@ -204,6 +245,7 @@ QString Diagnostics::generateReport() const
     lines << QStringLiteral("- Build Type: ") + (QFile::exists(QStringLiteral("/.flatpak-info")) ? QStringLiteral("Flatpak (Sandboxed)") : QStringLiteral("Native"));
     lines << QStringLiteral("- Qt Runtime: ") + QString::fromUtf8(qVersion()) + QStringLiteral(" (compiled with ") + QStringLiteral(QT_VERSION_STR) + QStringLiteral(")");
     lines << QStringLiteral("- QPA Platform: ") + QGuiApplication::platformName();
+    lines << QStringLiteral("- Verbose Logging: ") + (verboseLogging() ? QStringLiteral("On (debug messages are recorded, up to %1 lines)").arg(logCapacity()) : QStringLiteral("Off"));
     lines << QString();
 
     lines << QStringLiteral("## System & Desktop");

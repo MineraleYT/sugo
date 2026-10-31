@@ -1299,6 +1299,11 @@ QQC2.Page {
                 }
 
                 SettingRow {
+                    title: i18n("Verbose logging")
+                    description: i18n("Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce the problem, then copy the report.")
+                    SettingSwitch { setting: "verboseLogging" }
+                }
+                SettingRow {
                     title: i18n("Reset settings")
                     description: i18n("Put the settings back to what they were when you first started Sugo. Your timers, session history and calendar account are kept.")
                     SButton {

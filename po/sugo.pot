@@ -18,11 +18,11 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/core/AppSettings.cpp:285
+#: src/core/AppSettings.cpp:287
 msgid "Could not set up starting Sugo at login."
 msgstr ""
 
-#: src/core/AppSettings.cpp:286
+#: src/core/AppSettings.cpp:288
 msgid "Could not remove the entry that starts Sugo at login."
 msgstr ""
 
@@ -269,15 +269,15 @@ msgstr ""
 msgid "Backup restored."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:270
+#: src/core/Diagnostics.cpp:312
 msgid "The report can only be saved to a local file."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:278
+#: src/core/Diagnostics.cpp:320
 msgid "Could not open %1 for writing: %2"
 msgstr ""
 
-#: src/core/Diagnostics.cpp:283
+#: src/core/Diagnostics.cpp:325
 msgid "Could not write %1: %2"
 msgstr ""
 
@@ -1125,7 +1125,7 @@ msgid "Maximize"
 msgstr ""
 
 #: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:1362
+#: src/qml/pages/AppSettingsPage.qml:1367
 msgid "Close"
 msgstr ""
 
@@ -1835,7 +1835,7 @@ msgid ""
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1252
-#: src/qml/pages/AppSettingsPage.qml:1361
+#: src/qml/pages/AppSettingsPage.qml:1366
 msgid "Copy to Clipboard"
 msgstr ""
 
@@ -1860,61 +1860,71 @@ msgid "Failed to export diagnostic report."
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1302
-msgid "Reset settings"
+msgid "Verbose logging"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1303
+msgid ""
+"Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce "
+"the problem, then copy the report."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1307
+msgid "Reset settings"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1308
 msgid ""
 "Put the settings back to what they were when you first started Sugo. Your "
 "timers, session history and calendar account are kept."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1306
+#: src/qml/pages/AppSettingsPage.qml:1311
 msgid "Reset Settings…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1317
+#: src/qml/pages/AppSettingsPage.qml:1322
 msgid "Back up Sugo database"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1320
-#: src/qml/pages/AppSettingsPage.qml:1337
+#: src/qml/pages/AppSettingsPage.qml:1325
+#: src/qml/pages/AppSettingsPage.qml:1342
 msgid "SQLite database (*.db)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1326
+#: src/qml/pages/AppSettingsPage.qml:1331
 msgid "Export session history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1329
+#: src/qml/pages/AppSettingsPage.qml:1334
 msgid "CSV spreadsheet (*.csv)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1329
+#: src/qml/pages/AppSettingsPage.qml:1334
 msgid "JSON (*.json)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1335
+#: src/qml/pages/AppSettingsPage.qml:1340
 msgid "Choose a Sugo backup"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1343
+#: src/qml/pages/AppSettingsPage.qml:1348
 msgid "Export Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1346
+#: src/qml/pages/AppSettingsPage.qml:1351
 msgid "Text files (*.txt)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1346
+#: src/qml/pages/AppSettingsPage.qml:1351
 msgid "All files (*)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1359
+#: src/qml/pages/AppSettingsPage.qml:1364
 msgid "Diagnostics Report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1360
+#: src/qml/pages/AppSettingsPage.qml:1365
 msgid "All personal details and usernames have been redacted."
 msgstr ""
 

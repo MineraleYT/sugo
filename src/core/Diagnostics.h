@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QMetaObject>
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -60,8 +61,17 @@ public:
     /// Clears the log buffer (primarily for testing).
     static void clearLogs();
 
+    /// Verbose logging: Sugo's debug messages are let through (sugo.* categories) and the log
+    /// buffer holds more lines. Off restores Qt's default rules; QT_LOGGING_RULES from the
+    /// environment wins over both. Follows AppSettings::verboseLogging once attached.
+    static void setVerboseLogging(bool verbose);
+    static bool verboseLogging();
+    /// How many log lines the buffer keeps now.
+    static int logCapacity();
+
 private:
     AppSettings *m_settings = nullptr;
     DataManager *m_dataManager = nullptr;
     mutable QString m_lastExportError;
+    QMetaObject::Connection m_verboseConnection;
 };

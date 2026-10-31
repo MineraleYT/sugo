@@ -452,6 +452,23 @@ private Q_SLOTS:
         QVERIFY(!reloaded->autoCheckUpdates());
     }
 
+    void verboseLoggingIsOffByDefaultAndPersists()
+    {
+        {
+            const auto settings = make();
+            QVERIFY(!settings->verboseLogging());
+            QSignalSpy spy(settings.get(), &AppSettings::verboseLoggingChanged);
+            settings->setVerboseLogging(false);
+            QCOMPARE(spy.count(), 0);
+            settings->setVerboseLogging(true);
+            settings->setVerboseLogging(true);
+            QCOMPARE(spy.count(), 1);
+            QVERIFY(settings->verboseLogging());
+        }
+        QCOMPARE(stored("VerboseLogging"), QStringLiteral("true"));
+        QVERIFY(make()->verboseLogging());
+    }
+
     void resetToDefaultsRestoresEveryPreferenceThroughTheSetters()
     {
         {
@@ -481,10 +498,12 @@ private Q_SLOTS:
         settings->setColorScheme(QStringLiteral("light"));
         settings->setUpdateChannel(QStringLiteral("nightly"));
         settings->setAutoCheckUpdates(false);
+        settings->setVerboseLogging(true);
 
         QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
         QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
         QSignalSpy scheme(settings.get(), &AppSettings::colorSchemeChanged);
+        QSignalSpy verbose(settings.get(), &AppSettings::verboseLoggingChanged);
         QSignalSpy channel(settings.get(), &AppSettings::updateChannelChanged);
         QSignalSpy firstRun(settings.get(), &AppSettings::firstRunCompletedChanged);
         QSignalSpy login(settings.get(), &AppSettings::startAtLoginChanged);
@@ -509,11 +528,13 @@ private Q_SLOTS:
         QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
         QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
         QVERIFY(settings->autoCheckUpdates());
+        QVERIFY(!settings->verboseLogging());
 
         // Views are told ...
         QCOMPARE(trayIcon.count(), 1);
         QCOMPARE(volume.count(), 1);
         QCOMPARE(scheme.count(), 1);
+        QCOMPARE(verbose.count(), 1);
         QCOMPARE(channel.count(), 1);
         // ... and what is not a preference of this class stays.
         QVERIFY(settings->firstRunCompleted());
@@ -528,12 +549,14 @@ private Q_SLOTS:
         QCOMPARE(stored("SoundTheme"), QStringLiteral("alarm-clock-elapsed"));
         QCOMPARE(stored("ColorScheme"), QStringLiteral("system"));
         QCOMPARE(stored("UpdateChannel"), QStringLiteral("stable"));
+        QCOMPARE(stored("VerboseLogging"), QStringLiteral("false"));
         QCOMPARE(stored("FirstRunCompleted"), QStringLiteral("true"));
         QCOMPARE(stored("CalendarSync/Username"), QStringLiteral("anna"));
         const auto reloaded = make();
         QCOMPARE(reloaded->soundVolume(), 80);
         QCOMPARE(reloaded->colorScheme(), QStringLiteral("system"));
         QVERIFY(reloaded->showTrayIcon());
+        QVERIFY(!reloaded->verboseLogging());
 
         // Nothing left to reset: no change is announced.
         settings->resetToDefaults();
