@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 name: CI
 
+# dev (daily work), testing (the nightly builds) and main (tested, the releases): see
+# "Branches" in docs/DEVELOPMENT.md.
 on:
   push:
     branches:
+      - dev
+      - testing
       - main
     paths-ignore:
       - '**.md'
@@ -13,6 +17,8 @@ on:
       - '.gitignore'
   pull_request:
     branches:
+      - dev
+      - testing
       - main
     paths-ignore:
       - '**.md'

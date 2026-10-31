@@ -128,11 +128,28 @@ For now the program is in English only. The texts still go through the KI18n-sty
 
 ---
 
+## Branches
+
+| Branch | For | A push runs |
+|:---|:---|:---|
+| `dev` | Daily work: every commit goes here | CI (build and tests) |
+| `testing` | What is ready to try: `dev` brought over when you decide | CI, then the nightly build (`nightly.yml`) |
+| `main` | What has been tried: `testing` brought over once it works | CI; releases are tagged here |
+
+Each step is a fast-forward push:
+
+```sh
+git push origin dev:testing     # publish a nightly build of dev
+git push origin testing:main    # mark the tested build as the base of the next release
+```
+
+---
+
 ## Releasing
 
-A release is a version bump, a commit, an annotated tag and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one).
+A release is a version bump, a commit, an annotated tag on `main` and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one).
 
-**Nightly builds.** Every push to `main` that passes CI is built by `nightly.yml` and replaces the assets of the pre-release `nightly` (its tag follows `main`): the AppImage and `nightly.json`, the feed of the nightly channel. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
+**Nightly builds.** Every push to `testing` that passes CI is built by `nightly.yml` and replaces the assets of the pre-release `nightly` (its tag follows `testing`; the branch can't be called `nightly` like the tag): the AppImage and `nightly.json`, the feed of the nightly channel. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
 
 **Checklist** for version `X.Y.Z`:
 

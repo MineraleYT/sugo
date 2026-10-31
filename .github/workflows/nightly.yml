@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Every change on main that passes CI becomes the nightly build: the pre-release "nightly" (one,
-# replaced each time) with the AppImage and nightly.json, the feed the program's update check
-# reads on the nightly channel (see src/core/UpdateChecker.h).
+# Every push to the branch testing that passes CI becomes the nightly build: the pre-release
+# "nightly" (one, replaced each time) with the AppImage and nightly.json, the feed the program's
+# update check reads on the nightly channel (see src/core/UpdateChecker.h). Daily work goes to
+# dev, which only runs CI; see "Branches" in docs/DEVELOPMENT.md.
 name: Nightly
 
 on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main]
+    branches: [testing]
   workflow_dispatch:
 
 # A newer change makes the build of an older one pointless.
@@ -85,12 +86,12 @@ jobs:
                 '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > nightly.json
           cat nightly.json
 
-          # The tag follows main.
+          # The tag follows the branch testing.
           gh api -X PATCH "repos/$REPO/git/refs/tags/nightly" -f sha="$SHA" -F force=true >/dev/null 2>&1 \
             || gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/nightly -f sha="$SHA" >/dev/null
 
           title="Sugo Nightly $VERSION"
-          notes="The newest change on main ($SHA), built automatically. It may have bugs; the stable releases are tested.
+          notes="The branch testing at $SHA, built automatically. It may have bugs; the stable releases are tested.
 
           Download Sugo-x86_64.AppImage, make it executable and start it. In Settings → Updates, the Nightly channel keeps it up to date by itself."
           if gh release view nightly --repo "$REPO" >/dev/null 2>&1; then
