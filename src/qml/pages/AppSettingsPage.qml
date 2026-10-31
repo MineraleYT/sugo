@@ -132,7 +132,19 @@ QQC2.Page {
         }
     }
 
-    // Result of the last diagnostics action: "", "copied", "exported" or "exportFailed".
+    // A copy is shown on the Copy button itself (a check for a few seconds), like the calendar test.
+    property bool diagnosticsCopied: false
+    function showDiagnosticsCopied(): void {
+        diagnosticsCopied = true;
+        diagnosticsCopiedTimer.restart();
+    }
+    Timer {
+        id: diagnosticsCopiedTimer
+        interval: 3000
+        onTriggered: page.diagnosticsCopied = false
+    }
+
+    // Result of the last diagnostics export: "", "exported" or "exportFailed".
     property string diagnosticsResult: ""
     property bool diagnosticsDismissed: false
     // Translated reason of the last failed export, from Diagnostics.lastExportError().
@@ -1251,11 +1263,11 @@ QQC2.Page {
                     Layout.bottomMargin: Theme.spaceMd
                     spacing: Theme.spaceSm
                     SButton {
-                        text: i18n("Copy to Clipboard")
-                        iconName: "copy"
+                        text: page.diagnosticsCopied ? i18n("Copied") : i18n("Copy to Clipboard")
+                        iconName: page.diagnosticsCopied ? "check" : "copy"
                         onClicked: {
                             Diagnostics.copyToClipboard();
-                            page.showDiagnosticsResult("copied");
+                            page.showDiagnosticsCopied();
                         }
                     }
                     SButton {
@@ -1280,8 +1292,6 @@ QQC2.Page {
                     tone: page.diagnosticsResult === "exportFailed" ? "danger" : "info"
                     text: {
                         switch (page.diagnosticsResult) {
-                        case "copied":
-                            return i18n("Diagnostic report copied to clipboard.");
                         case "exported":
                             return i18n("Diagnostic report successfully exported.");
                         case "exportFailed":
@@ -1402,7 +1412,7 @@ QQC2.Page {
             onConfirmed: {
                 Diagnostics.copyToClipboard();
                 diagnosticsPreviewDialog.close();
-                page.showDiagnosticsResult("copied");
+                page.showDiagnosticsCopied();
             }
         }
 
