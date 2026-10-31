@@ -9,8 +9,8 @@ mkdir -p "$podir"
 XGETTEXT=${XGETTEXT:-xgettext}
 MSGCAT=${MSGCAT:-msgcat}
 
-CPP_FILES=$(find src -name "*.cpp" -o -name "*.h")
-QML_FILES=$(find src -name "*.qml")
+CPP_FILES=$(find src -name "*.cpp" -o -name "*.h" | LC_ALL=C sort)
+QML_FILES=$(find src -name "*.qml" | LC_ALL=C sort)
 
 $XGETTEXT --from-code=UTF-8 -C \
     --keyword=i18n:1 --keyword=i18nc:1c,2 --keyword=i18np:1,2 --keyword=i18ncp:1c,2,3 \
