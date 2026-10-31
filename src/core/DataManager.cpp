@@ -11,6 +11,7 @@
 
 #include "Localization.h"
 
+#include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
 #include <QLoggingCategory>
@@ -146,6 +147,14 @@ bool DataManager::clearHistory()
     Q_EMIT dataChanged();
     Q_EMIT operationSucceeded(i18n("Session history cleared."));
     return true;
+}
+
+void DataManager::openDatabaseFolder() const
+{
+    if (usingTemporaryDatabase()) {
+        return;
+    }
+    QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(databasePath()).absolutePath()));
 }
 
 bool DataManager::backupDatabase(const QUrl &fileUrl)

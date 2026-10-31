@@ -40,6 +40,8 @@ public:
     Q_INVOKABLE qint64 lastWorkSessionId() const;
 
     Q_INVOKABLE bool clearHistory();
+    /// Opens the folder holding the database in the file manager.
+    Q_INVOKABLE void openDatabaseFolder() const;
     Q_INVOKABLE bool backupDatabase(const QUrl &fileUrl);
     Q_INVOKABLE bool restoreDatabase(const QUrl &fileUrl);
     Q_INVOKABLE bool updateSessionNote(qint64 sessionId, const QString &note);

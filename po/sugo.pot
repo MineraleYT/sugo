@@ -167,76 +167,76 @@ msgid ""
 "login was refused."
 msgstr ""
 
-#: src/core/DataManager.cpp:141
+#: src/core/DataManager.cpp:142
 msgid "Could not clear session history."
 msgstr ""
 
-#: src/core/DataManager.cpp:147
+#: src/core/DataManager.cpp:148
 msgid "Session history cleared."
 msgstr ""
 
-#: src/core/DataManager.cpp:155
+#: src/core/DataManager.cpp:164
 msgid "Choose a local file for the backup."
 msgstr ""
 
-#: src/core/DataManager.cpp:159 src/core/DataManager.cpp:248
+#: src/core/DataManager.cpp:168 src/core/DataManager.cpp:257
 msgid "Choose a backup file other than the active database."
 msgstr ""
 
-#: src/core/DataManager.cpp:166
+#: src/core/DataManager.cpp:175
 msgid "Could not prepare the database for backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:176
+#: src/core/DataManager.cpp:185
 msgid "Could not create the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:184
+#: src/core/DataManager.cpp:193
 msgid "Could not create the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:191
+#: src/core/DataManager.cpp:200
 msgid "Could not replace the selected backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:197
+#: src/core/DataManager.cpp:206
 msgid "Could not finish writing the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:201
+#: src/core/DataManager.cpp:210
 msgid "Database backup created."
 msgstr ""
 
-#: src/core/DataManager.cpp:208 src/core/DataManager.cpp:227
+#: src/core/DataManager.cpp:217 src/core/DataManager.cpp:236
 msgid "This file is not a Sugo database."
 msgstr ""
 
-#: src/core/DataManager.cpp:229
+#: src/core/DataManager.cpp:238
 msgid "This backup was created by a newer version of Sugo."
 msgstr ""
 
-#: src/core/DataManager.cpp:244
+#: src/core/DataManager.cpp:253
 msgid "Choose a local backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:253 src/core/DataManager.cpp:269
-#: src/core/DataManager.cpp:333
+#: src/core/DataManager.cpp:262 src/core/DataManager.cpp:278
+#: src/core/DataManager.cpp:342
 msgid "Could not restore the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:262
+#: src/core/DataManager.cpp:271
 msgid "Could not read the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:279 src/core/DataManager.cpp:291
+#: src/core/DataManager.cpp:288 src/core/DataManager.cpp:300
 msgid "Could not open the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:318
+#: src/core/DataManager.cpp:327
 msgid "The restored timers could not be read."
 msgstr ""
 
-#: src/core/DataManager.cpp:340
+#: src/core/DataManager.cpp:349
 msgid "Backup restored."
 msgstr ""
 
@@ -1096,7 +1096,7 @@ msgid "Maximize"
 msgstr ""
 
 #: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:1260
+#: src/qml/pages/AppSettingsPage.qml:1272
 msgid "Close"
 msgstr ""
 
@@ -1140,7 +1140,7 @@ msgstr ""
 msgid "Open Releases Page"
 msgstr ""
 
-#: src/qml/pages/AboutPage.qml:181 src/qml/pages/AppSettingsPage.qml:1213
+#: src/qml/pages/AboutPage.qml:181 src/qml/pages/AppSettingsPage.qml:1225
 #: src/qml/pages/TimerPage.qml:231
 msgid "Dismiss"
 msgstr ""
@@ -1631,142 +1631,155 @@ msgid "Data management"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1053
-msgid "Database: %1"
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1054
-msgid "Stop the active timer before restoring a backup."
+msgid "Database"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1056
-msgid "Back up…"
+msgid "Open folder"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1061
-msgid "Restore…"
+#: src/qml/pages/AppSettingsPage.qml:1063
+msgid "Backup and restore"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1065
+msgid "Stop the active timer before restoring a backup."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1066
+msgid ""
+"Save your timers and session history to a file, or bring them back from one."
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1068
+msgid "Back up…"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1073
+msgid "Restore…"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1080
 msgid "Session history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1072
+#: src/qml/pages/AppSettingsPage.qml:1084
 msgid "Clear history…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1082
+#: src/qml/pages/AppSettingsPage.qml:1094
 msgid "Global Shortcuts and Automation"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1086
+#: src/qml/pages/AppSettingsPage.qml:1098
 msgid "Allow other programs to control the timer"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1087
+#: src/qml/pages/AppSettingsPage.qml:1099
 msgid ""
 "Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and "
 "stop it. Turn this off if you only use Sugo's own window and tray."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1091
+#: src/qml/pages/AppSettingsPage.qml:1103
 msgid "D-Bus commands"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1092
+#: src/qml/pages/AppSettingsPage.qml:1104
 msgid ""
 "Sugo can be controlled through D-Bus at %1, for example with the command "
 "below. Available commands: %2."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1127
+#: src/qml/pages/AppSettingsPage.qml:1139
 msgid "Copy command"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1136
+#: src/qml/pages/AppSettingsPage.qml:1148
 msgid "Command copied to the clipboard."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1144
+#: src/qml/pages/AppSettingsPage.qml:1156
 msgid "Global shortcuts"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1145
+#: src/qml/pages/AppSettingsPage.qml:1157
 msgid "Assign keys to these commands in Plasma's System Settings."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1147
+#: src/qml/pages/AppSettingsPage.qml:1159
 msgid "Open Shortcut Settings"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1156
+#: src/qml/pages/AppSettingsPage.qml:1168
 msgid "Troubleshooting & Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1160
+#: src/qml/pages/AppSettingsPage.qml:1172
 msgid "Diagnostic report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1161
+#: src/qml/pages/AppSettingsPage.qml:1173
 msgid ""
 "Generate a redacted report with system information and recent logs to share "
 "when reporting an issue."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1169
-#: src/qml/pages/AppSettingsPage.qml:1259
+#: src/qml/pages/AppSettingsPage.qml:1181
+#: src/qml/pages/AppSettingsPage.qml:1271
 msgid "Copy to Clipboard"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1177
+#: src/qml/pages/AppSettingsPage.qml:1189
 msgid "Export Diagnostics…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1182
+#: src/qml/pages/AppSettingsPage.qml:1194
 msgid "View Report…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1199
+#: src/qml/pages/AppSettingsPage.qml:1211
 msgid "Diagnostic report copied to clipboard."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1201
+#: src/qml/pages/AppSettingsPage.qml:1213
 msgid "Diagnostic report successfully exported."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1205
+#: src/qml/pages/AppSettingsPage.qml:1217
 msgid "Failed to export diagnostic report."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1224
+#: src/qml/pages/AppSettingsPage.qml:1236
 msgid "Back up Sugo database"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1227
-#: src/qml/pages/AppSettingsPage.qml:1235
+#: src/qml/pages/AppSettingsPage.qml:1239
+#: src/qml/pages/AppSettingsPage.qml:1247
 msgid "SQLite database (*.db)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1233
+#: src/qml/pages/AppSettingsPage.qml:1245
 msgid "Choose a Sugo backup"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1241
+#: src/qml/pages/AppSettingsPage.qml:1253
 msgid "Export Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1244
+#: src/qml/pages/AppSettingsPage.qml:1256
 msgid "Text files (*.txt)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1244
+#: src/qml/pages/AppSettingsPage.qml:1256
 msgid "All files (*)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1257
+#: src/qml/pages/AppSettingsPage.qml:1269
 msgid "Diagnostics Report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1258
+#: src/qml/pages/AppSettingsPage.qml:1270
 msgid "All personal details and usernames have been redacted."
 msgstr ""
 

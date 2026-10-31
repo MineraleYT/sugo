@@ -1050,8 +1050,20 @@ QQC2.Page {
                 iconName: "server-database"
                 SettingRow {
                     first: true
-                    title: i18n("Database: %1", DataManager ? DataManager.databasePath : "")
-                    description: TimerEngine.active ? i18n("Stop the active timer before restoring a backup.") : ""
+                    title: i18n("Database")
+                    description: DataManager ? DataManager.databasePath : ""
+                    SButton {
+                        text: i18n("Open folder")
+                        iconName: "external"
+                        visible: DataManager !== null && !DataManager.usingTemporaryDatabase
+                        onClicked: DataManager.openDatabaseFolder()
+                    }
+                }
+                SettingRow {
+                    title: i18n("Backup and restore")
+                    description: TimerEngine.active
+                        ? i18n("Stop the active timer before restoring a backup.")
+                        : i18n("Save your timers and session history to a file, or bring them back from one.")
                     SButton {
                         text: i18n("Back up…")
                         iconName: "download"
