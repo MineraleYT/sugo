@@ -1077,6 +1077,16 @@ QQC2.Page {
                     }
                 }
                 SettingRow {
+                    title: i18n("Export history")
+                    description: i18n("Save all recorded sessions as a spreadsheet (CSV) or JSON file.")
+                    SButton {
+                        text: i18n("Export…")
+                        iconName: "download"
+                        enabled: DataManager !== null && DataManager.sessionCount > 0
+                        onClicked: exportHistoryDialog.open()
+                    }
+                }
+                SettingRow {
                     title: i18n("Session history")
                     SButton {
                         id: clearHistoryButton
@@ -1238,6 +1248,15 @@ QQC2.Page {
             defaultSuffix: "db"
             nameFilters: [i18n("SQLite database (*.db)")]
             onAccepted: DataManager.backupDatabase(selectedFile)
+        }
+
+        FileDialog {
+            id: exportHistoryDialog
+            title: i18n("Export session history")
+            fileMode: FileDialog.SaveFile
+            defaultSuffix: "csv"
+            nameFilters: [i18n("CSV spreadsheet (*.csv)"), i18n("JSON (*.json)")]
+            onAccepted: DataManager.exportHistory(selectedFile)
         }
 
         FileDialog {

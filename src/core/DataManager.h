@@ -12,7 +12,7 @@ class SessionRecorder;
 class SessionRepository;
 class StatsModel;
 
-/// Backup, restore and clear the user's recorded timer sessions.
+/// Backup, restore, export and clear the user's recorded timer sessions.
 class DataManager : public QObject
 {
     Q_OBJECT
@@ -40,6 +40,8 @@ public:
     Q_INVOKABLE qint64 lastWorkSessionId() const;
 
     Q_INVOKABLE bool clearHistory();
+    /// Writes every session to a .csv or .json file (chosen by the file's extension).
+    Q_INVOKABLE bool exportHistory(const QUrl &fileUrl);
     /// Opens the folder holding the database in the file manager.
     Q_INVOKABLE void openDatabaseFolder() const;
     Q_INVOKABLE bool backupDatabase(const QUrl &fileUrl);
