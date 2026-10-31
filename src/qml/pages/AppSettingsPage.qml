@@ -1257,33 +1257,33 @@ QQC2.Page {
                         }
                     }
                 }
-        Banner {
-            id: diagnosticsInlineMessage
-            Layout.fillWidth: true
-            Layout.bottomMargin: Theme.spaceMd
-            visible: page.diagnosticsResult.length > 0 && !page.diagnosticsDismissed
-            tone: page.diagnosticsResult === "exportFailed" ? "danger" : "info"
-            text: {
-                switch (page.diagnosticsResult) {
-                case "copied":
-                    return i18n("Diagnostic report copied to clipboard.");
-                case "exported":
-                    return i18n("Diagnostic report successfully exported.");
-                case "exportFailed":
-                    return page.diagnosticsExportError.length > 0
-                        ? page.diagnosticsExportError
-                        : i18n("Failed to export diagnostic report.");
+                Banner {
+                    id: diagnosticsInlineMessage
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: Theme.spaceMd
+                    visible: page.diagnosticsResult.length > 0 && !page.diagnosticsDismissed
+                    tone: page.diagnosticsResult === "exportFailed" ? "danger" : "info"
+                    text: {
+                        switch (page.diagnosticsResult) {
+                        case "copied":
+                            return i18n("Diagnostic report copied to clipboard.");
+                        case "exported":
+                            return i18n("Diagnostic report successfully exported.");
+                        case "exportFailed":
+                            return page.diagnosticsExportError.length > 0
+                                ? page.diagnosticsExportError
+                                : i18n("Failed to export diagnostic report.");
+                        }
+                        return "";
+                    }
+                    SButton {
+                        kind: "ghost"
+                        iconOnly: true
+                        iconName: "close"
+                        text: i18n("Dismiss")
+                        onClicked: page.diagnosticsDismissed = true
+                    }
                 }
-                return "";
-            }
-            SButton {
-                kind: "ghost"
-                iconOnly: true
-                iconName: "close"
-                text: i18n("Dismiss")
-                onClicked: page.diagnosticsDismissed = true
-            }
-        }
 
             }
         }
