@@ -10,7 +10,7 @@
   <name>Sugo</name>
   <summary>Pomodoro timer with configurable presets and session statistics</summary>
   <description>
-    <p>Sugo is a Pomodoro timer for KDE Plasma 6. It provides configurable work and break phases, timer presets, session history, and productivity statistics.</p>
+    <p>Sugo is a Pomodoro timer for Linux desktops, at home on KDE Plasma. It provides configurable work and break phases, timer presets, session history, and productivity statistics.</p>
     <p>Sugo is an independent project and is not an official KDE application.</p>
     <ul>
       <li>Work, short-break, and long-break phases with configurable durations and cycle count</li>

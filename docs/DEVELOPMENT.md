@@ -72,11 +72,11 @@ The sandbox permissions are in the `finish-args` of `io.github.mineraleyt.sugo.y
 
 ## Building the AppImage
 
-The AppImage is built in an Ubuntu 22.04 container (the oldest glibc it runs on) with Qt 6.8 from qt.io, extra-cmake-modules built from source and linuxdeploy, all pinned in `packaging/appimage/build.sh`:
+The AppImage is built in an Ubuntu 22.04 container (the oldest glibc it runs on) with Qt 6.10 from qt.io, extra-cmake-modules built from source and linuxdeploy, all pinned in `packaging/appimage/build.sh`:
 
 ```sh
 podman run --rm -v "$PWD:/src:ro,z" -v "$PWD/out:/out:z" docker.io/library/ubuntu:22.04 \
-    bash /src/packaging/appimage/build.sh 1.2.0-dev /out
+    bash /src/packaging/appimage/build.sh 1.0.1-dev /out
 ```
 
 The first argument is the version the program shows and compares when it looks for updates. To try the result without installing it, unpack it (`./out/Sugo-x86_64.AppImage --appimage-extract`) and run `squashfs-root/AppRun`, or pass that to `tests/smoke_app.sh`. If AppImageLauncher is installed, starting the AppImage itself makes it offer to move the file into `~/Applications`.
@@ -99,6 +99,16 @@ env -i PATH=/usr/bin:/bin HOME=/tmp/sugo-test-home \
 ```
 
 A test that builds a GUI application sets `QT_QPA_PLATFORM=offscreen` for itself (see `tests/CMakeLists.txt`); tests that need D-Bus start a private daemon and are written to work without a session bus. The build is expected to be free of compiler warnings.
+
+### Environment variables for development
+
+| Variable | Effect |
+|---|---|
+| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `about`, `welcome` |
+| `SUGO_SMOKE_PAGE`, `SUGO_STATS_SMOKE_TEST=1` | Smoke runs (`tests/smoke_app.sh`): check a page, then quit |
+| `SUGO_SCREENSHOT=file.png` | Saves a picture of the window after `SUGO_SCREENSHOT_DELAY` ms (1500 by default), then quits |
+| `SUGO_WINDOW_STYLE` | Forces the title bar style (`kde`, `gnome`, `macos`, `windows`, `generic`, ...) |
+| `SUGO_OVERRIDE_VERSION` | The version the update check compares, to try it against the published feeds |
 
 ---
 

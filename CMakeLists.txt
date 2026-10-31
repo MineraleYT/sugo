@@ -18,8 +18,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # The version the program shows and compares when it looks for updates. Nightly builds set it to
-# a pre-release of the coming version, "1.2.1-nightly.20261031.42": newer than 1.2.0, older than
-# 1.2.1 (see .github/workflows/nightly.yml).
+# a pre-release of the coming version, "1.0.1-nightly.20261031.42": newer than 1.0.0, older than
+# 1.0.1 (see .github/workflows/nightly.yml).
 # Empty: the project version (kept out of the cache, so a version bump reaches existing builds).
 set(SUGO_VERSION "" CACHE STRING "Version shown by the program and compared by the update check (empty: the project version)")
 set(sugo_version "${SUGO_VERSION}")
@@ -53,7 +53,7 @@ if(BUILD_TESTING)
 endif()
 
 install(FILES data/io.github.mineraleyt.sugo.desktop DESTINATION ${KDE_INSTALL_APPDIR})
-# KF6 KRunner only looks for D-Bus runners in share/krunner/dbusplugins. The plugin version
+# KRunner only looks for D-Bus runners in share/krunner/dbusplugins. The plugin version
 # comes from project() so it can never fall behind a release.
 configure_file(data/io.github.mineraleyt.sugo.runner.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop DESTINATION ${KDE_INSTALL_DATADIR}/krunner/dbusplugins)

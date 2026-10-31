@@ -4,11 +4,11 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// The bar above the page: back (on sub-pages), the title, the timer's state and the page's actions.
+/// The bar above the page: back (on sub-pages), the title, and the timer's state.
 Rectangle {
     id: bar
 
-    /// The page shown; its `title` and `actions` (PageAction) appear here.
+    /// The page shown; its `title` appears here.
     property var page: null
     property bool canGoBack: false
     property bool showMenuButton: false
@@ -135,30 +135,6 @@ Rectangle {
 
         Item {
             Layout.fillWidth: true
-        }
-
-        Repeater {
-            model: bar.page && bar.page.actions && !bar.minimal ? bar.page.actions : []
-            delegate: SButton {
-                required property var modelData
-                visible: modelData.visible
-                enabled: modelData.enabled
-                kind: "ghost"
-                text: modelData.text
-                iconName: modelData.iconName
-                toolTipText: modelData.tooltip
-                onClicked: modelData.trigger()
-            }
-        }
-
-        Rectangle {
-            visible: !bar.minimal && !!bar.page && !!bar.page.actions && bar.page.actions.length > 0
-                     && DesktopStyle.rightButtons.length > 0
-            Layout.preferredWidth: Theme.hairline
-            Layout.preferredHeight: Theme.iconMd
-            Layout.leftMargin: Theme.spaceXs
-            Layout.rightMargin: Theme.spaceXs
-            color: Theme.border
         }
 
         // The window's own buttons on this side, as the desktop draws them.

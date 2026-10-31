@@ -20,10 +20,10 @@ class QSaveFile;
  * Looks for a newer Sugo and, when it runs as an AppImage, installs it.
  *
  * Each release channel has a feed on GitHub, a small JSON file published next to the builds:
- * "stable" with the newest release, "nightly" with the build of the newest change on main
+ * "stable" with the newest release, "nightly" with the newest build of the branch testing
  * (.github/workflows/release.yml and nightly.yml write them):
  *
- *     { "version": "1.2.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/nightly/Sugo-x86_64.AppImage",
+ *     { "version": "1.0.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/nightly/Sugo-x86_64.AppImage",
  *       "sha256": "<64 hex digits>", "size": 45939192, "page": "https://github.com/MineraleYT/sugo/releases/tag/nightly" }
  *
  * The feed is newer when its version is (compareVersions(); nightly versions are the next

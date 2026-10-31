@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: Sugo version
-      placeholder: e.g. 1.2.0 or 1.2.1-nightly.20261031.1
+      placeholder: e.g. 1.0.0 or 1.0.1-nightly.20261031.1
     validations:
       required: true
   - type: dropdown

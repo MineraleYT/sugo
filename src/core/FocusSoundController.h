@@ -19,9 +19,6 @@ class AppSettings;
 class FocusSoundController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
-    Q_PROPERTY(int volume READ volume WRITE setVolume NOTIFY volumeChanged FINAL)
-    Q_PROPERTY(bool isPlaying READ isPlaying NOTIFY isPlayingChanged FINAL)
 
 public:
     enum class Mode {
@@ -54,8 +51,6 @@ public Q_SLOTS:
     void updatePlayback();
 
 Q_SIGNALS:
-    void modeChanged();
-    void volumeChanged();
     void isPlayingChanged();
 
 private Q_SLOTS:

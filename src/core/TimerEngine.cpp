@@ -452,10 +452,7 @@ void TimerEngine::setCyclesBeforeLong(int cycles)
 
 void TimerEngine::setAutoStartMode(AutoStartMode mode)
 {
-    if (m_autoStartMode != mode) {
-        m_autoStartMode = mode;
-        Q_EMIT autoStartModeChanged();
-    }
+    m_autoStartMode = mode;
 }
 
 void TimerEngine::setAutoStartModeInt(int mode)

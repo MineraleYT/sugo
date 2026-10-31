@@ -70,7 +70,6 @@ public:
     Q_PROPERTY(BreakdownMode breakdownMode READ breakdownMode WRITE setBreakdownMode NOTIFY breakdownModeChanged FINAL)
     Q_PROPERTY(bool includeInterrupted READ includeInterrupted WRITE setIncludeInterrupted NOTIFY includeInterruptedChanged FINAL)
 
-    Q_PROPERTY(QDate anchorDate READ anchorDate NOTIFY periodChanged FINAL)
     Q_PROPERTY(QString title READ title NOTIFY periodChanged FINAL)
     Q_PROPERTY(bool isCurrent READ isCurrent NOTIFY periodChanged FINAL)
     Q_PROPERTY(bool canGoNext READ canGoNext NOTIFY periodChanged FINAL)

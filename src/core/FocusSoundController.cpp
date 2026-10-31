@@ -73,7 +73,6 @@ void FocusSoundController::setMode(int mode)
         return;
     }
     m_mode = mode;
-    Q_EMIT modeChanged();
     updatePlayback();
 }
 
@@ -84,7 +83,6 @@ void FocusSoundController::setVolume(int volume)
         return;
     }
     m_volume = volume;
-    Q_EMIT volumeChanged();
 }
 
 void FocusSoundController::preview(int mode, int volume)

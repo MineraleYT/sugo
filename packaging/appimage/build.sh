@@ -5,7 +5,7 @@
 # AppImage is meant for (glibc 2.35), with Qt from qt.io (Ubuntu 22.04 has no Qt 6.8):
 #
 #   podman run --rm -v "$PWD:/src:ro,z" -v "$PWD/out:/out:z" ubuntu:22.04 \
-#       bash /src/packaging/appimage/build.sh 1.2.0 /out
+#       bash /src/packaging/appimage/build.sh 1.0.0 /out
 #
 # Arguments: the version the program shows and compares when it looks for updates (see
 # UpdateChecker), and the directory that receives Sugo-x86_64.AppImage.

@@ -30,8 +30,6 @@ class PresetModel : public QAbstractListModel
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged FINAL)
     Q_PROPERTY(QString currentCategory READ currentCategory NOTIFY currentChanged FINAL)
-    Q_PROPERTY(QString currentSummary READ currentSummary NOTIFY currentChanged FINAL)
-    Q_PROPERTY(QString currentIconName READ currentIconName NOTIFY currentChanged FINAL)
 
 public:
     static int maxWorkMinutes() { return PresetLimits::MaxWorkSeconds / 60; }

@@ -46,7 +46,6 @@ qt6_add_qml_module(sugo_core
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml
         qml/components/ThemeIcon.qml
-        qml/components/PageAction.qml
 )
 
 # C++ types exposed to QML (QML_ELEMENT / QML_SINGLETON) live in core/.

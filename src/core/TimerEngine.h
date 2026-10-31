@@ -92,7 +92,6 @@ public:
     Q_ENUM(AutoStartMode)
 
     Q_PROPERTY(int cyclesBeforeLong READ cyclesBeforeLong WRITE setCyclesBeforeLong NOTIFY cyclesBeforeLongChanged FINAL)
-    Q_PROPERTY(int autoStartMode READ autoStartModeInt WRITE setAutoStartModeInt NOTIFY autoStartModeChanged FINAL)
 
     /// A phase cut short before this much time ran is an accidental start: it is not recorded
     /// (SessionRecorder) and a Work phase skipped that early does not count a cycle.
@@ -125,7 +124,6 @@ public:
     void setCyclesBeforeLong(int cycles);
     AutoStartMode autoStartMode() const { return m_autoStartMode; }
     void setAutoStartMode(AutoStartMode mode);
-    int autoStartModeInt() const { return static_cast<int>(m_autoStartMode); }
     void setAutoStartModeInt(int mode);
 
 public Q_SLOTS:
@@ -158,7 +156,6 @@ Q_SIGNALS:
     void shortBreakSecondsChanged();
     void longBreakSecondsChanged();
     void cyclesBeforeLongChanged();
-    void autoStartModeChanged();
     void oneMinuteRemaining(TimerEngine::Phase phase);
 
     /// A phase ended, either elapsed (completed) or cut short by stop/skip.
