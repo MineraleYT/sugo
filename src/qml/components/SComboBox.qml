@@ -16,7 +16,9 @@ QQC2.ComboBox {
 
     background: Rectangle {
         radius: Theme.radius
-        color: combo.down || combo.popup.visible ? Theme.pressed : (combo.hovered ? Theme.hover : Theme.background)
+        // hover and pressed are translucent: lay them over the field's colour, not in place of it.
+        color: combo.down || combo.popup.visible ? Qt.tint(Theme.background, Theme.pressed)
+                                                 : (combo.hovered ? Qt.tint(Theme.background, Theme.hover) : Theme.background)
         border.width: Theme.hairline
         border.color: combo.visualFocus ? Theme.focusRing : Theme.border
     }

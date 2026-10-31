@@ -49,13 +49,17 @@ QQC2.AbstractButton {
             if (button.isPrimary) {
                 return button.enabled ? Theme.alpha(Theme.primary, button.down ? 0.8 : (button.hovered ? 0.9 : 1)) : Theme.selected;
             }
+            // A secondary button's hover is laid over its own fill: animating from the opaque fill to
+            // the translucent overlay would pass through a half-opaque grey (a light flash).
+            const secondary = button.kind === "secondary";
+            const over = c => secondary ? Qt.tint(Theme.card, c) : c;
             if (button.down) {
-                return Theme.pressed;
+                return over(Theme.pressed);
             }
             if (button.hovered && button.enabled) {
-                return button.kind === "danger" || button.destructive ? Theme.dangerFill : Theme.hover;
+                return over(button.kind === "danger" || button.destructive ? Theme.dangerFill : Theme.hover);
             }
-            return button.kind === "secondary" ? Theme.card : "transparent";
+            return secondary ? Theme.card : "transparent";
         }
         border.width: button.kind === "secondary" || button.kind === "danger" ? Theme.hairline : 0
         border.color: button.kind === "danger" ? Theme.alpha(Theme.danger, 0.4) : Theme.border
