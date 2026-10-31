@@ -12,3 +12,5 @@ Terminal=false
 Categories=Qt;Utility;
 Keywords=pomodoro;timer;focus;productivity;
 StartupNotify=true
+# Lets the task manager find this entry even when an AppImage integrator renames the file.
+StartupWMClass=io.github.mineraleyt.sugo

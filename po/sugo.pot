@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-31 02:25+0100\n"
+"POT-Creation-Date: 2026-10-31 02:31+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,6 +17,23 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: src/main.cpp:73 src/main.cpp:77 src/core/TrayPresenter.cpp:42
+#: src/core/TrayPresenter.cpp:68
+msgid "Sugo"
+msgstr ""
+
+#: src/main.cpp:79
+msgid "A Pomodoro timer with time statistics"
+msgstr ""
+
+#: src/main.cpp:80
+msgid "© 2026 Sugo contributors"
+msgstr ""
+
+#: src/main.cpp:88
+msgid "Start hidden in the system tray (used by the login entry)"
+msgstr ""
 
 #: src/stats/StatsModel.cpp:185
 msgctxt ""
@@ -267,23 +284,6 @@ msgstr ""
 
 #: src/platform/DBusTimerService.cpp:22
 msgid "Control by other programs is turned off in Sugo's settings."
-msgstr ""
-
-#: src/main.cpp:72 src/main.cpp:76 src/core/TrayPresenter.cpp:42
-#: src/core/TrayPresenter.cpp:68
-msgid "Sugo"
-msgstr ""
-
-#: src/main.cpp:78
-msgid "A Pomodoro timer with time statistics"
-msgstr ""
-
-#: src/main.cpp:79
-msgid "© 2026 Sugo contributors"
-msgstr ""
-
-#: src/main.cpp:87
-msgid "Start hidden in the system tray (used by the login entry)"
 msgstr ""
 
 #: src/core/UpdateChecker.cpp:329
@@ -829,601 +829,17 @@ msgstr ""
 msgid "Could not remove the entry that starts Sugo at login."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:15
-msgid "Welcome"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:319
-msgid ""
-"A calm Pomodoro timer. Focus in rounds, rest in between, and see where your "
-"time goes."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:331
-msgid "No account, no tracking: everything stays on this computer."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:373
-msgctxt "a duration in minutes"
-msgid "%1 min"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:378 src/qml/pages/PresetEditPage.qml:28
-#: src/qml/components/Sidebar.qml:143
-msgid "Timers"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:379
-msgid "Work in rounds, rest in between"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:380
-msgid ""
-"A timer alternates focus and short breaks, with a longer break every few "
-"rounds. You start with a classic Pomodoro that keeps notifications quiet "
-"while you work; add your own from the sidebar."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:404
-msgid "The cycle of the timer in use"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:438
-msgid "focus"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:439
-msgid "break"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:441 src/qml/Main.qml:175
-msgid "long break"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:524
-msgctxt "work and break minutes of a timer"
-msgid "%1 / %2 min"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:543
-msgid "Live tray icon"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:544
-msgid "The minutes left, right in the panel."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:566
-msgid "Quiet while you work"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:567
-msgid "Notifications can wait for the break."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:594
-msgid "Set up"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:595
-msgid "Make it yours"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:596
-msgid ""
-"A few choices to start with. You can change all of them later in Settings."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:614
-msgid "Protect weekend streaks"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:615
-msgid "A weekend without sessions does not end your streak."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:623
-msgid "Show an icon in the tray"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:624
-msgid "While a timer runs, it shows the phase and the minutes left."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:633
-msgid "Keep running in the tray"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:634
-msgid "Closing the window leaves the timer running."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:642
-msgid "Start at login"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:643
-msgid "Sugo is ready as soon as you log in."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:706
-msgid "You're all set"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:718
-msgid "Your timer is ready. Sessions and streaks will show up in Statistics."
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:732 src/qml/pages/TimerPage.qml:411
-#: src/qml/Main.qml:696
-msgctxt "keyboard key"
-msgid "Space"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:734
-msgid "starts and pauses"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:743 src/qml/components/Sidebar.qml:122
-msgctxt "keyboard shortcut"
-msgid "Ctrl K"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:745
-msgid "finds anything"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:778
-msgid "Skip Tour"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:801
-msgctxt "@action:button welcome tour"
-msgid "Step %1 of %2"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:841 src/qml/components/TopBar.qml:94
-msgid "Back"
-msgstr ""
-
-#: src/qml/pages/WelcomePage.qml:862 src/qml/pages/StatsPage.qml:173
-msgid "Next"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:13 src/qml/pages/AppSettingsPage.qml:20
-#: src/qml/components/Sidebar.qml:129 src/qml/Main.qml:691
-msgid "Focus"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:62
-msgid "Skip This Work Session?"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:62
-msgid "Stop This Work Session?"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:63
-msgid ""
-"The rest of this work session is skipped and it is saved as interrupted."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:64
-msgid "The work session ends now and is saved as interrupted."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:67
-msgid "Keep Working"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:88
-msgid "Work %1"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:132
-msgid "Ready to focus"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:132
-msgid "Time for a break"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:135
-msgid "Paused"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:139
-msgctxt "focusing · category"
-msgid "Focusing · %1"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:139
-msgid "Focusing"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:217
-msgid "The timer was paused because the computer went to sleep."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:218
-msgid "The timer was paused because your screen was locked."
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:231 src/qml/pages/AppSettingsPage.qml:1204
-#: src/qml/pages/AboutPage.qml:181
-msgid "Dismiss"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:280
-msgctxt "time left"
-msgid "%1 minutes %2 seconds left"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:371
-msgctxt "the phase after this one, its minutes"
-msgid "Next: %1 · %2 min"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:414
-msgid "pause"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:414
-msgid "start"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:421
-msgctxt "keyboard key"
-msgid "S"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:425
-msgid "skip"
-msgstr ""
-
-#: src/qml/pages/TimerPage.qml:445
-msgid "Notifications silenced until the break"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:19
-msgid "Day"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:20
-msgid "Week"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:21
-msgid "Month"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:22
-msgid "Year"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:28 src/qml/pages/PresetEditPage.qml:384
-msgid "Category"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:29
-msgid "Task"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:44
-msgctxt "change against the day before"
-msgid "%1%2% vs the day before"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:46
-msgctxt "change against the week before"
-msgid "%1%2% vs the week before"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:48
-msgctxt "change against the month before"
-msgid "%1%2% vs the month before"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:50
-msgctxt "change against the year before"
-msgid "%1%2% vs the year before"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:66
-msgid "Best hour"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:67
-msgid "Best month"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:67
-msgid "Best day"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:158
-msgid "Previous"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:180
-msgid "Today"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:211
-msgid "Focused"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:228
-msgid "Sessions"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:230
-msgid "+%1 interrupted"
-msgid_plural "+%1 interrupted"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/qml/pages/StatsPage.qml:234
-msgid "Breaks"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:246
-msgid "Activity"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:335
-msgid "No focus time in this period yet."
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:353
-msgid "Where the time went"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:362
-msgid "Nothing recorded in this period."
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:417
-msgid "Streak"
-msgstr ""
-
-#: src/qml/pages/StatsPage.qml:429
-msgid "day"
-msgid_plural "days"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/qml/pages/StatsPage.qml:438
-msgid "Best %1"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:81
-msgid "%1 work session"
-msgid_plural "%1 work sessions"
-msgstr[0] ""
-msgstr[1] ""
-
-#: src/qml/pages/PresetEditPage.qml:79
-msgctxt ""
-"%1 work duration, %2 break duration, %3 long break duration, %4 number of "
-"work sessions"
-msgid "%1 work • %2 break • %3 long break after %4"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:83
-msgctxt "%1 work duration, %2 break duration"
-msgid "%1 work • %2 break"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:133
-msgid "Discard Changes?"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:134
-msgid "The changes you made to this timer have not been saved."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:135 src/qml/pages/PresetEditPage.qml:215
-msgid "Discard"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:137
-msgid "Keep Editing"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:146
-msgid "Reset to Defaults?"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:147
-msgid ""
-"“%1” goes back to its original durations and options. Your changes to it are "
-"lost."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:148
-msgid "Reset"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:159
-msgid "Delete Timer"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:160
-msgid "Delete “%1”? Statistics already recorded with it are kept."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:161 src/qml/pages/PresetEditPage.qml:432
-msgid "Delete"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:168
-msgid ""
-"“%1” was started meanwhile, so it was not deleted. Stop it to delete it."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:208
-msgid "A new timer"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:208
-msgid "Unsaved changes"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:215 src/qml/pages/AppSettingsPage.qml:802
-#: src/qml/components/ConfirmDialog.qml:16
-msgid "Cancel"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:220
-msgid "Create Timer"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:221
-msgctxt "keyboard shortcut"
-msgid "Ctrl S"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:338
-msgid "Icon"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:339
-msgid "Choose the icon of this timer"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:341
-msgid "Change the icon"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:370
-msgid "Name this timer"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:373
-msgid "Name"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:381
-msgid "Add a category, e.g. Work or Study"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:393
-msgid "Running"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:395
-msgid "Stop the timer to switch to a different timer."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:403
-msgid "Duplicate"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:430
-msgid "The default timer cannot be deleted"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:431
-msgid "This timer is running. Stop it to delete it."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:474
-msgid "One cycle"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:474
-msgid "Work and break"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:483
-msgctxt "hours and minutes"
-msgid "%1h %2m"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:484
-msgctxt "minutes"
-msgid "%1 min"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:531
-msgid "Durations"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:549
-msgctxt "@action set the work duration"
-msgid "%1 minutes"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:573 src/qml/pages/PresetEditPage.qml:584
-#: src/qml/pages/PresetEditPage.qml:595
-msgctxt "minutes, short"
-msgid "min"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:600 src/qml/pages/PresetEditPage.qml:609
-msgid "Long break after"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:601
-msgid "How many work sessions come before the long break."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:607
-msgctxt "work sessions, short"
-msgid "sessions"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:608
-msgid "Never"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:615
-msgid "Behavior"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:619 src/qml/pages/PresetEditPage.qml:623
-msgid "Start automatically"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:620
-msgid "Whether breaks, work phases, or neither start by themselves."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:624
-msgid "Manual"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:624
-msgid "Breaks only"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:624
-msgid "All phases"
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:633
-msgid ""
-"Turns off all system notifications for the work phase and back on for the "
-"break."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:634
-msgid ""
-"Not available: this desktop's notification service cannot be silenced by "
-"applications."
-msgstr ""
-
-#: src/qml/pages/PresetEditPage.qml:670
-msgid "Reset to Defaults"
-msgstr ""
-
 #: src/qml/pages/AppSettingsPage.qml:18
 msgid "General"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:19 src/qml/pages/AppSettingsPage.qml:553
 msgid "Sounds"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:20 src/qml/pages/TimerPage.qml:13
+#: src/qml/components/Sidebar.qml:129 src/qml/Main.qml:691
+msgid "Focus"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:21 src/qml/pages/AppSettingsPage.qml:710
@@ -1531,9 +947,7 @@ msgid "Update channel"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:427
-msgid ""
-"A build of every change, as soon as it is made: the newest Sugo, sometimes "
-"with new bugs."
+msgid "Every new build, as soon as it is made. May have bugs."
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:429
@@ -1759,6 +1173,11 @@ msgstr ""
 msgid "Log in"
 msgstr ""
 
+#: src/qml/pages/AppSettingsPage.qml:802 src/qml/pages/PresetEditPage.qml:215
+#: src/qml/components/ConfirmDialog.qml:16
+msgid "Cancel"
+msgstr ""
+
 #: src/qml/pages/AppSettingsPage.qml:812 src/qml/pages/AppSettingsPage.qml:813
 #: src/qml/pages/AppSettingsPage.qml:896 src/qml/pages/AppSettingsPage.qml:897
 msgid "Test connection"
@@ -1933,6 +1352,11 @@ msgstr ""
 msgid "Failed to export diagnostic report."
 msgstr ""
 
+#: src/qml/pages/AppSettingsPage.qml:1204 src/qml/pages/TimerPage.qml:231
+#: src/qml/pages/AboutPage.qml:181
+msgid "Dismiss"
+msgstr ""
+
 #: src/qml/pages/AppSettingsPage.qml:1215
 msgid "Back up Sugo database"
 msgstr ""
@@ -1969,6 +1393,580 @@ msgstr ""
 #: src/qml/pages/AppSettingsPage.qml:1251
 #: src/qml/components/WindowButtons.qml:41
 msgid "Close"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:15
+msgid "Welcome"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:319
+msgid ""
+"A calm Pomodoro timer. Focus in rounds, rest in between, and see where your "
+"time goes."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:331
+msgid "No account, no tracking: everything stays on this computer."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:373
+msgctxt "a duration in minutes"
+msgid "%1 min"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:378 src/qml/pages/PresetEditPage.qml:28
+#: src/qml/components/Sidebar.qml:143
+msgid "Timers"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:379
+msgid "Work in rounds, rest in between"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:380
+msgid ""
+"A timer alternates focus and short breaks, with a longer break every few "
+"rounds. You start with a classic Pomodoro that keeps notifications quiet "
+"while you work; add your own from the sidebar."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:404
+msgid "The cycle of the timer in use"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:438
+msgid "focus"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:439
+msgid "break"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:441 src/qml/Main.qml:175
+msgid "long break"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:524
+msgctxt "work and break minutes of a timer"
+msgid "%1 / %2 min"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:543
+msgid "Live tray icon"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:544
+msgid "The minutes left, right in the panel."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:566
+msgid "Quiet while you work"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:567
+msgid "Notifications can wait for the break."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:594
+msgid "Set up"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:595
+msgid "Make it yours"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:596
+msgid ""
+"A few choices to start with. You can change all of them later in Settings."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:614
+msgid "Protect weekend streaks"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:615
+msgid "A weekend without sessions does not end your streak."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:623
+msgid "Show an icon in the tray"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:624
+msgid "While a timer runs, it shows the phase and the minutes left."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:633
+msgid "Keep running in the tray"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:634
+msgid "Closing the window leaves the timer running."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:642
+msgid "Start at login"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:643
+msgid "Sugo is ready as soon as you log in."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:706
+msgid "You're all set"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:718
+msgid "Your timer is ready. Sessions and streaks will show up in Statistics."
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:732 src/qml/pages/TimerPage.qml:411
+#: src/qml/Main.qml:696
+msgctxt "keyboard key"
+msgid "Space"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:734
+msgid "starts and pauses"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:743 src/qml/components/Sidebar.qml:122
+msgctxt "keyboard shortcut"
+msgid "Ctrl K"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:745
+msgid "finds anything"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:778
+msgid "Skip Tour"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:801
+msgctxt "@action:button welcome tour"
+msgid "Step %1 of %2"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:841 src/qml/components/TopBar.qml:94
+msgid "Back"
+msgstr ""
+
+#: src/qml/pages/WelcomePage.qml:862 src/qml/pages/StatsPage.qml:173
+msgid "Next"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:62
+msgid "Skip This Work Session?"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:62
+msgid "Stop This Work Session?"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:63
+msgid ""
+"The rest of this work session is skipped and it is saved as interrupted."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:64
+msgid "The work session ends now and is saved as interrupted."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:67
+msgid "Keep Working"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:88
+msgid "Work %1"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:132
+msgid "Ready to focus"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:132
+msgid "Time for a break"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:135
+msgid "Paused"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:139
+msgctxt "focusing · category"
+msgid "Focusing · %1"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:139
+msgid "Focusing"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:217
+msgid "The timer was paused because the computer went to sleep."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:218
+msgid "The timer was paused because your screen was locked."
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:280
+msgctxt "time left"
+msgid "%1 minutes %2 seconds left"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:371
+msgctxt "the phase after this one, its minutes"
+msgid "Next: %1 · %2 min"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:414
+msgid "pause"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:414
+msgid "start"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:421
+msgctxt "keyboard key"
+msgid "S"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:425
+msgid "skip"
+msgstr ""
+
+#: src/qml/pages/TimerPage.qml:445
+msgid "Notifications silenced until the break"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:19
+msgid "Day"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:20
+msgid "Week"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:21
+msgid "Month"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:22
+msgid "Year"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:28 src/qml/pages/PresetEditPage.qml:384
+msgid "Category"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:29
+msgid "Task"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:44
+msgctxt "change against the day before"
+msgid "%1%2% vs the day before"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:46
+msgctxt "change against the week before"
+msgid "%1%2% vs the week before"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:48
+msgctxt "change against the month before"
+msgid "%1%2% vs the month before"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:50
+msgctxt "change against the year before"
+msgid "%1%2% vs the year before"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:66
+msgid "Best hour"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:67
+msgid "Best month"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:67
+msgid "Best day"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:158
+msgid "Previous"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:180
+msgid "Today"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:211
+msgid "Focused"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:228
+msgid "Sessions"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:230
+msgid "+%1 interrupted"
+msgid_plural "+%1 interrupted"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/qml/pages/StatsPage.qml:234
+msgid "Breaks"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:246
+msgid "Activity"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:335
+msgid "No focus time in this period yet."
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:353
+msgid "Where the time went"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:362
+msgid "Nothing recorded in this period."
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:417
+msgid "Streak"
+msgstr ""
+
+#: src/qml/pages/StatsPage.qml:429
+msgid "day"
+msgid_plural "days"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/qml/pages/StatsPage.qml:438
+msgid "Best %1"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:81
+msgid "%1 work session"
+msgid_plural "%1 work sessions"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/qml/pages/PresetEditPage.qml:79
+msgctxt ""
+"%1 work duration, %2 break duration, %3 long break duration, %4 number of "
+"work sessions"
+msgid "%1 work • %2 break • %3 long break after %4"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:83
+msgctxt "%1 work duration, %2 break duration"
+msgid "%1 work • %2 break"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:133
+msgid "Discard Changes?"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:134
+msgid "The changes you made to this timer have not been saved."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:135 src/qml/pages/PresetEditPage.qml:215
+msgid "Discard"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:137
+msgid "Keep Editing"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:146
+msgid "Reset to Defaults?"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:147
+msgid ""
+"“%1” goes back to its original durations and options. Your changes to it are "
+"lost."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:148
+msgid "Reset"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:159
+msgid "Delete Timer"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:160
+msgid "Delete “%1”? Statistics already recorded with it are kept."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:161 src/qml/pages/PresetEditPage.qml:432
+msgid "Delete"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:168
+msgid ""
+"“%1” was started meanwhile, so it was not deleted. Stop it to delete it."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:208
+msgid "A new timer"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:208
+msgid "Unsaved changes"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:220
+msgid "Create Timer"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:221
+msgctxt "keyboard shortcut"
+msgid "Ctrl S"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:338
+msgid "Icon"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:339
+msgid "Choose the icon of this timer"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:341
+msgid "Change the icon"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:370
+msgid "Name this timer"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:373
+msgid "Name"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:381
+msgid "Add a category, e.g. Work or Study"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:393
+msgid "Running"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:395
+msgid "Stop the timer to switch to a different timer."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:403
+msgid "Duplicate"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:430
+msgid "The default timer cannot be deleted"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:431
+msgid "This timer is running. Stop it to delete it."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:474
+msgid "One cycle"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:474
+msgid "Work and break"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:483
+msgctxt "hours and minutes"
+msgid "%1h %2m"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:484
+msgctxt "minutes"
+msgid "%1 min"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:531
+msgid "Durations"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:549
+msgctxt "@action set the work duration"
+msgid "%1 minutes"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:573 src/qml/pages/PresetEditPage.qml:584
+#: src/qml/pages/PresetEditPage.qml:595
+msgctxt "minutes, short"
+msgid "min"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:600 src/qml/pages/PresetEditPage.qml:609
+msgid "Long break after"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:601
+msgid "How many work sessions come before the long break."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:607
+msgctxt "work sessions, short"
+msgid "sessions"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:608
+msgid "Never"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:615
+msgid "Behavior"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:619 src/qml/pages/PresetEditPage.qml:623
+msgid "Start automatically"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:620
+msgid "Whether breaks, work phases, or neither start by themselves."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:624
+msgid "Manual"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:624
+msgid "Breaks only"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:624
+msgid "All phases"
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:633
+msgid ""
+"Turns off all system notifications for the work phase and back on for the "
+"break."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:634
+msgid ""
+"Not available: this desktop's notification service cannot be silenced by "
+"applications."
+msgstr ""
+
+#: src/qml/pages/PresetEditPage.qml:670
+msgid "Reset to Defaults"
 msgstr ""
 
 #: src/qml/pages/AboutPage.qml:10 src/qml/components/Sidebar.qml:224

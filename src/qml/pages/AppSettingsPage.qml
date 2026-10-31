@@ -424,7 +424,7 @@ QQC2.Page {
                     first: true
                     title: i18n("Update channel")
                     description: AppSettings.updateChannel === "nightly"
-                                 ? i18n("A build of every change, as soon as it is made: the newest Sugo, sometimes with new bugs.")
+                                 ? i18n("Every new build, as soon as it is made. May have bugs.")
                                  : UpdateChecker.currentVersion.indexOf("-nightly") >= 0
                                    ? i18n("Tested releases. This nightly build stays until a newer release comes out.")
                                    : i18n("Tested releases.")

@@ -16,7 +16,8 @@ OUT=${2:?output directory}
 SRC=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=${WORK:-/tmp/sugo-appimage}
 
-QT_VERSION=6.8.3
+# 6.9 or later: older Qt sends no window icon on Wayland (xdg-toplevel-icon).
+QT_VERSION=6.10.3
 AQT_VERSION=3.3.0
 ECM_TAG=v6.8.0
 # linuxdeploy publishes no checksums: these are of the files at the pinned tags.

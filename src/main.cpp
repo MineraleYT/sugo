@@ -66,8 +66,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationDomain(QStringLiteral("io.github.mineraleyt"));
     QCoreApplication::setApplicationName(QStringLiteral("sugo"));
     QGuiApplication::setDesktopFileName(QStringLiteral("io.github.mineraleyt.sugo"));
-    QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("io.github.mineraleyt.sugo"),
-                                                    QIcon(QStringLiteral(":/icons/io.github.mineraleyt.sugo.svg"))));
+    // Our own file, not the theme's: on Wayland Qt sends a theme icon's name, which the compositor
+    // can't resolve when nothing is installed (an AppImage run directly).
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/io.github.mineraleyt.sugo.svg")));
 
     QGuiApplication::setApplicationDisplayName(i18n("Sugo"));
     QCoreApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
