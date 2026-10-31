@@ -6,3 +6,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # All the updates of a week in one pull request.
+    groups:
+      actions:
+        patterns: ["*"]
