@@ -89,6 +89,19 @@ private Q_SLOTS:
         QVERIFY(handled.contains(QStringLiteral("kept")));
     }
 
+    void kioDirModelWarningsAreSilencedInBothModes()
+    {
+        // The rule is installed by setVerboseLogging, which attach() calls at startup.
+        const QLoggingCategory dirModel("kf.kio.widgets.kdirmodel");
+        const QLoggingCategory otherKde("kf.kio.core");
+        for (const bool verbose : {false, true}) {
+            Diagnostics::setVerboseLogging(verbose);
+            QVERIFY(!dirModel.isWarningEnabled());
+            QVERIFY(otherKde.isWarningEnabled());
+        }
+        Diagnostics::setVerboseLogging(false);
+    }
+
     void testCircularBufferCap()
     {
         Diagnostics::clearLogs();

@@ -94,9 +94,15 @@ void Diagnostics::attach(AppSettings *settings, DataManager *dataManager)
 
 void Diagnostics::setVerboseLogging(bool verbose)
 {
-    // An empty rule set is Qt's default. Rules from QT_LOGGING_RULES are evaluated after
-    // these, so a developer's own rules still win.
-    QLoggingCategory::setFilterRules(verbose ? QStringLiteral("sugo.*.debug=true") : QString());
+    // Rules from QT_LOGGING_RULES are evaluated after these, so a developer's own rules still win.
+    // Always: KIO's file dialog model (loaded by Plasma's platform theme) warns once per file of
+    // the folder when that folder changes while the dialog closes, as a backup or an export
+    // written there does. Harmless, but it floods the terminal with the user's file names.
+    QString rules = QStringLiteral("kf.kio.widgets.kdirmodel.warning=false");
+    if (verbose) {
+        rules += QStringLiteral("\nsugo.*.debug=true");
+    }
+    QLoggingCategory::setFilterRules(rules);
     QMutexLocker locker(&logMutex());
     s_verbose = verbose;
     while (logBuffer().size() > maxLogEntries()) {
