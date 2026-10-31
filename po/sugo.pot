@@ -1125,7 +1125,7 @@ msgid "Maximize"
 msgstr ""
 
 #: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:1367
+#: src/qml/pages/AppSettingsPage.qml:1376
 msgid "Close"
 msgstr ""
 
@@ -1835,7 +1835,7 @@ msgid ""
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1252
-#: src/qml/pages/AppSettingsPage.qml:1366
+#: src/qml/pages/AppSettingsPage.qml:1375
 msgid "Copy to Clipboard"
 msgstr ""
 
@@ -1870,61 +1870,73 @@ msgid ""
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1307
-msgid "Reset settings"
+msgid "Welcome tour"
 msgstr ""
 
 #: src/qml/pages/AppSettingsPage.qml:1308
+msgid "Go through the introduction to Sugo again."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1310
+msgid "Show the Welcome Tour"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1316
+msgid "Reset settings"
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:1317
 msgid ""
 "Put the settings back to what they were when you first started Sugo. Your "
 "timers, session history and calendar account are kept."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1311
+#: src/qml/pages/AppSettingsPage.qml:1320
 msgid "Reset Settings…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1322
+#: src/qml/pages/AppSettingsPage.qml:1331
 msgid "Back up Sugo database"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1325
-#: src/qml/pages/AppSettingsPage.qml:1342
+#: src/qml/pages/AppSettingsPage.qml:1334
+#: src/qml/pages/AppSettingsPage.qml:1351
 msgid "SQLite database (*.db)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1331
+#: src/qml/pages/AppSettingsPage.qml:1340
 msgid "Export session history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1334
+#: src/qml/pages/AppSettingsPage.qml:1343
 msgid "CSV spreadsheet (*.csv)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1334
+#: src/qml/pages/AppSettingsPage.qml:1343
 msgid "JSON (*.json)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1340
+#: src/qml/pages/AppSettingsPage.qml:1349
 msgid "Choose a Sugo backup"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1348
+#: src/qml/pages/AppSettingsPage.qml:1357
 msgid "Export Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1351
+#: src/qml/pages/AppSettingsPage.qml:1360
 msgid "Text files (*.txt)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1351
+#: src/qml/pages/AppSettingsPage.qml:1360
 msgid "All files (*)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1364
+#: src/qml/pages/AppSettingsPage.qml:1373
 msgid "Diagnostics Report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1365
+#: src/qml/pages/AppSettingsPage.qml:1374
 msgid "All personal details and usernames have been redacted."
 msgstr ""
 
