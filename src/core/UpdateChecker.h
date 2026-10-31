@@ -23,8 +23,8 @@ class QSaveFile;
  * "stable" with the newest release, "nightly" with the newest build of the branch testing
  * (.github/workflows/release.yml and nightly.yml write them):
  *
- *     { "version": "1.0.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/nightly/Sugo-x86_64.AppImage",
- *       "sha256": "<64 hex digits>", "size": 45939192, "page": "https://github.com/MineraleYT/sugo/releases/tag/nightly" }
+ *     { "version": "1.0.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/v1.0.1-nightly.20261031.42/Sugo-x86_64.AppImage",
+ *       "sha256": "<64 hex digits>", "size": 45939192, "page": "https://github.com/MineraleYT/sugo/releases/tag/v1.0.1-nightly.20261031.42" }
  *
  * The feed is newer when its version is (compareVersions(); nightly versions are the next
  * release's pre-releases, so they sit between two releases). When asked to install it

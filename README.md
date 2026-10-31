@@ -55,7 +55,7 @@ One file that runs on any recent x86_64 Linux and keeps itself up to date:
    ./Sugo-x86_64.AppImage
    ```
 
-Sugo then tells you when a new release is out: **Install update** downloads it, **Restart to update** starts it. In Settings → General → Updates you can turn the automatic check off, or choose the **Nightly** channel: test builds of what is coming, published as the [nightly pre-release](https://github.com/MineraleYT/sugo/releases/tag/nightly).
+Sugo then tells you when a new release is out: **Install update** downloads it, **Restart to update** starts it. In Settings → General → Updates you can turn the automatic check off, or choose the **Nightly** channel: test builds of what is coming, published as [pre-releases](https://github.com/MineraleYT/sugo/releases), the newest one named in the [nightly feed release](https://github.com/MineraleYT/sugo/releases/tag/nightly).
 
 ### Flatpak
 

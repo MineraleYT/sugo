@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Every push to the branch testing that passes CI becomes the nightly build: the pre-release
-# "nightly" (one, replaced each time) with the AppImage and nightly.json, the feed the program's
-# update check reads on the nightly channel (see src/core/UpdateChecker.h). Daily work goes to
-# dev, which only runs CI; see "Branches" in docs/DEVELOPMENT.md.
+# Every push to the branch testing that passes CI becomes the nightly build: a new pre-release
+# named after its version, with the AppImage and nightly.json. The pre-release "nightly" holds
+# only the latest nightly.json, the feed the program's update check reads on the nightly channel
+# (see src/core/UpdateChecker.h). Daily work goes to dev, which only runs CI; see "Branches" in
+# docs/DEVELOPMENT.md.
 name: Nightly
 
 on:
@@ -93,7 +94,7 @@ jobs:
           highlights=$(git log --no-merges --format=%s "$range" | grep -viE "$fix" | sed 's/^/- /')
           fixes=$(git log --no-merges --format=%s "$range" | grep -iE "$fix" | sed 's/^/- /')
           {
-            echo "**$VERSION** · $(plural "$changes" change) from $(plural "$people" contributor)"
+            echo "**v$VERSION** · $(plural "$changes" change) from $(plural "$people" contributor)"
             echo
             echo "The branch testing at $SHA, built automatically. It may have bugs; the stable releases are tested."
             echo
@@ -106,7 +107,10 @@ jobs:
           } > notes.md
           cat notes.md
 
-      - name: Replace the nightly release
+      # One pre-release per build, tagged v<version> (release.yml skips the nightly tags).
+      # The pre-release "nightly" stays as the fixed address of the feed (nightly.json, which the
+      # installed programs read) and as the tag the next release notes start from.
+      - name: Publish the nightly build
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -114,24 +118,34 @@ jobs:
           SHA: ${{ needs.version.outputs.sha }}
         run: |
           file=Sugo-x86_64.AppImage
+          tag="v$VERSION"
           jq -n --arg version "$VERSION" \
-                --arg url "https://github.com/$REPO/releases/download/nightly/$file" \
+                --arg url "https://github.com/$REPO/releases/download/$tag/$file" \
                 --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
                 --argjson size "$(stat -c %s "$file")" \
-                --arg page "https://github.com/$REPO/releases/tag/nightly" \
+                --arg page "https://github.com/$REPO/releases/tag/$tag" \
                 '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > nightly.json
           cat nightly.json
 
-          # The tag follows the branch testing.
+          title="Sugo Nightly $VERSION (${SHA:0:12})"
+          gh api -X POST "repos/$REPO/git/refs" -f ref="refs/tags/$tag" -f sha="$SHA" >/dev/null 2>&1 \
+            || gh api -X PATCH "repos/$REPO/git/refs/tags/$tag" -f sha="$SHA" -F force=true >/dev/null
+          if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$REPO" --prerelease --latest=false --title "$title" --notes-file notes.md
+          else
+            gh release create "$tag" --repo "$REPO" --prerelease --latest=false --verify-tag --title "$title" --notes-file notes.md
+          fi
+          gh release upload "$tag" "$file" nightly.json --repo "$REPO" --clobber
+
+          # The feed last: it must never announce a file that is not there yet. The tag nightly
+          # follows the branch testing.
           gh api -X PATCH "repos/$REPO/git/refs/tags/nightly" -f sha="$SHA" -F force=true >/dev/null 2>&1 \
             || gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/nightly -f sha="$SHA" >/dev/null
-
-          title="Sugo Nightly $VERSION"
+          pointer="The newest nightly build is [$VERSION](https://github.com/$REPO/releases/tag/$tag). This release only holds nightly.json, the feed the program's update check reads on the Nightly channel."
           if gh release view nightly --repo "$REPO" >/dev/null 2>&1; then
-            gh release edit nightly --repo "$REPO" --prerelease --title "$title" --notes-file notes.md
+            gh release edit nightly --repo "$REPO" --prerelease --latest=false --title "Sugo Nightly (latest)" --notes "$pointer"
           else
-            gh release create nightly --repo "$REPO" --prerelease --verify-tag --title "$title" --notes-file notes.md
+            gh release create nightly --repo "$REPO" --prerelease --latest=false --verify-tag --title "Sugo Nightly (latest)" --notes "$pointer"
           fi
-          # The AppImage first: the feed must never announce a file that is not there yet.
-          gh release upload nightly "$file" --repo "$REPO" --clobber
+          gh release delete-asset nightly "$file" --repo "$REPO" --yes 2>/dev/null || true # left by the former rolling release
           gh release upload nightly nightly.json --repo "$REPO" --clobber

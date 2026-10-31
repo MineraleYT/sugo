@@ -194,7 +194,7 @@ void UpdateChecker::setChannel(const QString &channel)
 
 QUrl UpdateChecker::feedUrl(const QString &channel)
 {
-    // The newest release's feed is always at the same address; the nightly is one rolling release.
+    // The newest release's feed is always at the same address; the nightly's is held by the release "nightly".
     return channel == QLatin1String("nightly")
         ? QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/nightly/nightly.json"))
         : QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/latest/download/stable.json"));
