@@ -57,6 +57,9 @@ public:
 
     /// Appends a log line to the internal buffer (for testing and handler).
     static void addLogEntry(const QString &level, const QString &category, const QString &message);
+    /// Whether messages of a logging category go into the report. Not those of KDE Frameworks
+    /// (kf.*): they are not about Sugo and can contain the names of the user's files.
+    static bool isRecordedCategory(const QString &category);
 
     /// Clears the log buffer (primarily for testing).
     static void clearLogs();

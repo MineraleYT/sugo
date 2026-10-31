@@ -269,15 +269,15 @@ msgstr ""
 msgid "Backup restored."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:312
+#: src/core/Diagnostics.cpp:324
 msgid "The report can only be saved to a local file."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:320
+#: src/core/Diagnostics.cpp:332
 msgid "Could not open %1 for writing: %2"
 msgstr ""
 
-#: src/core/Diagnostics.cpp:325
+#: src/core/Diagnostics.cpp:337
 msgid "Could not write %1: %2"
 msgstr ""
 

@@ -63,6 +63,32 @@ private Q_SLOTS:
         QVERIFY(!logs.contains(home));
     }
 
+    void kdeFrameworksMessagesStayOutOfTheReport()
+    {
+        Diagnostics::clearLogs();
+        Diagnostics::addLogEntry(QStringLiteral("WARN"), QStringLiteral("kf.kio.widgets.kdirmodel"),
+                                 QStringLiteral("No node found for item that was just removed: QUrl(\"file:///home/someone/Downloads/medical-report.pdf\")"));
+        Diagnostics::addLogEntry(QStringLiteral("WARN"), QStringLiteral("sugo.data"), QStringLiteral("Cannot detach the restored backup"));
+        Diagnostics::addLogEntry(QStringLiteral("WARN"), QStringLiteral("qt.qpa.wayland"), QStringLiteral("Wayland message"));
+
+        const QString logs = Diagnostics().recentLogs();
+        QVERIFY(!logs.contains(QStringLiteral("kf.kio")));
+        QVERIFY(!logs.contains(QStringLiteral("medical-report.pdf")));
+        QVERIFY(logs.contains(QStringLiteral("[sugo.data]")));
+        QVERIFY(logs.contains(QStringLiteral("[qt.qpa.wayland]")));
+
+        // Also through the real message handler.
+        Diagnostics::installLogHandler();
+        Diagnostics::clearLogs();
+        QTest::ignoreMessage(QtWarningMsg, "file:///home/someone/Downloads/secret.txt");
+        QTest::ignoreMessage(QtWarningMsg, "kept");
+        QMessageLogger(nullptr, 0, nullptr, "kf.kio.core").warning("file:///home/someone/Downloads/secret.txt");
+        QMessageLogger(nullptr, 0, nullptr, "sugo.test").warning("kept");
+        const QString handled = Diagnostics().recentLogs();
+        QVERIFY(!handled.contains(QStringLiteral("secret.txt")));
+        QVERIFY(handled.contains(QStringLiteral("kept")));
+    }
+
     void testCircularBufferCap()
     {
         Diagnostics::clearLogs();

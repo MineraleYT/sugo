@@ -121,8 +121,20 @@ void Diagnostics::installLogHandler()
     }
 }
 
+bool Diagnostics::isRecordedCategory(const QString &category)
+{
+    // KDE Frameworks are loaded into Sugo by Plasma's platform theme (the file dialog, for one).
+    // Their messages say nothing about Sugo and can name the user's files ("No node found for
+    // item that was just removed: file:///home/.../Downloads/..."), so they stay out of a report
+    // meant to be shared; they are still printed as usual.
+    return !category.startsWith(QLatin1String("kf."));
+}
+
 void Diagnostics::addLogEntry(const QString &level, const QString &category, const QString &message)
 {
+    if (!isRecordedCategory(category)) {
+        return;
+    }
     const QString time = QTime::currentTime().toString(QStringLiteral("HH:mm:ss.zzz"));
     const QString redactedMsg = redact(message);
     const QString line = QStringLiteral("[%1] [%2] [%3] %4").arg(time, level, category, redactedMsg);
