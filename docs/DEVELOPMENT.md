@@ -33,24 +33,24 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 #### Fedora
 ```sh
 sudo dnf install cmake ninja-build gcc-c++ \
-    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg kf6-extra-cmake-modules
+    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg qt6-qtmultimedia-devel kf6-extra-cmake-modules
 ```
 
 #### Ubuntu 26.04 or newer
 ```sh
 sudo apt install cmake ninja-build g++ \
-    qt6-base-dev qt6-declarative-dev qt6-svg-plugins libqt6sql6-sqlite extra-cmake-modules
+    qt6-base-dev qt6-declarative-dev qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 ```
 
 #### Arch Linux
 ```sh
-sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg extra-cmake-modules
+sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg extra-cmake-modules
 ```
 
 #### openSUSE Tumbleweed
 ```sh
 sudo zypper install cmake ninja gcc-c++ \
-    qt6-base-devel qt6-declarative-devel qt6-svg-devel extra-cmake-modules
+    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel extra-cmake-modules
 ```
 
 For a system-wide install use `-DCMAKE_INSTALL_PREFIX=/usr` and run the install step with `sudo`.

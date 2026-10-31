@@ -2,8 +2,10 @@
 #include "AppSettings.h"
 
 #include "Autostart.h"
+#include "FocusSoundController.h"
 #include "SystemTray.h"
 
+#include <QAudioOutput>
 #include <QDBusConnection>
 #include <QDebug>
 #include <QDBusServiceWatcher>
@@ -11,10 +13,13 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QLocale>
+#include <QMediaPlayer>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStyleHints>
+#include <QTimer>
+#include <QUrl>
 #include "Localization.h"
 #include "Settings.h"
 #include <algorithm>
@@ -78,6 +83,62 @@ QString findSoundFile(const QString &soundName)
     }
     return {};
 }
+
+constexpr qint64 kAlertFadeInMs = 300;
+constexpr qint64 kAlertFadeOutMs = 600;
+
+/// Plays a file with pw-play or paplay, at a fixed volume.
+void playWithPlayerProgram(const QString &file, int vol)
+{
+    if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
+        const double volFactor = vol / 100.0;
+        if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
+            return;
+        }
+    }
+    if (!QStandardPaths::findExecutable(QStringLiteral("paplay")).isEmpty()) {
+        // paplay's volume is linear, 65536 = 100 %.
+        const int paVolume = vol * 65536 / 100;
+        if (QProcess::startDetached(QStringLiteral("paplay"), {QStringLiteral("--volume=%1").arg(paVolume), file})) {
+            return;
+        }
+    }
+    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+}
+
+/// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
+/// backend; a file it cannot decode falls back to playWithPlayerProgram().
+bool playWithFade(const QString &file, int vol, QObject *parent)
+{
+    auto *player = new QMediaPlayer(parent);
+    if (!player->isAvailable()) {
+        delete player;
+        return false;
+    }
+    auto *output = new QAudioOutput(player);
+    output->setVolume(0.0f);
+    player->setAudioOutput(output);
+
+    auto *fade = new QTimer(player);
+    fade->setInterval(20);
+    QObject::connect(fade, &QTimer::timeout, player, [player, output, vol]() {
+        output->setVolume(float(vol / 100.0 * AppSettings::alertFadeGain(player->position(), player->duration())));
+    });
+    QObject::connect(player, &QMediaPlayer::mediaStatusChanged, player, [player](QMediaPlayer::MediaStatus status) {
+        if (status == QMediaPlayer::EndOfMedia) {
+            player->deleteLater();
+        }
+    });
+    QObject::connect(player, &QMediaPlayer::errorOccurred, player, [player, file, vol]() {
+        player->disconnect(); // errors can come more than once: play the fallback only once
+        player->deleteLater();
+        playWithPlayerProgram(file, vol);
+    });
+    player->setSource(QUrl::fromLocalFile(file));
+    fade->start();
+    player->play();
+    return true;
+}
 } // namespace
 
 AppSettings::AppSettings(QObject *parent)
@@ -102,7 +163,7 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), 80).toInt(), 0, 100);
     m_preAlarmEnabled = settings.value(QLatin1String(kPreAlarmEnabled), true).toBool();
     m_preAlarmSound = settings.value(QLatin1String(kPreAlarmSound), QStringLiteral("dialog-information")).toString();
-    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), 0).toInt(), 0, 3);
+    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), 0).toInt(), 0, FocusSoundController::LastMode);
     m_focusSoundVolume = std::clamp(settings.value(QLatin1String(kFocusSoundVolume), 30).toInt(), 0, 100);
     m_keepScreenAwake = settings.value(QLatin1String(kKeepScreenAwake), true).toBool();
     m_autoPauseOnScreenLock = settings.value(QLatin1String(kAutoPauseOnScreenLock), true).toBool();
@@ -291,7 +352,7 @@ void AppSettings::setPreAlarmSound(const QString &sound)
 
 void AppSettings::setFocusSoundMode(int mode)
 {
-    mode = std::clamp(mode, 0, 3);
+    mode = std::clamp(mode, 0, FocusSoundController::LastMode);
     if (m_focusSoundMode == mode) {
         return;
     }
@@ -430,20 +491,23 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
         return;
     }
 
-    if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
-        const double volFactor = vol / 100.0;
-        if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
-            return;
+    if (!playWithFade(file, vol, this)) {
+        playWithPlayerProgram(file, vol);
+    }
+}
+
+double AppSettings::alertFadeGain(qint64 positionMs, qint64 durationMs)
+{
+    // A short sound gets shorter fades, so that it still reaches full volume.
+    const qint64 fadeIn = durationMs > 0 ? std::min(kAlertFadeInMs, durationMs / 3) : kAlertFadeInMs;
+    double gain = fadeIn > 0 ? std::clamp(double(positionMs) / fadeIn, 0.0, 1.0) : 1.0;
+    if (durationMs > 0) {
+        const qint64 fadeOut = std::min(kAlertFadeOutMs, durationMs / 3);
+        if (fadeOut > 0) {
+            gain = std::min(gain, std::clamp(double(durationMs - positionMs) / fadeOut, 0.0, 1.0));
         }
     }
-    if (!QStandardPaths::findExecutable(QStringLiteral("paplay")).isEmpty()) {
-        // paplay's volume is linear, 65536 = 100 %.
-        const int paVolume = vol * 65536 / 100;
-        if (QProcess::startDetached(QStringLiteral("paplay"), {QStringLiteral("--volume=%1").arg(paVolume), file})) {
-            return;
-        }
-    }
-    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+    return gain;
 }
 
 bool AppSettings::isUsableSoundName(const QString &soundName)

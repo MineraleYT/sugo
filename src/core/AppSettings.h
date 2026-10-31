@@ -156,7 +156,11 @@ public:
     void applyColorScheme();
 
 
+    /// Plays an event sound or a file at the given volume, fading it in and out where Qt
+    /// Multimedia can decode it.
     Q_INVOKABLE void playSoundPreview(const QString &soundName, int volume = -1);
+    /// The fade level (0..1) of an alert sound at a position; the duration is 0 while unknown.
+    static double alertFadeGain(qint64 positionMs, qint64 durationMs);
     /// Tests: called with the sound name and volume instead of starting a player.
     void setSoundPlayerForTesting(std::function<void(const QString &, int)> player) { m_soundPlayer = std::move(player); }
     /// canberra-gtk-play arguments for an event sound name. The name is glued to its option, so

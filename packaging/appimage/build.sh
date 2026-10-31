@@ -34,7 +34,7 @@ apt-get install -y -qq --no-install-recommends \
     libfontconfig1 libfreetype6 libdbus-1-3 libglib2.0-0 \
     libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
     libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
-    libwayland-client0 libwayland-cursor0 libwayland-egl1 >/dev/null
+    libwayland-client0 libwayland-cursor0 libwayland-egl1 libpulse0 libxrandr2 >/dev/null
 
 mkdir -p "$WORK" "$OUT"
 cd "$WORK"
@@ -43,7 +43,7 @@ cd "$WORK"
 QT="$WORK/qt/$QT_VERSION/gcc_64"
 if [ ! -d "$QT" ]; then
     pip3 install -q "aqtinstall==$AQT_VERSION"
-    python3 -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -O "$WORK/qt" >/dev/null
+    python3 -m aqt install-qt linux desktop "$QT_VERSION" linux_gcc_64 -m qtmultimedia -O "$WORK/qt" >/dev/null
 fi
 if [ ! -d "$WORK/ecm" ]; then
     git clone -q --depth 1 --branch "$ECM_TAG" https://invent.kde.org/frameworks/extra-cmake-modules.git ecm-src

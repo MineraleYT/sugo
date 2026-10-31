@@ -385,7 +385,7 @@ private Q_SLOTS:
         {
             QSettings config(configPath(), QSettings::IniFormat);
             config.setValue(QStringLiteral("TrayBadgeStyle"), 9);
-            config.setValue(QStringLiteral("FocusSoundMode"), 7);
+            config.setValue(QStringLiteral("FocusSoundMode"), 99);
             config.setValue(QStringLiteral("SoundVolume"), 500);
             config.setValue(QStringLiteral("ColorScheme"), QStringLiteral("purple"));
             config.sync();
@@ -393,7 +393,7 @@ private Q_SLOTS:
         {
             const auto settings = make();
             QCOMPARE(settings->trayBadgeStyle(), 2);
-            QCOMPARE(settings->focusSoundMode(), 3);
+            QCOMPARE(settings->focusSoundMode(), 6);
             QCOMPARE(settings->soundVolume(), 100);
             QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
         } // releases the shared config, so the next one rereads the file
@@ -525,6 +525,22 @@ private Q_SLOTS:
         // A name read from the configuration that looks like an option stays a value.
         QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd")),
                  QStringList{QStringLiteral("--id=--file=/etc/passwd")});
+    }
+
+    void alertSoundsFadeInAndOut()
+    {
+        // A 3 s sound: 300 ms in, 600 ms out.
+        QCOMPARE(AppSettings::alertFadeGain(0, 3000), 0.0);
+        QCOMPARE(AppSettings::alertFadeGain(150, 3000), 0.5);
+        QCOMPARE(AppSettings::alertFadeGain(1500, 3000), 1.0);
+        QCOMPARE(AppSettings::alertFadeGain(2700, 3000), 0.5);
+        QCOMPARE(AppSettings::alertFadeGain(3000, 3000), 0.0);
+        // A 600 ms sound: both fades shrink to 200 ms, so it still reaches full volume.
+        QCOMPARE(AppSettings::alertFadeGain(300, 600), 1.0);
+        QCOMPARE(AppSettings::alertFadeGain(500, 600), 0.5);
+        // The duration is not known yet: only the fade-in applies.
+        QCOMPARE(AppSettings::alertFadeGain(150, 0), 0.5);
+        QCOMPARE(AppSettings::alertFadeGain(5000, 0), 1.0);
     }
 };
 

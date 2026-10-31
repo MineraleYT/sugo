@@ -19,6 +19,9 @@ constexpr int kAheadSamples = kSampleRate / 2; // keep 500 ms queued ahead of pl
 constexpr int kFeedIntervalMs = 50;
 constexpr int kMaxRestarts = 3;
 constexpr int kRestartDelayMs = 1000;
+constexpr float kFadeInStep = 1.0f / (kSampleRate * 2);          // 2 s from silence to full
+constexpr float kFadeOutStep = 1.0f / (kSampleRate * 3 / 2);     // 1.5 s from full to silence
+constexpr int kAheadMs = kAheadSamples * 1000 / kSampleRate;
 } // namespace
 
 FocusSoundController::FocusSoundController(QObject *parent)
@@ -30,11 +33,14 @@ FocusSoundController::FocusSoundController(QObject *parent)
 
     m_previewTimer.setSingleShot(true);
     connect(&m_previewTimer, &QTimer::timeout, this, &FocusSoundController::stopPreview);
+
+    m_stopTimer.setSingleShot(true);
+    connect(&m_stopTimer, &QTimer::timeout, this, &FocusSoundController::discardProcess);
 }
 
 FocusSoundController::~FocusSoundController()
 {
-    stopPlayback();
+    discardProcess();
     // On quit no event loop deletes a killed player once it has ended: wait for it briefly here,
     // or it is destroyed while still running.
     const auto players = findChildren<QProcess *>();
@@ -53,7 +59,7 @@ void FocusSoundController::attach(TimerEngine *engine, AppSettings *settings)
         connect(m_engine, &TimerEngine::stateChanged, this, &FocusSoundController::updatePlayback);
     }
     if (m_settings) {
-        m_mode = std::clamp(m_settings->focusSoundMode(), 0, 3);
+        m_mode = std::clamp(m_settings->focusSoundMode(), 0, LastMode);
         m_volume = m_settings->focusSoundVolume();
         connect(m_settings, &AppSettings::focusSoundModeChanged, this, [this]() {
             setMode(m_settings->focusSoundMode());
@@ -68,7 +74,7 @@ void FocusSoundController::attach(TimerEngine *engine, AppSettings *settings)
 
 void FocusSoundController::setMode(int mode)
 {
-    mode = std::clamp(mode, 0, 3);
+    mode = std::clamp(mode, 0, LastMode);
     if (m_mode == mode) {
         return;
     }
@@ -87,7 +93,7 @@ void FocusSoundController::setVolume(int volume)
 
 void FocusSoundController::preview(int mode, int volume)
 {
-    mode = std::clamp(mode, 0, 3);
+    mode = std::clamp(mode, 0, LastMode);
     if (mode <= 0) {
         stopPreview();
         return;
@@ -96,9 +102,7 @@ void FocusSoundController::preview(int mode, int volume)
     m_previewMode = mode;
     m_previewVolume = std::clamp(volume, 0, 100);
     // generateChunk() follows the mode live, so a running player just changes sound.
-    if (!m_process) {
-        startPlayback();
-    }
+    play();
     m_previewTimer.start(5000); // 5 seconds preview
 }
 
@@ -127,16 +131,30 @@ void FocusSoundController::updatePlayback()
     if (!shouldPlay) {
         m_restarts = 0; // the next time the sound is wanted, a failing player gets new chances
     }
-    if (shouldPlay && !m_process) {
-        startPlayback();
-    } else if (!shouldPlay && m_process) {
+    if (shouldPlay) {
+        play();
+    } else {
         stopPlayback();
+    }
+}
+
+void FocusSoundController::play()
+{
+    if (!m_process) {
+        startPlayback();
+    } else if (m_stopping) {
+        // Wanted again while fading out: fade back in on the same player.
+        m_stopping = false;
+        m_stopTimer.stop();
+        if (m_process->state() == QProcess::Running) {
+            setPlaying(true);
+        }
     }
 }
 
 void FocusSoundController::startPlayback()
 {
-    stopPlayback();
+    discardProcess();
 
     QString program;
     QStringList args;
@@ -190,11 +208,11 @@ void FocusSoundController::onPlayerStarted()
     m_sampleIndex = 0;
     m_samplesWritten = 0;
     m_rainFilter = 0.0f;
+    m_brown = 0.0f;
+    std::fill(std::begin(m_pink), std::end(m_pink), 0.0f);
+    m_gain = 0.0f;
     m_playClock.start();
-    if (!m_isPlaying) {
-        m_isPlaying = true;
-        Q_EMIT isPlayingChanged();
-    }
+    setPlaying(true);
 
     feedAudio(); // fills the initial lead
     m_feedTimer.start();
@@ -222,12 +240,30 @@ void FocusSoundController::onPlayerFailed()
 
 void FocusSoundController::stopPlayback()
 {
-    discardProcess();
+    if (!m_process || m_stopping) {
+        return;
+    }
+    if (m_process->state() != QProcess::Running || m_gain <= 0.0f) {
+        discardProcess(); // nothing audible to fade
+        return;
+    }
+    m_stopping = true;
+    setPlaying(false);
+}
+
+void FocusSoundController::setPlaying(bool playing)
+{
+    if (m_isPlaying != playing) {
+        m_isPlaying = playing;
+        Q_EMIT isPlayingChanged();
+    }
 }
 
 void FocusSoundController::discardProcess()
 {
     m_feedTimer.stop();
+    m_stopTimer.stop();
+    m_stopping = false;
     if (QProcess *process = m_process.data()) {
         m_process = nullptr; // the handlers above ignore this process from now on
         if (process->state() == QProcess::NotRunning) {
@@ -239,10 +275,7 @@ void FocusSoundController::discardProcess()
             process->kill();
         }
     }
-    if (m_isPlaying) {
-        m_isPlaying = false;
-        Q_EMIT isPlayingChanged();
-    }
+    setPlaying(false);
 }
 
 void FocusSoundController::feedAudio()
@@ -252,7 +285,17 @@ void FocusSoundController::feedAudio()
     }
 
     const int activeMode = m_previewing ? m_previewMode : m_mode;
-    if (activeMode <= 0) {
+    if (activeMode > 0) {
+        m_soundMode = activeMode;
+    }
+    if (m_soundMode <= 0) {
+        return;
+    }
+    if (m_stopping && m_gain <= 0.0f) {
+        // Faded out: stop once what is queued (silence at its end) has been played.
+        if (!m_stopTimer.isActive()) {
+            m_stopTimer.start(kAheadMs + 100);
+        }
         return;
     }
 
@@ -282,10 +325,11 @@ QByteArray FocusSoundController::generateChunk(int numSamples)
     auto *samples = reinterpret_cast<qint16 *>(data.data());
 
     const float volFactor = (playbackVolume() / 100.0f);
-    const int currentMode = m_previewing ? m_previewMode : m_mode;
+    const int currentMode = m_soundMode;
 
     for (int i = 0; i < numSamples; ++i, ++m_sampleIndex) {
         float s = 0.0f;
+        m_gain = m_stopping ? std::max(0.0f, m_gain - kFadeOutStep) : std::min(1.0f, m_gain + kFadeInStep);
 
         if (currentMode == static_cast<int>(Mode::ClockTick)) {
             // Crisp ticking clock: short impulse at the beginning of each second
@@ -304,9 +348,26 @@ QByteArray FocusSoundController::generateChunk(int numSamples)
         } else if (currentMode == static_cast<int>(Mode::WhiteNoise)) {
             // White noise
             s = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * 0.5f;
+        } else if (currentMode == static_cast<int>(Mode::BrownNoise) || currentMode == static_cast<int>(Mode::Waves)) {
+            // Brown noise: leaky integration of white noise, a deep rumble
+            const float white = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f);
+            m_brown = (m_brown + 0.02f * white) / 1.02f;
+            s = m_brown * 3.5f;
+            if (currentMode == static_cast<int>(Mode::Waves)) {
+                // Waves: the rumble swells and ebbs every 8 seconds
+                const float swell = std::sin(static_cast<float>(M_PI) * static_cast<float>(m_sampleIndex % (kSampleRate * 8)) / (kSampleRate * 8));
+                s *= 0.25f + 0.75f * swell * swell;
+            }
+        } else if (currentMode == static_cast<int>(Mode::PinkNoise)) {
+            // Pink noise (Paul Kellet's economy filter): softer than white, brighter than brown
+            const float white = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f);
+            m_pink[0] = 0.99765f * m_pink[0] + white * 0.0990460f;
+            m_pink[1] = 0.96300f * m_pink[1] + white * 0.2965164f;
+            m_pink[2] = 0.57000f * m_pink[2] + white * 1.0526913f;
+            s = (m_pink[0] + m_pink[1] + m_pink[2] + white * 0.1848f) * 0.12f;
         }
 
-        s = std::clamp(s * volFactor, -1.0f, 1.0f);
+        s = std::clamp(s * volFactor * m_gain, -1.0f, 1.0f);
         samples[i] = static_cast<qint16>(s * 32767.0f);
     }
 

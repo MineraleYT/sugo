@@ -155,6 +155,7 @@ target_link_libraries(sugo_core PRIVATE
     Qt6::Sql
     Qt6::DBus
     Qt6::Network
+    Qt6::Multimedia
 )
 
 add_executable(sugo main.cpp)

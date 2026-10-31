@@ -162,10 +162,45 @@ private Q_SLOTS:
         QVERIFY(sounds->isPlaying()); // the work phase goes on with its sound
     }
 
-        void invalidModesAreClamped()
+    void soundFadesInFromSilence()
+    {
+        engine->start();
+        const QString capture = dir.filePath(QStringLiteral("audio.raw"));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo(capture).size() >= 44100, 3000);
+        QFile file(capture);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        const QByteArray raw = file.read(44100);
+        const auto *samples = reinterpret_cast<const qint16 *>(raw.constData());
+        const auto loudest = [samples](int from, int to) {
+            int peak = 0;
+            for (int i = from; i < to; ++i) peak = std::max(peak, std::abs(int(samples[i])));
+            return peak;
+        };
+        QVERIFY(loudest(0, 100) < 50);         // starts nearly silent
+        QVERIFY(loudest(20000, 22050) > 1000); // and grows (white noise at 45 %, a quarter in)
+    }
+
+    void resumingDuringTheFadeOutKeepsThePlayer()
+    {
+        engine->start();
+        QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        QTest::qWait(300); // let it fade in a little, so there is something to fade out
+        const QString pids = dir.filePath(QStringLiteral("audio.raw.pids"));
+        engine->pause();
+        QVERIFY(!sounds->isPlaying());
+        engine->resume();
+        QVERIFY(sounds->isPlaying());
+        QTest::qWait(2500); // longer than a whole fade-out
+        QVERIFY(sounds->isPlaying());
+        QFile file(pids);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll().count('\n'), 1); // still the first player
+    }
+
+    void invalidModesAreClamped()
     {
         sounds->setMode(9);
-        QCOMPARE(sounds->mode(), 3);
+        QCOMPARE(sounds->mode(), FocusSoundController::LastMode);
         sounds->setMode(-2);
         QCOMPARE(sounds->mode(), 0);
     }

@@ -564,7 +564,11 @@ QQC2.Page {
                             { text: i18n("Completion Chime"), value: "complete" },
                             { text: i18n("Instant Message"), value: "message-new-instant" },
                             { text: i18n("Information Sound"), value: "dialog-information" },
-                            { text: i18n("Bell"), value: "bell" }
+                            { text: i18n("Bell"), value: "bell" },
+                            { text: i18n("Success"), value: "completion-success" },
+                            { text: i18n("Login Chime"), value: "service-login" },
+                            { text: i18n("Attention"), value: "window-attention" },
+                            { text: i18n("Ringing Phone"), value: "phone-incoming-call" }
                         ]
                         currentIndex: page.valueIndex(model, AppSettings.soundTheme)
                         Accessible.name: i18n("Phase sound")
@@ -612,7 +616,10 @@ QQC2.Page {
                             { text: i18n("Information Sound"), value: "dialog-information" },
                             { text: i18n("Bell"), value: "bell" },
                             { text: i18n("Completion Chime"), value: "complete" },
-                            { text: i18n("Alarm Clock"), value: "alarm-clock-elapsed" }
+                            { text: i18n("Alarm Clock"), value: "alarm-clock-elapsed" },
+                            { text: i18n("Message"), value: "message" },
+                            { text: i18n("Attention"), value: "window-attention" },
+                            { text: i18n("Success"), value: "completion-success" }
                         ]
                         currentIndex: page.valueIndex(model, AppSettings.preAlarmSound)
                         Accessible.name: i18n("Pre-alarm sound")
@@ -636,7 +643,10 @@ QQC2.Page {
                             { text: i18n("Off"), value: 0 },
                             { text: i18n("Clock tick"), value: 1 },
                             { text: i18n("Rain"), value: 2 },
-                            { text: i18n("White noise"), value: 3 }
+                            { text: i18n("White noise"), value: 3 },
+                            { text: i18n("Brown noise"), value: 4 },
+                            { text: i18n("Pink noise"), value: 5 },
+                            { text: i18n("Waves"), value: 6 }
                         ]
                         currentIndex: AppSettings.focusSoundMode
                         Accessible.name: i18n("Focus sound")
