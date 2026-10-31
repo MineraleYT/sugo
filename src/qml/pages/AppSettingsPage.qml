@@ -51,7 +51,6 @@ QQC2.Page {
     readonly property bool calFailed: CalendarSync ? calStatus === CalendarSync.Failed : false
     readonly property bool calNotConfigured: CalendarSync ? calStatus === CalendarSync.NotConfigured : false
     readonly property bool calRefreshing: calWorking && calAction === "refresh"
-    readonly property bool calTesting: calWorking && calAction === "test"
     // A successful connection test is shown on the Test button itself (a green check for a few
     // seconds); failures are explained in the message at the bottom of the card.
     property bool calTestOk: false

@@ -72,18 +72,6 @@ QQC2.Page {
         }
     }
 
-    readonly property string liveSummary: {
-        const dur = (min) => i18ncp("duration in minutes", "%1 min", "%1 min", min);
-        if (cyclesBox.value > 0 && longBox.value > 0) {
-            return i18nc("%1 work duration, %2 break duration, %3 long break duration, %4 number of work sessions",
-                         "%1 work • %2 break • %3 long break after %4",
-                         dur(workBox.value), dur(shortBox.value), dur(longBox.value),
-                         i18np("%1 work session", "%1 work sessions", cyclesBox.value));
-        }
-        return i18nc("%1 work duration, %2 break duration", "%1 work • %2 break",
-                     dur(workBox.value), dur(shortBox.value));
-    }
-
     /// Back to the timer page (a new timer that is not created after all).
     function close(): void {
         applicationWindow().navigate("timer");

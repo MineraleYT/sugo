@@ -248,7 +248,26 @@ private Q_SLOTS:
             QVERIFY(db.open());
             QSqlQuery query(QSqlDatabase::database(db.connectionName(), false));
             QVERIFY(query.exec(QStringLiteral("INSERT INTO meta (key, value) VALUES ('k', 'v')")));
-            QVERIFY(query.exec(QStringLiteral("PRAGMA application_id = 0"))); // as an M4 development build left it
+            QVERIFY(query.exec(QStringLiteral("PRAGMA application_id = 0"))); // as early development builds left it
+        }
+        Database db(path);
+        QVERIFY2(db.open(), qPrintable(db.lastError()));
+        QVERIFY(db.movedAsidePath().isEmpty());
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT value FROM meta WHERE key = 'k'")).toString(),
+                 QStringLiteral("v"));
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
+    }
+
+    void databaseWithPreviousStampIsAdoptedAndRestamped()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            QSqlQuery query(QSqlDatabase::database(db.connectionName(), false));
+            QVERIFY(query.exec(QStringLiteral("INSERT INTO meta (key, value) VALUES ('k', 'v')")));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA application_id = %1").arg(Database::kPreviousApplicationId)));
         }
         Database db(path);
         QVERIFY2(db.open(), qPrintable(db.lastError()));

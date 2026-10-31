@@ -8,7 +8,7 @@
  * Owns the SQLite connection and brings the schema up to date.
  *
  * Ownership: our files carry `PRAGMA application_id` = kApplicationId. A file that
- * already has tables but is not ours (another program, or an old prototype that
+ * already has tables but is not ours (another program that
  * happens to use the same path) is never migrated or modified: it is moved aside to
  * `<path>.foreign-<timestamp>` and a fresh database is created. See movedAsidePath().
  * A file that is not SQLite at all, or a damaged one, is likewise moved to
@@ -23,8 +23,10 @@
 class Database
 {
 public:
-    /// "kTmt" in ASCII; identifies Sugo databases.
-    static constexpr int kApplicationId = 0x6B546D74;
+    /// Identifies Sugo databases: "Sugo" in ASCII.
+    static constexpr int kApplicationId = 0x5375676F;
+    /// The id Sugo 1.0 stamped its files with; such files are ours and get the new stamp on open.
+    static constexpr int kPreviousApplicationId = 0x6B546D74;
 
     /// `path` may be ":memory:" (tests, or fallback when the file is unusable).
     explicit Database(const QString &path);

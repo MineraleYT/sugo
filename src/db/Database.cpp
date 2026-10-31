@@ -275,7 +275,7 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
         return failed(idQuery.lastError());
     }
     const int applicationId = idQuery.value(0).toInt();
-    if (applicationId == kApplicationId) {
+    if (applicationId == kApplicationId || applicationId == kPreviousApplicationId) {
         return Ownership::Ours;
     }
     if (applicationId == 0) {

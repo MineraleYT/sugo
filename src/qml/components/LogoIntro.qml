@@ -15,7 +15,6 @@ Item {
     property real size: Theme.logoHero
     /// When the text around the logo should start coming in, from `play()`.
     readonly property int textDelay: Theme.durationShort + Theme.durationLong * 3 + Theme.durationStagger
-    readonly property bool running: intro.running
 
     // The parts of the entrance, 0..1 (the leaf overshoots a little).
     property real tileIn: 0
