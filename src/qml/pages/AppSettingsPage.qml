@@ -205,6 +205,19 @@ QQC2.Page {
             restoreConfirmDialog.close();
         }
     }
+
+    ConfirmDialog {
+        id: resetSettingsDialog
+        title: i18n("Reset all settings?")
+        text: i18n("Every setting on this page goes back to its default. Your timers, session history, calendar account and the choice to start Sugo at login are kept.")
+        confirmText: i18n("Reset Settings")
+        confirmKind: "danger"
+        onConfirmed: {
+            resetSettingsDialog.close();
+            AppSettings.resetToDefaults();
+            applicationWindow().showPassiveNotification(i18n("Settings were reset to their defaults."));
+        }
+    }
     readonly property bool wide: width >= Theme.contentMaxWidth * 0.62
 
     // Switches bound to a setting lose their binding when the user toggles them. Re-binding
@@ -1285,6 +1298,16 @@ QQC2.Page {
                     }
                 }
 
+                SettingRow {
+                    title: i18n("Reset settings")
+                    description: i18n("Put the settings back to what they were when you first started Sugo. Your timers, session history and calendar account are kept.")
+                    SButton {
+                        destructive: true
+                        text: i18n("Reset Settings…")
+                        iconName: "undo"
+                        onClicked: resetSettingsDialog.open()
+                    }
+                }
             }
         }
     }

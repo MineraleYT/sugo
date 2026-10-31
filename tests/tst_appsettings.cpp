@@ -452,6 +452,96 @@ private Q_SLOTS:
         QVERIFY(!reloaded->autoCheckUpdates());
     }
 
+    void resetToDefaultsRestoresEveryPreferenceThroughTheSetters()
+    {
+        {
+            // Not preferences of this class: they must survive a reset.
+            QSettings other(configPath(), QSettings::IniFormat);
+            other.setValue(QStringLiteral("CalendarSync/Username"), QStringLiteral("anna"));
+            other.sync();
+        }
+        const auto settings = make();
+        settings->setShowTrayIcon(false);
+        settings->setCloseToTray(false);
+        settings->setAllowExternalControl(false);
+        settings->setStartAtLogin(true);
+        settings->setStartMinimized(false);
+        settings->setTrayBadgeStyle(2);
+        settings->setSoundTheme(QStringLiteral("bell"));
+        settings->setSoundVolume(10);
+        settings->setPreAlarmEnabled(false);
+        settings->setPreAlarmSound(QStringLiteral("bell"));
+        settings->setFocusSoundMode(2);
+        settings->setFocusSoundVolume(90);
+        settings->setKeepScreenAwake(false);
+        settings->setAutoPauseOnScreenLock(false);
+        settings->setProtectWeekendStreak(false);
+        settings->setFirstRunCompleted(true);
+        settings->setPromptTaskNote(false);
+        settings->setColorScheme(QStringLiteral("light"));
+        settings->setUpdateChannel(QStringLiteral("nightly"));
+        settings->setAutoCheckUpdates(false);
+
+        QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
+        QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
+        QSignalSpy scheme(settings.get(), &AppSettings::colorSchemeChanged);
+        QSignalSpy channel(settings.get(), &AppSettings::updateChannelChanged);
+        QSignalSpy firstRun(settings.get(), &AppSettings::firstRunCompletedChanged);
+        QSignalSpy login(settings.get(), &AppSettings::startAtLoginChanged);
+
+        settings->resetToDefaults();
+
+        QVERIFY(settings->showTrayIcon());
+        QVERIFY(settings->closeToTray());
+        QVERIFY(settings->allowExternalControl());
+        QVERIFY(settings->startMinimized());
+        QCOMPARE(settings->trayBadgeStyle(), 0);
+        QCOMPARE(settings->soundTheme(), QStringLiteral("alarm-clock-elapsed"));
+        QCOMPARE(settings->soundVolume(), 80);
+        QVERIFY(settings->preAlarmEnabled());
+        QCOMPARE(settings->preAlarmSound(), QStringLiteral("dialog-information"));
+        QCOMPARE(settings->focusSoundMode(), 0);
+        QCOMPARE(settings->focusSoundVolume(), 30);
+        QVERIFY(settings->keepScreenAwake());
+        QVERIFY(settings->autoPauseOnScreenLock());
+        QVERIFY(settings->protectWeekendStreak());
+        QVERIFY(settings->promptTaskNote());
+        QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
+        QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
+        QVERIFY(settings->autoCheckUpdates());
+
+        // Views are told ...
+        QCOMPARE(trayIcon.count(), 1);
+        QCOMPARE(volume.count(), 1);
+        QCOMPARE(scheme.count(), 1);
+        QCOMPARE(channel.count(), 1);
+        // ... and what is not a preference of this class stays.
+        QVERIFY(settings->firstRunCompleted());
+        QCOMPARE(firstRun.count(), 0);
+        QVERIFY(settings->startAtLogin());
+        QVERIFY(state->enabled);
+        QCOMPARE(login.count(), 0);
+
+        // The file has the defaults, not the old values.
+        QCOMPARE(stored("ShowTrayIcon"), QStringLiteral("true"));
+        QCOMPARE(stored("SoundVolume"), QStringLiteral("80"));
+        QCOMPARE(stored("SoundTheme"), QStringLiteral("alarm-clock-elapsed"));
+        QCOMPARE(stored("ColorScheme"), QStringLiteral("system"));
+        QCOMPARE(stored("UpdateChannel"), QStringLiteral("stable"));
+        QCOMPARE(stored("FirstRunCompleted"), QStringLiteral("true"));
+        QCOMPARE(stored("CalendarSync/Username"), QStringLiteral("anna"));
+        const auto reloaded = make();
+        QCOMPARE(reloaded->soundVolume(), 80);
+        QCOMPARE(reloaded->colorScheme(), QStringLiteral("system"));
+        QVERIFY(reloaded->showTrayIcon());
+
+        // Nothing left to reset: no change is announced.
+        settings->resetToDefaults();
+        QCOMPARE(trayIcon.count(), 1);
+        QCOMPARE(volume.count(), 1);
+        QCOMPARE(scheme.count(), 1);
+    }
+
     void trayAvailabilityChangesUpdateDependentProperties()
     {
         const auto settings = make(false);

@@ -3,7 +3,9 @@
 
 #include "Settings.h"
 
+#include <QLatin1String>
 #include <QObject>
+#include <QString>
 #include <QtQml/qqmlregistration.h>
 
 #include <functional>
@@ -152,6 +154,11 @@ public:
     void setUpdateChannel(const QString &channel);
     bool autoCheckUpdates() const { return m_autoCheckUpdates; }
     void setAutoCheckUpdates(bool enabled);
+    /// Puts every preference back to its default, through the setters (so views are told and the
+    /// file is updated). Kept: whether the welcome tour was seen, the login entry (it lives on
+    /// disk, outside the settings file) and everything that is not a preference of this class
+    /// (timers, history, the calendar account).
+    Q_INVOKABLE void resetToDefaults();
     /// Installs the chosen colour scheme as the application palette (needs a GUI application).
     void applyColorScheme();
 
@@ -205,6 +212,30 @@ Q_SIGNALS:
     void autostartFailed(const QString &message);
 
 private:
+    /// The value of every preference when nothing is stored: used when loading the file and by
+    /// resetToDefaults().
+    struct Defaults {
+        static constexpr bool showTrayIcon = true;
+        static constexpr bool closeToTray = true;
+        static constexpr bool allowExternalControl = true;
+        static constexpr bool startMinimized = true;
+        static constexpr int trayBadgeStyle = 0;
+        static constexpr QLatin1String soundTheme{"alarm-clock-elapsed"};
+        static constexpr int soundVolume = 80;
+        static constexpr bool preAlarmEnabled = true;
+        static constexpr QLatin1String preAlarmSound{"dialog-information"};
+        static constexpr int focusSoundMode = 0;
+        static constexpr int focusSoundVolume = 30;
+        static constexpr bool keepScreenAwake = true;
+        static constexpr bool autoPauseOnScreenLock = true;
+        static constexpr bool protectWeekendStreak = true;
+        static constexpr bool firstRunCompleted = false;
+        static constexpr bool promptTaskNote = true;
+        static constexpr QLatin1String colorScheme{"system"};
+        static constexpr QLatin1String updateChannel{"stable"};
+        static constexpr bool autoCheckUpdates = true;
+    };
+
     void store(const char *key, bool value);
     void storeInt(const char *key, int value);
     void storeString(const char *key, const QString &value);
@@ -215,24 +246,24 @@ private:
     std::function<void(const QString &, int)> m_soundPlayer;
     bool m_trayAvailable;
 
-    bool m_showTrayIcon = true;
-    bool m_closeToTray = true;
-    bool m_allowExternalControl = true;
-    bool m_startMinimized = true;
-    int m_trayBadgeStyle = 0;
-    QString m_soundTheme = QStringLiteral("alarm-clock-elapsed");
-    int m_soundVolume = 80;
-    bool m_preAlarmEnabled = true;
-    QString m_preAlarmSound = QStringLiteral("dialog-information");
-    int m_focusSoundMode = 0;
-    int m_focusSoundVolume = 30;
-    bool m_keepScreenAwake = true;
-    bool m_autoPauseOnScreenLock = true;
-    bool m_protectWeekendStreak = true;
-    bool m_firstRunCompleted = false;
-    bool m_promptTaskNote = true;
-    QString m_colorScheme = QStringLiteral("dark");
-    QString m_updateChannel = QStringLiteral("stable");
-    bool m_autoCheckUpdates = true;
+    bool m_showTrayIcon = Defaults::showTrayIcon;
+    bool m_closeToTray = Defaults::closeToTray;
+    bool m_allowExternalControl = Defaults::allowExternalControl;
+    bool m_startMinimized = Defaults::startMinimized;
+    int m_trayBadgeStyle = Defaults::trayBadgeStyle;
+    QString m_soundTheme = QString(Defaults::soundTheme);
+    int m_soundVolume = Defaults::soundVolume;
+    bool m_preAlarmEnabled = Defaults::preAlarmEnabled;
+    QString m_preAlarmSound = QString(Defaults::preAlarmSound);
+    int m_focusSoundMode = Defaults::focusSoundMode;
+    int m_focusSoundVolume = Defaults::focusSoundVolume;
+    bool m_keepScreenAwake = Defaults::keepScreenAwake;
+    bool m_autoPauseOnScreenLock = Defaults::autoPauseOnScreenLock;
+    bool m_protectWeekendStreak = Defaults::protectWeekendStreak;
+    bool m_firstRunCompleted = Defaults::firstRunCompleted;
+    bool m_promptTaskNote = Defaults::promptTaskNote;
+    QString m_colorScheme = QString(Defaults::colorScheme);
+    QString m_updateChannel = QString(Defaults::updateChannel);
+    bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
     bool m_launchedInBackground = false;
 };

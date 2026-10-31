@@ -154,26 +154,26 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     , m_trayAvailable(trayAvailable)
 {
     const QSettings &settings = *m_config;
-    m_showTrayIcon = settings.value(QLatin1String(kShowTrayIcon), true).toBool();
-    m_closeToTray = settings.value(QLatin1String(kCloseToTray), true).toBool();
-    m_allowExternalControl = settings.value(QLatin1String(kAllowExternalControl), true).toBool();
-    m_startMinimized = settings.value(QLatin1String(kStartMinimized), true).toBool();
-    m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), 0).toInt(), 0, 2);
-    m_soundTheme = settings.value(QLatin1String(kSoundTheme), QStringLiteral("alarm-clock-elapsed")).toString();
-    m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), 80).toInt(), 0, 100);
-    m_preAlarmEnabled = settings.value(QLatin1String(kPreAlarmEnabled), true).toBool();
-    m_preAlarmSound = settings.value(QLatin1String(kPreAlarmSound), QStringLiteral("dialog-information")).toString();
-    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), 0).toInt(), 0, FocusSoundController::LastMode);
-    m_focusSoundVolume = std::clamp(settings.value(QLatin1String(kFocusSoundVolume), 30).toInt(), 0, 100);
-    m_keepScreenAwake = settings.value(QLatin1String(kKeepScreenAwake), true).toBool();
-    m_autoPauseOnScreenLock = settings.value(QLatin1String(kAutoPauseOnScreenLock), true).toBool();
-    m_protectWeekendStreak = settings.value(QLatin1String(kProtectWeekendStreak), true).toBool();
-    m_firstRunCompleted = settings.value(QLatin1String(kFirstRunCompleted), false).toBool();
-    m_promptTaskNote = settings.value(QLatin1String(kPromptTaskNote), true).toBool();
-    m_colorScheme = validColorScheme(settings.value(QLatin1String(kColorScheme), QStringLiteral("system")).toString());
+    m_showTrayIcon = settings.value(QLatin1String(kShowTrayIcon), Defaults::showTrayIcon).toBool();
+    m_closeToTray = settings.value(QLatin1String(kCloseToTray), Defaults::closeToTray).toBool();
+    m_allowExternalControl = settings.value(QLatin1String(kAllowExternalControl), Defaults::allowExternalControl).toBool();
+    m_startMinimized = settings.value(QLatin1String(kStartMinimized), Defaults::startMinimized).toBool();
+    m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), Defaults::trayBadgeStyle).toInt(), 0, 2);
+    m_soundTheme = settings.value(QLatin1String(kSoundTheme), QString(Defaults::soundTheme)).toString();
+    m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), Defaults::soundVolume).toInt(), 0, 100);
+    m_preAlarmEnabled = settings.value(QLatin1String(kPreAlarmEnabled), Defaults::preAlarmEnabled).toBool();
+    m_preAlarmSound = settings.value(QLatin1String(kPreAlarmSound), QString(Defaults::preAlarmSound)).toString();
+    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), Defaults::focusSoundMode).toInt(), 0, FocusSoundController::LastMode);
+    m_focusSoundVolume = std::clamp(settings.value(QLatin1String(kFocusSoundVolume), Defaults::focusSoundVolume).toInt(), 0, 100);
+    m_keepScreenAwake = settings.value(QLatin1String(kKeepScreenAwake), Defaults::keepScreenAwake).toBool();
+    m_autoPauseOnScreenLock = settings.value(QLatin1String(kAutoPauseOnScreenLock), Defaults::autoPauseOnScreenLock).toBool();
+    m_protectWeekendStreak = settings.value(QLatin1String(kProtectWeekendStreak), Defaults::protectWeekendStreak).toBool();
+    m_firstRunCompleted = settings.value(QLatin1String(kFirstRunCompleted), Defaults::firstRunCompleted).toBool();
+    m_promptTaskNote = settings.value(QLatin1String(kPromptTaskNote), Defaults::promptTaskNote).toBool();
+    m_colorScheme = validColorScheme(settings.value(QLatin1String(kColorScheme), QString(Defaults::colorScheme)).toString());
     applyColorScheme();
-    m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QStringLiteral("stable");
-    m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), true).toBool();
+    m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
+    m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
 
     // Left behind by versions that had a daily goal.
     if (m_config->contains(QStringLiteral("DailyGoal"))) {
@@ -459,6 +459,29 @@ void AppSettings::setAutoCheckUpdates(bool enabled)
     m_autoCheckUpdates = enabled;
     store(kAutoCheckUpdates, enabled);
     Q_EMIT autoCheckUpdatesChanged();
+}
+
+void AppSettings::resetToDefaults()
+{
+    // Through the setters: they skip what is already right, store the rest and tell the views.
+    setShowTrayIcon(Defaults::showTrayIcon);
+    setCloseToTray(Defaults::closeToTray);
+    setAllowExternalControl(Defaults::allowExternalControl);
+    setStartMinimized(Defaults::startMinimized);
+    setTrayBadgeStyle(Defaults::trayBadgeStyle);
+    setSoundTheme(QString(Defaults::soundTheme));
+    setSoundVolume(Defaults::soundVolume);
+    setPreAlarmEnabled(Defaults::preAlarmEnabled);
+    setPreAlarmSound(QString(Defaults::preAlarmSound));
+    setFocusSoundMode(Defaults::focusSoundMode);
+    setFocusSoundVolume(Defaults::focusSoundVolume);
+    setKeepScreenAwake(Defaults::keepScreenAwake);
+    setAutoPauseOnScreenLock(Defaults::autoPauseOnScreenLock);
+    setProtectWeekendStreak(Defaults::protectWeekendStreak);
+    setPromptTaskNote(Defaults::promptTaskNote);
+    setColorScheme(QString(Defaults::colorScheme));
+    setUpdateChannel(QString(Defaults::updateChannel));
+    setAutoCheckUpdates(Defaults::autoCheckUpdates);
 }
 
 void AppSettings::applyColorScheme()
