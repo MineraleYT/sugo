@@ -94,7 +94,8 @@ export LD_LIBRARY_PATH="$QT/lib"
 export QML_SOURCES_PATHS="$SRC/src/qml"
 export EXTRA_QT_MODULES="svg;waylandclient"
 # offscreen: the smoke tests run the AppImage without a display before it is published.
-export EXTRA_PLATFORM_PLUGINS="libqwayland-egl.so;libqwayland-generic.so;libqoffscreen.so"
+# Qt 6.10 has one Wayland platform plugin (libqwayland.so) where older versions had two.
+export EXTRA_PLATFORM_PLUGINS="libqwayland.so;libqoffscreen.so"
 export OUTPUT="$OUT/Sugo-x86_64.AppImage"
 rm -f "$OUTPUT"
 ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage \
