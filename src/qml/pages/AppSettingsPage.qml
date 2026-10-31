@@ -172,6 +172,29 @@ QQC2.Page {
         }
     }
 
+    // Months of the "older than" choice of the session history: 0 stands for all sessions.
+    readonly property var historyCleanupChoices: [
+        { text: i18n("Older than 3 months"), value: 3 },
+        { text: i18n("Older than 6 months"), value: 6 },
+        { text: i18n("Older than 1 year"), value: 12 },
+        { text: i18n("All sessions"), value: 0 }
+    ]
+
+    ConfirmDialog {
+        id: clearOldHistoryDialog
+        property int months: 3
+        title: i18n("Remove old sessions?")
+        text: months === 12
+            ? i18n("This permanently removes the sessions recorded more than 1 year ago. More recent sessions, presets and settings will remain.")
+            : i18n("This permanently removes the sessions recorded more than %1 months ago. More recent sessions, presets and settings will remain.", months)
+        confirmText: i18n("Remove Sessions")
+        confirmKind: "danger"
+        onConfirmed: {
+            DataManager.clearHistoryOlderThan(months);
+            clearOldHistoryDialog.close();
+        }
+    }
+
     ConfirmDialog {
         id: restoreConfirmDialog
         title: i18n("Restore this backup?")
@@ -1088,13 +1111,29 @@ QQC2.Page {
                 }
                 SettingRow {
                     title: i18n("Session history")
+                    description: i18n("Remove recorded sessions and their statistics.")
+                    SComboBox {
+                        id: historyCleanupBox
+                        textRole: "text"
+                        valueRole: "value"
+                        model: page.historyCleanupChoices
+                        currentIndex: 0
+                        Accessible.name: i18n("Sessions to remove")
+                    }
                     SButton {
                         id: clearHistoryButton
                         destructive: true
                         text: i18n("Clear history…")
                         iconName: "trash"
                         enabled: DataManager !== null && DataManager.sessionCount > 0
-                        onClicked: clearHistoryDialog.open()
+                        onClicked: {
+                            if (historyCleanupBox.currentValue === 0) {
+                                clearHistoryDialog.open();
+                            } else {
+                                clearOldHistoryDialog.months = historyCleanupBox.currentValue;
+                                clearOldHistoryDialog.open();
+                            }
+                        }
                     }
                 }
             }

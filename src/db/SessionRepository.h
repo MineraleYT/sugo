@@ -51,6 +51,9 @@ public:
 
     int count() const;
     bool deleteAll();
+    /// Deletes the sessions that started before `ms` (Unix ms). Returns how many rows were
+    /// deleted, or -1 on error.
+    int deleteStartedBefore(qint64 ms);
 
     static QString kindToString(SessionKind kind);
     static SessionKind kindFromString(const QString &text);

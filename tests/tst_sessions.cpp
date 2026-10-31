@@ -139,6 +139,23 @@ private Q_SLOTS:
         QVERIFY(sessions->between(5000, 6000).isEmpty());
     }
 
+    void deleteStartedBeforeRemovesOnlyOlderSessions()
+    {
+        QVERIFY(sessions->insert(makeRecord(1'000)));
+        QVERIFY(sessions->insert(makeRecord(2'000)));
+        QVERIFY(sessions->insert(makeRecord(3'000)));
+
+        QCOMPARE(sessions->deleteStartedBefore(2'000), 1); // strictly before the cut-off
+        const auto left = sessions->between(0, kForever);
+        QCOMPARE(left.size(), 2);
+        QCOMPARE(left.first().startedAtMs, qint64(2'000));
+
+        QCOMPARE(sessions->deleteStartedBefore(500), 0);
+        QCOMPARE(sessions->count(), 2);
+        QCOMPARE(sessions->deleteStartedBefore(kForever), 2);
+        QCOMPARE(sessions->count(), 0);
+    }
+
     void allThreeKindsRoundTrip()
     {
         QVERIFY(sessions->insert(makeRecord(1, SessionKind::Work)));

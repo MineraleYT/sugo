@@ -178,6 +178,35 @@ bool DataManager::clearHistory()
     return true;
 }
 
+void DataManager::setNowProvider(std::function<QDateTime()> provider)
+{
+    m_now = std::move(provider);
+}
+
+bool DataManager::clearHistoryOlderThan(int months)
+{
+    if (!m_sessions || months < 1) {
+        Q_EMIT operationFailed(i18n("Could not clear session history."));
+        return false;
+    }
+    const QDateTime now = m_now ? m_now() : QDateTime::currentDateTime();
+    const int removed = m_sessions->deleteStartedBefore(now.addMonths(-months).toMSecsSinceEpoch());
+    if (removed < 0) {
+        Q_EMIT operationFailed(i18n("Could not clear session history."));
+        return false;
+    }
+    if (removed == 0) {
+        Q_EMIT operationSucceeded(i18n("There were no sessions to remove."));
+        return true;
+    }
+    // Unlike clearHistory(), the recorder is left alone: sessions still waiting to be stored are
+    // newer than the cut-off and must not be dropped.
+    if (m_stats) m_stats->refresh();
+    Q_EMIT dataChanged();
+    Q_EMIT operationSucceeded(i18np("%1 session removed.", "%1 sessions removed.", removed));
+    return true;
+}
+
 bool DataManager::exportHistory(const QUrl &fileUrl)
 {
     const QString path = fileUrl.toLocalFile();

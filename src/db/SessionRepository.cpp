@@ -177,6 +177,19 @@ bool SessionRepository::deleteAll()
     return true;
 }
 
+int SessionRepository::deleteStartedBefore(qint64 ms)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("DELETE FROM session WHERE started_at < ?"));
+    query.addBindValue(ms);
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << "Cannot delete old sessions:" << query.lastError().text();
+        return -1;
+    }
+    return query.numRowsAffected();
+}
+
 QList<qint64> SessionRepository::completedWorkStartsAfter(qint64 afterId, qint64 *maxId) const
 {
     if (maxId) {

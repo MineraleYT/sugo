@@ -328,6 +328,43 @@ private Q_SLOTS:
         QVERIFY(inMemory.usingTemporaryDatabase());
     }
 
+    void clearHistoryOlderThanKeepsRecentSessions()
+    {
+        const QDateTime now(QDate(2026, 10, 31), QTime(12, 0));
+        manager->setNowProvider([now]() { return now; });
+        SessionRecord record;
+        record.kind = SessionKind::Work;
+        record.startedAtMs = now.addMonths(-7).toMSecsSinceEpoch();
+        QVERIFY(sessions->insert(record));
+        record.startedAtMs = now.addMonths(-4).toMSecsSinceEpoch();
+        QVERIFY(sessions->insert(record));
+        record.startedAtMs = now.addDays(-2).toMSecsSinceEpoch();
+        QVERIFY(sessions->insert(record));
+
+        QSignalSpy succeeded(manager.get(), &DataManager::operationSucceeded);
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QSignalSpy changed(manager.get(), &DataManager::dataChanged);
+        QVERIFY(manager->clearHistoryOlderThan(6));
+        QCOMPARE(manager->sessionCount(), 2);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(succeeded.count(), 1);
+        QCOMPARE(succeeded.first().first().toString(), QStringLiteral("1 session removed."));
+
+        QVERIFY(manager->clearHistoryOlderThan(3));
+        QCOMPARE(manager->sessionCount(), 1);
+        QCOMPARE(succeeded.last().first().toString(), QStringLiteral("1 session removed."));
+
+        // Nothing left to remove is not an error.
+        QVERIFY(manager->clearHistoryOlderThan(3));
+        QCOMPARE(manager->sessionCount(), 1);
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(failed.count(), 0);
+
+        QVERIFY(!manager->clearHistoryOlderThan(0));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(manager->sessionCount(), 1);
+    }
+
     void exportToCsvQuotesFieldsAndNeutralisesFormulas()
     {
         SessionRecord record;

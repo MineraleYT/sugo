@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QDateTime>
 #include <QObject>
 #include <QUrl>
+
+#include <functional>
 
 class Database;
 class PresetModel;
@@ -32,6 +35,9 @@ public:
     bool usingTemporaryDatabase() const;
     bool saveFailing() const;
 
+    /// Replaces the clock (local time) used for "older than" cut-offs; for tests.
+    void setNowProvider(std::function<QDateTime()> provider);
+
     /// Tracks newly recorded sessions: keeps sessionCount current and provides lastWorkSessionId().
     void setSessionRecorder(SessionRecorder *recorder);
     /// Reports failed timer saves through saveFailing.
@@ -40,6 +46,8 @@ public:
     Q_INVOKABLE qint64 lastWorkSessionId() const;
 
     Q_INVOKABLE bool clearHistory();
+    /// Deletes the sessions that started more than `months` months ago. Removing none is a success.
+    Q_INVOKABLE bool clearHistoryOlderThan(int months);
     /// Writes every session to a .csv or .json file (chosen by the file's extension).
     Q_INVOKABLE bool exportHistory(const QUrl &fileUrl);
     /// Opens the folder holding the database in the file manager.
@@ -66,4 +74,5 @@ private:
     StatsModel *m_stats;
     SessionRecorder *m_recorder = nullptr;
     PresetPersistence *m_presetPersistence = nullptr;
+    std::function<QDateTime()> m_now;
 };
