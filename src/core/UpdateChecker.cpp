@@ -1,0 +1,491 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "UpdateChecker.h"
+
+#include "AppSettings.h"
+#include "Localization.h"
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QSaveFile>
+
+#include <algorithm>
+
+namespace
+{
+const QString kReleasesPage = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
+const QString kDownloadPrefix = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/");
+/// An AppImage of Sugo is about 50 MB; a feed announcing more than this is not believed.
+constexpr qint64 kMaxDownloadSize = 512 * 1024 * 1024;
+constexpr int kFirstCheckDelayMs = 60 * 1000;
+constexpr int kCheckIntervalMs = 6 * 60 * 60 * 1000;
+
+struct ParsedVersion {
+    QStringList numbers; ///< Digit strings, compared by value with compareDigits().
+    QStringList preRelease; ///< Empty for a release.
+};
+
+ParsedVersion parseVersion(const QString &raw)
+{
+    QString cleaned = raw.trimmed();
+    if (cleaned.startsWith(QLatin1Char('v'), Qt::CaseInsensitive)) {
+        cleaned.remove(0, 1);
+    }
+    const int plusIdx = cleaned.indexOf(QLatin1Char('+'));
+    if (plusIdx >= 0) {
+        cleaned.truncate(plusIdx); // build metadata does not order versions
+    }
+    ParsedVersion version;
+    const int dashIdx = cleaned.indexOf(QLatin1Char('-'));
+    if (dashIdx >= 0) {
+        version.preRelease = cleaned.mid(dashIdx + 1).split(QLatin1Char('.'), Qt::SkipEmptyParts);
+        cleaned.truncate(dashIdx);
+    }
+    const auto parts = cleaned.split(QLatin1Char('.'));
+    version.numbers.reserve(parts.size());
+    static const QRegularExpression digitsOnly(QStringLiteral("^[0-9]+$"));
+    for (const QString &p : parts) {
+        version.numbers.append(digitsOnly.match(p).hasMatch() ? p : QStringLiteral("0"));
+    }
+    return version;
+}
+
+int sign(qint64 n)
+{
+    return n > 0 ? 1 : (n < 0 ? -1 : 0);
+}
+
+/// Compares two runs of ASCII digits by value, however long they are.
+int compareDigits(QStringView a, QStringView b)
+{
+    while (a.size() > 1 && a.front() == QLatin1Char('0')) {
+        a = a.mid(1);
+    }
+    while (b.size() > 1 && b.front() == QLatin1Char('0')) {
+        b = b.mid(1);
+    }
+    if (a.size() != b.size()) {
+        return a.size() > b.size() ? 1 : -1;
+    }
+    const int c = a.compare(b);
+    return c > 0 ? 1 : (c < 0 ? -1 : 0);
+}
+
+/// Compares runs of digits by value and everything else as text: "rc2" < "rc10".
+int naturalCompare(const QString &a, const QString &b)
+{
+    int i = 0;
+    int j = 0;
+    while (i < a.size() && j < b.size()) {
+        const auto ascii = [](QChar c) {
+            return c >= QLatin1Char('0') && c <= QLatin1Char('9');
+        };
+        if (ascii(a.at(i)) && ascii(b.at(j))) {
+            int ei = i;
+            int ej = j;
+            while (ei < a.size() && ascii(a.at(ei))) {
+                ++ei;
+            }
+            while (ej < b.size() && ascii(b.at(ej))) {
+                ++ej;
+            }
+            const int c = compareDigits(QStringView(a).mid(i, ei - i), QStringView(b).mid(j, ej - j));
+            if (c != 0) {
+                return c;
+            }
+            i = ei;
+            j = ej;
+        } else {
+            if (a.at(i) != b.at(j)) {
+                return a.at(i).toLower() < b.at(j).toLower() ? -1 : 1;
+            }
+            ++i;
+            ++j;
+        }
+    }
+    return sign(qint64(a.size() - i) - qint64(b.size() - j));
+}
+} // namespace
+
+UpdateChecker::UpdateChecker(QObject *parent)
+    : QObject(parent)
+    , m_appImagePath(qEnvironmentVariable("APPIMAGE"))
+    , m_downloadPrefix(kDownloadPrefix)
+{
+    m_scheduleTimer.setSingleShot(true);
+    connect(&m_scheduleTimer, &QTimer::timeout, this, [this]() {
+        m_scheduleTimer.start(kCheckIntervalMs);
+        // A check never interrupts a download or an update waiting for the restart.
+        if (m_status == Status::Idle || m_status == Status::UpToDate || m_status == Status::Error) {
+            checkForUpdates();
+        }
+    });
+}
+
+UpdateChecker::~UpdateChecker()
+{
+    abortDownload();
+}
+
+void UpdateChecker::attach(AppSettings *settings)
+{
+    const auto follow = [this, settings]() {
+        setChannel(settings->updateChannel());
+        setAutoInstall(settings->autoInstallUpdates());
+        if (canInstall() && m_autoInstall) {
+            if (!m_scheduleTimer.isActive()) {
+                m_scheduleTimer.start(kFirstCheckDelayMs);
+            }
+        } else {
+            m_scheduleTimer.stop();
+        }
+    };
+    follow();
+    connect(settings, &AppSettings::updateChannelChanged, this, follow);
+    connect(settings, &AppSettings::autoInstallUpdatesChanged, this, follow);
+    // A new channel is looked at straight away (by hand when the installs are not automatic).
+    connect(settings, &AppSettings::updateChannelChanged, this, [this]() {
+        if (canInstall() && m_autoInstall && m_status != Status::Downloading && m_status != Status::ReadyToRestart) {
+            reset();
+            checkForUpdates();
+        }
+    });
+}
+
+QString UpdateChecker::currentVersion() const
+{
+    const QByteArray overrideVer = qgetenv("SUGO_OVERRIDE_VERSION");
+    if (!overrideVer.isEmpty()) {
+        return QString::fromUtf8(overrideVer);
+    }
+#ifdef PROJECT_VERSION
+    return QStringLiteral(PROJECT_VERSION);
+#else
+    return QCoreApplication::applicationVersion();
+#endif
+}
+
+bool UpdateChecker::canInstall() const
+{
+    if (m_appImagePath.isEmpty()) {
+        return false;
+    }
+    const QFileInfo file(m_appImagePath);
+    return file.isFile() && QFileInfo(file.absolutePath()).isWritable();
+}
+
+QString UpdateChecker::channel() const
+{
+    return canInstall() ? m_channel : QStringLiteral("stable");
+}
+
+void UpdateChecker::setChannel(const QString &channel)
+{
+    m_channel = channel == QLatin1String("nightly") ? channel : QStringLiteral("stable");
+}
+
+QUrl UpdateChecker::feedUrl(const QString &channel)
+{
+    // The newest release's feed is always at the same address; the nightly is one rolling release.
+    return channel == QLatin1String("nightly")
+        ? QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/nightly/nightly.json"))
+        : QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/latest/download/stable.json"));
+}
+
+void UpdateChecker::reset()
+{
+    if (m_status == Status::Downloading || m_status == Status::ReadyToRestart) {
+        return; // the file is being replaced, or has been: forgetting that would lie
+    }
+    // Forget a request in flight: its reply must not overwrite the state later on.
+    if (QNetworkReply *reply = m_reply.data()) {
+        m_reply = nullptr;
+        reply->abort();
+    }
+    m_status = Status::Idle;
+    m_errorMessage.clear();
+    Q_EMIT statusChanged();
+}
+
+QString UpdateChecker::safeReleaseUrl(const QString &url)
+{
+    const QUrl parsed(url, QUrl::StrictMode);
+    if (parsed.isValid() && parsed.scheme() == QLatin1String("https")
+        && parsed.host().compare(QLatin1String("github.com"), Qt::CaseInsensitive) == 0
+        && parsed.userInfo().isEmpty() && parsed.port() == -1
+        && parsed.path().startsWith(QLatin1String("/MineraleYT/sugo/"), Qt::CaseInsensitive)) {
+        return parsed.toString();
+    }
+    return kReleasesPage;
+}
+
+QString UpdateChecker::trustedDownloadUrl(const QString &url) const
+{
+    if (m_downloadPrefix != kDownloadPrefix) {
+        return url.startsWith(m_downloadPrefix) ? url : QString(); // a test's local files
+    }
+    const QUrl parsed(url, QUrl::StrictMode);
+    if (parsed.isValid() && parsed.scheme() == QLatin1String("https")
+        && parsed.host().compare(QLatin1String("github.com"), Qt::CaseInsensitive) == 0
+        && parsed.userInfo().isEmpty() && parsed.port() == -1 && !parsed.hasQuery() && !parsed.hasFragment()
+        && parsed.path().startsWith(QLatin1String("/MineraleYT/sugo/releases/download/")) && !parsed.path().contains(QLatin1String("/../"))) {
+        return parsed.toString();
+    }
+    return QString();
+}
+
+void UpdateChecker::setStatus(Status s)
+{
+    if (m_status != s) {
+        m_status = s;
+        Q_EMIT statusChanged();
+    }
+}
+
+void UpdateChecker::fail(const QString &message)
+{
+    m_errorMessage = message;
+    setStatus(Status::Error);
+}
+
+QNetworkAccessManager *UpdateChecker::network()
+{
+    if (!m_nam) {
+        m_nam = new QNetworkAccessManager(this);
+    }
+    return m_nam;
+}
+
+int UpdateChecker::compareVersions(const QString &v1, const QString &v2)
+{
+    const ParsedVersion p1 = parseVersion(v1);
+    const ParsedVersion p2 = parseVersion(v2);
+    const int maxLen = std::max(p1.numbers.size(), p2.numbers.size());
+    const QString zero = QStringLiteral("0");
+    for (int i = 0; i < maxLen; ++i) {
+        const int c = compareDigits(i < p1.numbers.size() ? p1.numbers.at(i) : zero, i < p2.numbers.size() ? p2.numbers.at(i) : zero);
+        if (c != 0) {
+            return c;
+        }
+    }
+
+    // Same version number: a release beats its pre-releases.
+    if (p1.preRelease.isEmpty() || p2.preRelease.isEmpty()) {
+        return p1.preRelease.isEmpty() ? (p2.preRelease.isEmpty() ? 0 : 1) : -1;
+    }
+    const int ids = std::min(p1.preRelease.size(), p2.preRelease.size());
+    for (int i = 0; i < ids; ++i) {
+        const int c = naturalCompare(p1.preRelease.at(i), p2.preRelease.at(i));
+        if (c != 0) {
+            return c;
+        }
+    }
+    // "rc.1" < "rc.1.1": more identifiers sort later.
+    return sign(qint64(p1.preRelease.size()) - qint64(p2.preRelease.size()));
+}
+
+bool UpdateChecker::isPlausibleVersionTag(const QString &tag)
+{
+    static const QRegularExpression pattern(QStringLiteral("^v?[0-9]+(\\.[0-9]+)*(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"));
+    return tag.size() <= 64 && pattern.match(tag).hasMatch();
+}
+
+void UpdateChecker::checkForUpdates()
+{
+    if (m_status == Status::Checking || m_status == Status::Downloading || m_status == Status::ReadyToRestart) {
+        return;
+    }
+
+    m_latestVersion.clear();
+    m_releaseUrl.clear();
+    m_errorMessage.clear();
+    m_downloadUrl.clear();
+    setStatus(Status::Checking);
+
+    QNetworkRequest request(m_feedUrlOverride.isEmpty() ? feedUrl(channel()) : m_feedUrlOverride);
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Sugo/%1").arg(currentVersion()));
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    // The feeds change with every build: never an answer from a cache.
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setTransferTimeout(10000);
+
+    QNetworkReply *reply = network()->get(request);
+    m_reply = reply;
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply != m_reply) {
+            return; // superseded by reset() or a newer request
+        }
+        m_reply = nullptr;
+        if (reply->error() == QNetworkReply::ContentNotFoundError) {
+            fail(i18n("No release has been published on this channel yet."));
+        } else if (reply->error() != QNetworkReply::NoError) {
+            fail(reply->errorString());
+        } else {
+            handleFeed(reply->read(64 * 1024));
+        }
+    });
+}
+
+void UpdateChecker::handleFeed(const QByteArray &data)
+{
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        fail(i18n("Failed to parse release information."));
+        return;
+    }
+
+    const QJsonObject feed = doc.object();
+    const QString version = feed.value(QStringLiteral("version")).toString();
+    if (!isPlausibleVersionTag(version)) {
+        fail(i18n("No version information found in release."));
+        return;
+    }
+    m_latestVersion = version;
+    m_releaseUrl = safeReleaseUrl(feed.value(QStringLiteral("page")).toString());
+
+    if (compareVersions(m_latestVersion, currentVersion()) <= 0) {
+        setStatus(Status::UpToDate);
+        return;
+    }
+
+    if (canInstall()) {
+        static const QRegularExpression sha256(QStringLiteral("^[0-9a-f]{64}$"));
+        const QString hash = feed.value(QStringLiteral("sha256")).toString().toLower();
+        const qint64 size = feed.value(QStringLiteral("size")).toInteger();
+        m_downloadUrl = trustedDownloadUrl(feed.value(QStringLiteral("url")).toString());
+        if (m_downloadUrl.isEmpty() || !sha256.match(hash).hasMatch() || size <= 0 || size > kMaxDownloadSize) {
+            fail(i18n("The update information is incomplete."));
+            return;
+        }
+        m_expectedSha256 = hash.toLatin1();
+        m_expectedSize = size;
+    }
+    setStatus(Status::UpdateAvailable);
+    if (canInstall() && m_autoInstall) {
+        installUpdate();
+    }
+}
+
+void UpdateChecker::installUpdate()
+{
+    if (m_status != Status::UpdateAvailable || !canInstall() || m_downloadUrl.isEmpty()) {
+        return;
+    }
+
+    // Written next to the AppImage and moved over it only once complete and verified: a
+    // failure leaves the running copy as it was.
+    m_saveFile = std::make_unique<QSaveFile>(m_appImagePath);
+    if (!m_saveFile->open(QIODevice::WriteOnly)) {
+        const QString reason = m_saveFile->errorString();
+        m_saveFile.reset();
+        fail(i18n("Cannot write the update next to %1: %2", m_appImagePath, reason));
+        return;
+    }
+    m_hash = std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
+    m_received = 0;
+    m_progress = 0;
+    Q_EMIT progressChanged();
+    setStatus(Status::Downloading);
+
+    QNetworkRequest request{QUrl(m_downloadUrl)};
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Sugo/%1").arg(currentVersion()));
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    request.setTransferTimeout(60000); // without a byte for a minute
+    QNetworkReply *reply = network()->get(request);
+    m_reply = reply;
+
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply]() {
+        if (reply != m_reply || !m_saveFile) {
+            return;
+        }
+        const QByteArray chunk = reply->readAll();
+        m_received += chunk.size();
+        if (m_received > m_expectedSize) {
+            abortDownload();
+            fail(i18n("The update is larger than announced."));
+            return;
+        }
+        m_hash->addData(chunk);
+        if (m_saveFile->write(chunk) != chunk.size()) {
+            const QString reason = m_saveFile->errorString();
+            abortDownload();
+            fail(i18n("Cannot write the update: %1", reason));
+            return;
+        }
+        m_progress = qreal(m_received) / qreal(m_expectedSize);
+        Q_EMIT progressChanged();
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        if (reply == m_reply) {
+            m_reply = nullptr;
+            finishDownload(reply);
+        }
+    });
+}
+
+void UpdateChecker::finishDownload(QNetworkReply *reply)
+{
+    if (!m_saveFile) {
+        return; // already given up on
+    }
+    if (reply->error() != QNetworkReply::NoError) {
+        const QString reason = reply->errorString();
+        abortDownload();
+        fail(i18n("Could not download the update: %1", reason));
+        return;
+    }
+    if (m_received != m_expectedSize || m_hash->result().toHex() != m_expectedSha256) {
+        abortDownload();
+        fail(i18n("The downloaded update is damaged; it was not installed."));
+        return;
+    }
+
+    const QFileDevice::Permissions permissions = QFile::permissions(m_appImagePath);
+    if (!m_saveFile->commit()) {
+        const QString reason = m_saveFile->errorString();
+        m_saveFile.reset();
+        m_hash.reset();
+        fail(i18n("Cannot install the update: %1", reason));
+        return;
+    }
+    m_saveFile.reset();
+    m_hash.reset();
+    QFile::setPermissions(m_appImagePath, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    setStatus(Status::ReadyToRestart);
+}
+
+void UpdateChecker::abortDownload()
+{
+    if (m_saveFile) {
+        m_saveFile->cancelWriting();
+        m_saveFile.reset(); // removes the partial file
+    }
+    m_hash.reset();
+    if (QNetworkReply *reply = m_reply.data()) {
+        m_reply = nullptr;
+        reply->abort();
+    }
+}
+
+bool UpdateChecker::launchUpdated() const
+{
+    if (!restartOnQuit()) {
+        return false;
+    }
+    // The new copy starts once this process is gone: it would otherwise find this one still
+    // holding the D-Bus name and hand itself over to it.
+    return QProcess::startDetached(QStringLiteral("/bin/sh"),
+                                   {QStringLiteral("-c"),
+                                    QStringLiteral("while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec \"$0\""),
+                                    m_appImagePath, QString::number(QCoreApplication::applicationPid())});
+}

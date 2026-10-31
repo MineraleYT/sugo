@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Every change on main that passes CI becomes the nightly build: the pre-release "nightly" (one,
+# replaced each time) with the AppImage and nightly.json, the feed the program's update check
+# reads on the nightly channel (see src/core/UpdateChecker.h).
+name: Nightly
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# A newer change makes the build of an older one pointless.
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Version of this build
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # A pre-release of the version in CMakeLists.txt, the one being prepared; once that version
+      # is released (and not bumped yet), of the next patch. So a nightly is always newer than
+      # the last release and older than the next one, and nightlies order by date and run number.
+      - name: Compute the version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" >/dev/null 2>&1; then
+            IFS=. read -r major minor patch <<< "$base"
+            base="$major.$minor.$((patch + 1))"
+          fi
+          date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d)
+          echo "version=$base-nightly.$date.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  appimage:
+    needs: version
+    uses: ./.github/workflows/appimage.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      ref: ${{ needs.version.outputs.sha }}
+
+  publish:
+    name: Publish the nightly build
+    needs: [version, appimage]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download the AppImage
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sugo-appimage
+
+      - name: Replace the nightly release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          file=Sugo-x86_64.AppImage
+          jq -n --arg version "$VERSION" \
+                --arg url "https://github.com/$REPO/releases/download/nightly/$file" \
+                --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
+                --argjson size "$(stat -c %s "$file")" \
+                --arg page "https://github.com/$REPO/releases/tag/nightly" \
+                '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > nightly.json
+          cat nightly.json
+
+          # The tag follows main.
+          gh api -X PATCH "repos/$REPO/git/refs/tags/nightly" -f sha="$SHA" -F force=true >/dev/null 2>&1 \
+            || gh api -X POST "repos/$REPO/git/refs" -f ref=refs/tags/nightly -f sha="$SHA" >/dev/null
+
+          title="Sugo Nightly $VERSION"
+          notes="The newest change on main ($SHA), built automatically. It may have bugs; the stable releases are tested.
+
+          Download Sugo-x86_64.AppImage, make it executable and start it. In Settings → Updates, the Nightly channel keeps it up to date by itself."
+          if gh release view nightly --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit nightly --repo "$REPO" --prerelease --title "$title" --notes "$notes"
+          else
+            gh release create nightly --repo "$REPO" --prerelease --verify-tag --title "$title" --notes "$notes"
+          fi
+          # The AppImage first: the feed must never announce a file that is not there yet.
+          gh release upload nightly "$file" --repo "$REPO" --clobber
+          gh release upload nightly nightly.json --repo "$REPO" --clobber

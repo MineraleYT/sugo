@@ -1,0 +1,230 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "SessionRepository.h"
+
+#include <QLoggingCategory>
+#include <QSet>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+
+#include <algorithm>
+
+Q_LOGGING_CATEGORY(lcSessionRepo, "sugo.db.sessions")
+
+namespace
+{
+// QSqlQuery binds a null QString (e.g. a default-constructed one) as SQL NULL, which the
+// NOT NULL text columns reject. Bind empty text instead.
+QString text(const QString &value)
+{
+    return value.isNull() ? QStringLiteral("") : value;
+}
+} // namespace
+
+SessionRepository::SessionRepository(const QString &connectionName)
+    : m_connection(connectionName)
+{
+}
+
+QString SessionRepository::kindToString(SessionKind kind)
+{
+    switch (kind) {
+    case SessionKind::Work:
+        return QStringLiteral("work");
+    case SessionKind::ShortBreak:
+        return QStringLiteral("short_break");
+    case SessionKind::LongBreak:
+        return QStringLiteral("long_break");
+    }
+    Q_UNREACHABLE_RETURN(QString());
+}
+
+SessionKind SessionRepository::kindFromString(const QString &text)
+{
+    if (text == QLatin1String("short_break")) {
+        return SessionKind::ShortBreak;
+    }
+    if (text == QLatin1String("long_break")) {
+        return SessionKind::LongBreak;
+    }
+    return SessionKind::Work;
+}
+
+bool SessionRepository::insert(const SessionRecord &r, qint64 *insertedId)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    // The sub-select links the session to its preset; a missing preset yields NULL.
+    query.prepare(QStringLiteral(
+        "INSERT INTO session (kind, started_at, ended_at, duration_sec, planned_sec, completed, "
+        "preset_id, preset_name, category, note) "
+        "VALUES (?, ?, ?, ?, ?, ?, (SELECT id FROM preset WHERE uuid = ?), ?, ?, ?)"));
+    query.addBindValue(kindToString(r.kind));
+    query.addBindValue(r.startedAtMs);
+    query.addBindValue(r.endedAtMs);
+    query.addBindValue(r.durationSec);
+    query.addBindValue(r.plannedSec);
+    query.addBindValue(r.completed ? 1 : 0);
+    query.addBindValue(r.presetUuid);
+    query.addBindValue(text(r.presetName));
+    query.addBindValue(text(r.category));
+    query.addBindValue(text(r.note));
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << "Cannot record session:" << query.lastError().text();
+        return false;
+    }
+    if (insertedId) {
+        *insertedId = query.lastInsertId().toLongLong();
+    }
+    return true;
+}
+
+bool SessionRepository::updateNote(qint64 sessionId, const QString &note)
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("UPDATE session SET note = ? WHERE id = ?"));
+    query.addBindValue(text(note));
+    query.addBindValue(sessionId);
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << "Cannot update session note:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+qint64 SessionRepository::lastSessionId() const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    if (query.exec(QStringLiteral("SELECT id FROM session WHERE kind = 'work' ORDER BY id DESC LIMIT 1")) && query.next()) {
+        return query.value(0).toLongLong();
+    }
+    return 0;
+}
+
+QStringList SessionRepository::recentNotes(int limit) const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    // SQLite's TRIM() only strips spaces, so notes are trimmed and de-duplicated here, the way
+    // the statistics group them (QString::trimmed()). Newest first: each note takes the place of
+    // its most recent use, and reading stops once `limit` distinct notes are found.
+    query.setForwardOnly(true);
+    query.prepare(QStringLiteral("SELECT note FROM session WHERE note <> '' ORDER BY id DESC"));
+    QStringList result;
+    if (limit <= 0) {
+        return result;
+    }
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << query.lastError().text();
+        return result;
+    }
+    QSet<QString> seen;
+    while (result.size() < limit && query.next()) {
+        const QString note = query.value(0).toString().trimmed();
+        if (!note.isEmpty() && !seen.contains(note)) {
+            seen.insert(note);
+            result.append(note);
+        }
+    }
+    return result;
+}
+
+QList<SessionRecord> SessionRepository::between(qint64 fromMs, qint64 toMs) const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral(
+        "SELECT s.id, s.kind, s.started_at, s.ended_at, s.duration_sec, s.planned_sec, s.completed, "
+        "COALESCE(p.uuid, ''), s.preset_name, s.category, s.note "
+        "FROM session s LEFT JOIN preset p ON p.id = s.preset_id "
+        "WHERE s.started_at >= ? AND s.started_at < ? ORDER BY s.started_at, s.id"));
+    query.addBindValue(fromMs);
+    query.addBindValue(toMs);
+
+    QList<SessionRecord> result;
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << query.lastError().text();
+        return result;
+    }
+    while (query.next()) {
+        SessionRecord r;
+        r.id = query.value(0).toLongLong();
+        r.kind = kindFromString(query.value(1).toString());
+        r.startedAtMs = query.value(2).toLongLong();
+        r.endedAtMs = query.value(3).toLongLong();
+        r.durationSec = query.value(4).toInt();
+        r.plannedSec = query.value(5).toInt();
+        r.completed = query.value(6).toBool();
+        r.presetUuid = query.value(7).toString();
+        r.presetName = query.value(8).toString();
+        r.category = query.value(9).toString();
+        r.note = query.value(10).toString();
+        result.append(r);
+    }
+    return result;
+}
+
+int SessionRepository::count() const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    if (query.exec(QStringLiteral("SELECT COUNT(*) FROM session")) && query.next()) {
+        return query.value(0).toInt();
+    }
+    return -1;
+}
+
+bool SessionRepository::deleteAll()
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    if (!query.exec(QStringLiteral("DELETE FROM session"))) {
+        qCWarning(lcSessionRepo) << "Cannot clear session history:" << query.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QList<qint64> SessionRepository::completedWorkStarts() const
+{
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("SELECT started_at FROM session WHERE kind = 'work' AND completed = 1 ORDER BY started_at, id"));
+    QList<qint64> result;
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << query.lastError().text();
+        return result;
+    }
+    while (query.next()) {
+        result.append(query.value(0).toLongLong());
+    }
+    return result;
+}
+
+QList<qint64> SessionRepository::completedWorkStartsAfter(qint64 afterId, qint64 *maxId) const
+{
+    if (maxId) {
+        *maxId = afterId;
+    }
+    QSqlDatabase db = QSqlDatabase::database(m_connection, false);
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("SELECT id, started_at FROM session WHERE kind = 'work' AND completed = 1 AND id > ? "
+                                 "ORDER BY started_at, id"));
+    query.addBindValue(afterId);
+    QList<qint64> result;
+    if (!query.exec()) {
+        qCWarning(lcSessionRepo) << query.lastError().text();
+        return result;
+    }
+    qint64 highest = afterId;
+    while (query.next()) {
+        highest = std::max(highest, query.value(0).toLongLong());
+        result.append(query.value(1).toLongLong());
+    }
+    if (maxId) {
+        *maxId = highest;
+    }
+    return result;
+}

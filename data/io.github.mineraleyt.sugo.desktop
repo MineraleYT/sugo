@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Sugo contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[Desktop Entry]
+Type=Application
+Name=Sugo
+GenericName=Pomodoro Timer
+Comment=Pomodoro timer with work and break statistics
+Exec=sugo
+Icon=io.github.mineraleyt.sugo
+Terminal=false
+Categories=Qt;Utility;
+Keywords=pomodoro;timer;focus;productivity;
+StartupNotify=true

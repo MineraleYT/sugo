@@ -1,0 +1,13 @@
+build/
+build-local/
+build-cov/
+cmake-build-*/
+.flatpak-builder/
+.cache/
+CMakeUserPresets.json
+*.user
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+Testing/
+*.flatpak

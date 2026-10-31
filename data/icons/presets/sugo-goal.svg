@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+  <!-- Timer icon in the style of the application icon: its dark tile and its gradient. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="8" x2="0" y2="120" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#33363d"/>
+      <stop offset="1" stop-color="#16181c"/>
+    </linearGradient>
+    <linearGradient id="glyph" x1="32" y1="30" x2="96" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffa36b"/>
+      <stop offset="0.5" stop-color="#ff3d3d"/>
+      <stop offset="1" stop-color="#c2185b"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#tile)"/>
+  <rect x="8.5" y="8.5" width="111" height="111" rx="27.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+  <g fill="none" stroke="url(#glyph)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M44 92V37M44 40H84L76 52L84 64H44"/>
+  </g>
+</svg>

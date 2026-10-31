@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/release.yml'
+      - 'LICENSES/**'
+      - '.gitignore'
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/release.yml'
+      - 'LICENSES/**'
+      - '.gitignore'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            appstream desktop-file-utils cmake ninja-build g++ ccache dbus-daemon \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+            qt6-svg-plugins libqt6sql6-sqlite extra-cmake-modules
+
+      - name: Validate metadata
+        run: |
+          appstreamcli validate --no-net data/io.github.mineraleyt.sugo.metainfo.xml
+          desktop-file-validate data/io.github.mineraleyt.sugo.desktop
+
+      # The compiler cache of the newest run on this branch (or on main): only what changed recompiles.
+      - name: Restore the compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-main-
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Validate the generated runner definition
+        run: desktop-file-validate build/io.github.mineraleyt.sugo.runner.desktop
+
+      - name: Build
+        run: |
+          ccache --zero-stats
+          cmake --build build --parallel
+          ccache --show-stats
+
+      - name: Install to a temporary prefix
+        run: cmake --install build --prefix "$RUNNER_TEMP/sugo-install"
+
+      - name: Run test suite
+        run: ctest --test-dir build --output-on-failure

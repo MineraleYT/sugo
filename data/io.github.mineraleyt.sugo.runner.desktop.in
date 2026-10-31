@@ -1,0 +1,20 @@
+[Desktop Entry]
+Name=Sugo
+Comment=Control Sugo Pomodoro timer
+X-KDE-ServiceTypes=Plasma/Runner
+Type=Service
+Icon=io.github.mineraleyt.sugo
+X-KDE-PluginInfo-Author=MinerAle
+X-KDE-PluginInfo-Name=sugo
+X-KDE-PluginInfo-Version=@PROJECT_VERSION@
+X-KDE-PluginInfo-License=GPL-3.0-or-later
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus
+X-Plasma-DBusRunner-Service=io.github.mineraleyt.sugo
+X-Plasma-DBusRunner-Path=/krunner
+X-Plasma-Request-Actions-Once=false
+# Only queries starting with one of our keywords (as a whole word) reach the app.
+X-Plasma-Runner-Match-Regex=(?i)^(pomodoro|sugo|tomato|timer)\\b
+X-Plasma-Runner-Min-Letter-Count=5
+X-Plasma-Runner-Syntaxes=pomodoro,sugo,pomodoro :q:,sugo :q:
+X-Plasma-Runner-Syntax-Descriptions=Start, pause, stop or control the Sugo Pomodoro timer

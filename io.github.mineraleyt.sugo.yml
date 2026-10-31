@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+app-id: io.github.mineraleyt.sugo
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: sugo
+# Owning io.github.mineraleyt.sugo (single instance, /Timer, /krunner) needs no permission:
+# an app may always own its own ID. The Background portal (start at login) and the other
+# xdg-desktop-portal interfaces are reachable by default. Flatpak exports the D-Bus service
+# file (share/dbus-1/services) and, with a flatpak recent enough to know that export, the
+# KRunner plugin (share/krunner/dbusplugins); both must be named after the app ID.
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.ScreenSaver
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # The calendar password is kept in the desktop keyring (Secret Service).
+  - --talk-name=org.freedesktop.secrets
+  # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal).
+  - --system-talk-name=org.freedesktop.login1
+modules:
+  - name: sugo
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DBUILD_TESTING=OFF
+    sources:
+      - type: dir
+        path: .
+        skip:
+          - .git
+          - build
+          - build-local
+          - build-cov
+          - .flatpak-builder
+          - CMakeFiles
+          - cmake-build-*

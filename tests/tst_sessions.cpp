@@ -1,0 +1,485 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QTest>
+
+#include "Localization.h"
+
+#include <limits>
+#include <memory>
+
+#include "Database.h"
+#include "FakeClock.h"
+#include "PresetModel.h"
+#include "PresetPersistence.h"
+#include "PresetRepository.h"
+#include "SessionRecorder.h"
+#include "SessionRepository.h"
+#include "TimerBinding.h"
+#include "TimerEngine.h"
+
+namespace
+{
+constexpr qint64 kForever = std::numeric_limits<qint64>::max();
+
+SessionRecord makeRecord(qint64 startedAtMs, SessionKind kind = SessionKind::Work)
+{
+    SessionRecord r;
+    r.kind = kind;
+    r.startedAtMs = startedAtMs;
+    r.endedAtMs = startedAtMs + 1'500'000;
+    r.durationSec = 1500;
+    r.plannedSec = 1500;
+    r.completed = true;
+    r.presetName = QStringLiteral("Default");
+    return r;
+}
+} // namespace
+
+class SessionsTest : public QObject
+{
+    Q_OBJECT
+
+private:
+    std::unique_ptr<Database> db;
+    std::unique_ptr<SessionRepository> sessions;
+
+    // Engine stack used by the recorder tests.
+    FakeClock clock;
+    std::unique_ptr<TimerEngine> engine;
+    std::unique_ptr<PresetRepository> presetRepo;
+    std::unique_ptr<PresetModel> presets;
+    std::unique_ptr<PresetPersistence> persistence; // as in the app: presets exist in the database
+    std::unique_ptr<TimerBinding> binding;
+    std::unique_ptr<SessionRecorder> recorder;
+
+    void elapse(qint64 seconds)
+    {
+        clock.advanceSeconds(seconds);
+        engine->refresh();
+    }
+
+    QList<SessionRecord> all() const
+    {
+        return sessions->between(0, kForever);
+    }
+
+private Q_SLOTS:
+    void initTestCase()
+    {
+    }
+
+    void init()
+    {
+        db = std::make_unique<Database>(QStringLiteral(":memory:"));
+        QVERIFY(db->open());
+        sessions = std::make_unique<SessionRepository>(db->connectionName());
+
+        clock = FakeClock();
+        engine = std::make_unique<TimerEngine>(&clock, nullptr);
+        presetRepo = std::make_unique<PresetRepository>(db->connectionName());
+        presets = std::make_unique<PresetModel>();
+        persistence = std::make_unique<PresetPersistence>(presets.get(), presetRepo.get());
+        binding = std::make_unique<TimerBinding>(engine.get(), presets.get());
+        recorder = std::make_unique<SessionRecorder>(engine.get(), presets.get(), sessions.get());
+    }
+
+    void cleanup()
+    {
+        recorder.reset();
+        binding.reset();
+        persistence.reset();
+        presets.reset();
+        presetRepo.reset();
+        engine.reset();
+        sessions.reset();
+        db.reset();
+    }
+
+    // --- SessionRepository ---------------------------------------------------
+
+    void insertAndReadBackEveryField()
+    {
+        SessionRecord r = makeRecord(1'000'000, SessionKind::LongBreak);
+        r.durationSec = 800;
+        r.plannedSec = 900;
+        r.completed = false;
+        r.presetName = QStringLiteral("Deep work");
+        r.category = QStringLiteral("Work");
+
+        QVERIFY(sessions->insert(r));
+        QCOMPARE(sessions->count(), 1);
+
+        const QList<SessionRecord> loaded = all();
+        QCOMPARE(loaded.size(), 1);
+        const SessionRecord &g = loaded.at(0);
+        QVERIFY(g.id > 0);
+        QCOMPARE(g.kind, SessionKind::LongBreak);
+        QCOMPARE(g.startedAtMs, r.startedAtMs);
+        QCOMPARE(g.endedAtMs, r.endedAtMs);
+        QCOMPARE(g.durationSec, 800);
+        QCOMPARE(g.plannedSec, 900);
+        QVERIFY(!g.completed);
+        QCOMPARE(g.presetName, QStringLiteral("Deep work"));
+        QCOMPARE(g.category, QStringLiteral("Work"));
+    }
+
+    void betweenIsHalfOpenAndOrdered()
+    {
+        QVERIFY(sessions->insert(makeRecord(3000)));
+        QVERIFY(sessions->insert(makeRecord(1000)));
+        QVERIFY(sessions->insert(makeRecord(2000)));
+
+        QList<SessionRecord> r = sessions->between(1000, 3000);
+        QCOMPARE(r.size(), 2);
+        QCOMPARE(r.at(0).startedAtMs, 1000); // from is inclusive, results ordered
+        QCOMPARE(r.at(1).startedAtMs, 2000); // to is exclusive
+
+        QVERIFY(sessions->between(5000, 6000).isEmpty());
+    }
+
+    void allThreeKindsRoundTrip()
+    {
+        QVERIFY(sessions->insert(makeRecord(1, SessionKind::Work)));
+        QVERIFY(sessions->insert(makeRecord(2, SessionKind::ShortBreak)));
+        QVERIFY(sessions->insert(makeRecord(3, SessionKind::LongBreak)));
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QCOMPARE(r.at(1).kind, SessionKind::ShortBreak);
+        QCOMPARE(r.at(2).kind, SessionKind::LongBreak);
+    }
+
+    void sessionsOutliveTheirPresetAndKeepTheSnapshot()
+    {
+        PresetRepository presetRepo(db->connectionName());
+        TimerPreset custom;
+        custom.uuid = QStringLiteral("custom");
+        custom.name = QStringLiteral("Temp");
+        TimerPreset builtin;
+        builtin.uuid = PresetModel::DefaultUuid;
+        builtin.name = QStringLiteral("Default");
+        builtin.builtin = true;
+        QVERIFY(presetRepo.saveAll({builtin, custom}));
+
+        SessionRecord r = makeRecord(1000);
+        r.presetUuid = QStringLiteral("custom");
+        r.presetName = QStringLiteral("Temp");
+        r.category = QStringLiteral("Study");
+        QVERIFY(sessions->insert(r));
+        QCOMPARE(all().at(0).presetUuid, QStringLiteral("custom")); // linked
+
+        QVERIFY(presetRepo.saveAll({builtin})); // deletes the preset
+        const QList<SessionRecord> after = all();
+        QCOMPARE(after.size(), 1);                            // session kept
+        QVERIFY(after.at(0).presetUuid.isEmpty());            // link cleared (ON DELETE SET NULL)
+        QCOMPARE(after.at(0).presetName, QStringLiteral("Temp"));
+        QCOMPARE(after.at(0).category, QStringLiteral("Study"));
+    }
+
+    void sessionWithUnknownPresetIsStoredUnlinked()
+    {
+        SessionRecord r = makeRecord(1000);
+        r.presetUuid = QStringLiteral("never-saved");
+        QVERIFY(sessions->insert(r));
+        QVERIFY(all().at(0).presetUuid.isEmpty());
+    }
+
+    // --- SessionRecorder -----------------------------------------------------
+
+    /// Makes the database refuse new sessions, as a full disk or a lock would.
+    void failSessionInserts(bool fail)
+    {
+        QSqlQuery query(QSqlDatabase::database(db->connectionName()));
+        if (fail) {
+            QVERIFY(query.exec(QStringLiteral("CREATE TEMP TRIGGER refuse BEFORE INSERT ON session "
+                                              "BEGIN SELECT RAISE(ABORT, 'disk full'); END")));
+        } else {
+            QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+        }
+    }
+
+    void sessionsTheDatabaseRefusesAreKeptAndStoredLater()
+    {
+        QSignalSpy failing(recorder.get(), &SessionRecorder::saveFailingChanged);
+        QSignalSpy workRecorded(recorder.get(), &SessionRecorder::workSessionRecorded);
+        recorder->setRetryIntervalForTesting(30);
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60);
+        QVERIFY(all().isEmpty());
+        QVERIFY(recorder->isSaveFailing());
+        QCOMPARE(failing.count(), 1);
+        QCOMPARE(recorder->lastWorkSessionId(), -1);
+        QCOMPARE(workRecorded.count(), 0);
+
+        // A second phase ends while the database still refuses: both wait, in order.
+        engine->start();
+        elapse(5 * 60);
+        QVERIFY(all().isEmpty());
+        QCOMPARE(failing.count(), 1);
+
+        failSessionInserts(false);
+        QTRY_VERIFY(!recorder->isSaveFailing());
+        QCOMPARE(failing.count(), 2);
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 2);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QCOMPARE(r.at(1).kind, SessionKind::ShortBreak);
+        QCOMPARE(workRecorded.count(), 1); // the calendar still hears about it
+    }
+
+    void refusedSessionsGoInBeforeTheNextOne()
+    {
+        recorder->setRetryIntervalForTesting(60 * 60 * 1000); // only the next phase end retries
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60);
+        QVERIFY(recorder->isSaveFailing());
+        failSessionInserts(false);
+        engine->start();
+        elapse(5 * 60);
+        QVERIFY(!recorder->isSaveFailing());
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 2);
+        QVERIFY(r.at(0).id < r.at(1).id);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+    }
+
+    void completedWorkPhaseIsRecorded()
+    {
+        engine->start();
+        elapse(25 * 60);
+
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QVERIFY(r.at(0).completed);
+        QCOMPARE(r.at(0).durationSec, 25 * 60);
+        QCOMPARE(r.at(0).plannedSec, 25 * 60);
+        QCOMPARE(r.at(0).startedAtMs, clock.base().toMSecsSinceEpoch());
+        QCOMPARE(r.at(0).endedAtMs, clock.base().addSecs(25 * 60).toMSecsSinceEpoch());
+        QCOMPARE(r.at(0).presetUuid, PresetModel::DefaultUuid);
+        QCOMPARE(r.at(0).presetName, presets->get(PresetModel::DefaultUuid).value(QStringLiteral("name")).toString());
+    }
+
+    void breaksAreRecordedToo()
+    {
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        elapse(25 * 60);
+        elapse(5 * 60);
+
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 2);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QCOMPARE(r.at(1).kind, SessionKind::ShortBreak);
+        QCOMPARE(r.at(1).durationSec, 5 * 60);
+    }
+
+    void accidentalStartsAreNotRecorded()
+    {
+        engine->start();
+        elapse(4); // under the 5 s threshold
+        engine->stop();
+        QCOMPARE(sessions->count(), 0);
+    }
+
+    void interruptedSessionIsRecordedFromFiveSeconds()
+    {
+        engine->start();
+        elapse(5);
+        engine->stop();
+
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 1);
+        QVERIFY(!r.at(0).completed);
+        QCOMPARE(r.at(0).durationSec, 5);
+        QCOMPARE(r.at(0).plannedSec, 25 * 60);
+    }
+
+    void skippedPhaseIsRecordedAsInterrupted()
+    {
+        engine->start();
+        elapse(120);
+        engine->skip();
+
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 1);
+        QVERIFY(!r.at(0).completed);
+        QCOMPARE(r.at(0).durationSec, 120);
+    }
+
+    void pausedTimeIsNotCounted()
+    {
+        engine->start();
+        elapse(60);
+        engine->pause();
+        elapse(300);
+        engine->resume();
+        elapse(40);
+        engine->stop();
+
+        const SessionRecord r = all().at(0);
+        QCOMPARE(r.durationSec, 100);
+        QCOMPARE((r.endedAtMs - r.startedAtMs) / 1000, 400); // wall time includes the pause
+    }
+
+    void quitWhileRunningRecordsTheSession()
+    {
+        engine->start();
+        elapse(90);
+        engine->stop(); // what main() does on aboutToQuit
+        QCOMPARE(all().size(), 1);
+        QCOMPARE(all().at(0).durationSec, 90);
+    }
+
+    void switchingTimerAttributesTheRunningSessionToTheOldOne()
+    {
+        const QString study = presets->create({{QStringLiteral("name"), QStringLiteral("Study")},
+                                               {QStringLiteral("category"), QStringLiteral("Uni")}});
+        const QString defaultName = presets->get(PresetModel::DefaultUuid).value(QStringLiteral("name")).toString();
+
+        engine->start(); // runs with the default timer
+        elapse(60);
+        presets->setCurrentUuid(study); // binding resets the engine, which ends the session
+
+        QCOMPARE(all().size(), 1);
+        QCOMPARE(all().at(0).presetName, defaultName);
+        QCOMPARE(all().at(0).presetUuid, PresetModel::DefaultUuid);
+
+        engine->start(); // now with "Study"
+        elapse(30);
+        engine->stop();
+        QCOMPARE(all().size(), 2);
+        QCOMPARE(all().at(1).presetName, QStringLiteral("Study"));
+        QCOMPARE(all().at(1).category, QStringLiteral("Uni"));
+    }
+
+    void renamingAfterTheStartDoesNotChangeTheSnapshot()
+    {
+        const QString custom = presets->create({{QStringLiteral("name"), QStringLiteral("Before")},
+                                                {QStringLiteral("category"), QStringLiteral("A")}});
+        presets->setCurrentUuid(custom);
+        engine->start();
+        elapse(60);
+
+        presets->update(custom, {{QStringLiteral("name"), QStringLiteral("After")},
+                                 {QStringLiteral("category"), QStringLiteral("B")}});
+        engine->stop();
+
+        QCOMPARE(all().at(0).presetName, QStringLiteral("Before"));
+        QCOMPARE(all().at(0).category, QStringLiteral("A"));
+    }
+
+    void notesCanBeSavedAndQueried()
+    {
+        SessionRecord r1 = makeRecord(1000);
+        r1.note = QStringLiteral("Task 1");
+        sessions->insert(r1);
+
+        SessionRecord r2 = makeRecord(2000);
+        sessions->insert(r2);
+
+        const qint64 lastId = sessions->lastSessionId();
+        QVERIFY(lastId > 0);
+        QVERIFY(sessions->updateNote(lastId, QStringLiteral("Task 2 updated")));
+
+        const auto records = sessions->between(0, 10000);
+        QCOMPARE(records.size(), 2);
+        QCOMPARE(records.at(0).note, QStringLiteral("Task 1"));
+        QCOMPARE(records.at(1).note, QStringLiteral("Task 2 updated"));
+
+        const QStringList recent = sessions->recentNotes(5);
+        QCOMPARE(recent.size(), 2);
+        QCOMPARE(recent.at(0), QStringLiteral("Task 2 updated"));
+        QCOMPARE(recent.at(1), QStringLiteral("Task 1"));
+    }
+
+    void recentNotesAreTrimmedDedupedAndOrderedByLastUse()
+    {
+        const QStringList notes = {QStringLiteral("Alpha"), QStringLiteral("Beta"), QStringLiteral("  Alpha "),
+                                   QStringLiteral(""), QStringLiteral("   "), QStringLiteral("Gamma"),
+                                   QStringLiteral("Beta")};
+        qint64 start = 1000;
+        for (const QString &note : notes) {
+            SessionRecord r = makeRecord(start += 1000);
+            r.note = note;
+            QVERIFY(sessions->insert(r));
+        }
+        // Beta used last, then Gamma, then Alpha (its padded variant counts as the same note).
+        QCOMPARE(sessions->recentNotes(5), (QStringList{QStringLiteral("Beta"), QStringLiteral("Gamma"), QStringLiteral("Alpha")}));
+        // The limit applies after de-duplication.
+        QCOMPARE(sessions->recentNotes(2), (QStringList{QStringLiteral("Beta"), QStringLiteral("Gamma")}));
+    }
+
+    void recentNotesTreatAllSurroundingWhitespaceAlike()
+    {
+        // A note typed with a trailing newline or a tab is the same note (as in the statistics).
+        const QStringList notes = {QStringLiteral("Write report"), QStringLiteral("Write report\n"),
+                                   QStringLiteral("\tWrite report "), QStringLiteral("\r\n"), QStringLiteral("Read\u00a0")};
+        qint64 start = 1000;
+        for (const QString &note : notes) {
+            SessionRecord r = makeRecord(start += 1000);
+            r.note = note;
+            QVERIFY(sessions->insert(r));
+        }
+        QCOMPARE(sessions->recentNotes(5), (QStringList{QStringLiteral("Read"), QStringLiteral("Write report")}));
+    }
+
+        void insertReportsTheNewRowId()
+    {
+        qint64 first = 0;
+        qint64 second = 0;
+        QVERIFY(sessions->insert(makeRecord(1000), &first));
+        QVERIFY(sessions->insert(makeRecord(2000), &second));
+        QVERIFY(first > 0);
+        QCOMPARE(second, first + 1);
+    }
+
+    void completedWorkStartsAfterReturnsOnlyNewRows()
+    {
+        QVERIFY(sessions->insert(makeRecord(1000)));
+        QVERIFY(sessions->insert(makeRecord(2000, SessionKind::ShortBreak)));
+        qint64 maxId = 0;
+        QCOMPARE(sessions->completedWorkStartsAfter(0, &maxId), (QList<qint64>{1000}));
+        QVERIFY(maxId > 0);
+
+        SessionRecord interrupted = makeRecord(3000);
+        interrupted.completed = false;
+        QVERIFY(sessions->insert(interrupted));
+        QVERIFY(sessions->insert(makeRecord(4000)));
+        qint64 next = 0;
+        QCOMPARE(sessions->completedWorkStartsAfter(maxId, &next), (QList<qint64>{4000}));
+        QVERIFY(next > maxId);
+        QVERIFY(sessions->completedWorkStartsAfter(next).isEmpty());
+        QCOMPARE(sessions->completedWorkStarts(), (QList<qint64>{1000, 4000}));
+    }
+
+    void lastWorkSessionIdFollowsTheEndedWorkPhase()
+    {
+        QCOMPARE(recorder->lastWorkSessionId(), -1);
+
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        elapse(25 * 60); // work completes, short break starts
+        const QList<SessionRecord> afterWork = all();
+        QCOMPARE(afterWork.size(), 1);
+        QCOMPARE(recorder->lastWorkSessionId(), afterWork.at(0).id);
+
+        // A note typed during the break must still go to the work session, even once the
+        // break itself is recorded (it is a newer row).
+        elapse(5 * 60); // break completes, next work starts
+        QCOMPARE(all().size(), 2);
+        QCOMPARE(recorder->lastWorkSessionId(), afterWork.at(0).id);
+
+        // A work phase too short to be recorded resets it.
+        elapse(2);
+        engine->stop();
+        QCOMPARE(all().size(), 2);
+        QCOMPARE(recorder->lastWorkSessionId(), -1);
+    }
+};
+
+QTEST_GUILESS_MAIN(SessionsTest)
+#include "tst_sessions.moc"

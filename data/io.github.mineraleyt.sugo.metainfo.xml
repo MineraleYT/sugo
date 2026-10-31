@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SPDX-FileCopyrightText: 2026 Sugo contributors
+  SPDX-License-Identifier: CC0-1.0
+-->
+<component type="desktop-application">
+  <id>io.github.mineraleyt.sugo</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Sugo</name>
+  <summary>Pomodoro timer with configurable presets and session statistics</summary>
+  <description>
+    <p>Sugo is a Pomodoro timer for KDE Plasma 6. It provides configurable work and break phases, timer presets, session history, and productivity statistics.</p>
+    <p>Sugo is an independent project and is not an official KDE application.</p>
+    <ul>
+      <li>Work, short-break, and long-break phases with configurable durations and cycle count</li>
+      <li>User-defined presets with categories, symbolic icons, notification controls, and automatic-start modes</li>
+      <li>Configurable phase-end sounds, one-minute pre-alarm, and optional ambient focus audio</li>
+      <li>Optional screen-sleep inhibition during work phases</li>
+      <li>Session history, streak tracking, and charts</li>
+      <li>SQLite backup, restore, and session-history management</li>
+      <li>System tray integration and a D-Bus control interface</li>
+      <li>Optional calendar events for finished work sessions (Nextcloud login or any CalDAV calendar)</li>
+      <li>KRunner integration, optional automatic pause when the screen is locked, and task notes for completed sessions</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.mineraleyt.sugo.desktop</launchable>
+  <developer id="io.github.mineraleyt">
+    <name>MinerAle</name>
+  </developer>
+  <url type="homepage">https://github.com/MineraleYT/sugo</url>
+  <url type="bugtracker">https://github.com/MineraleYT/sugo/issues</url>
+  <provides>
+    <binary>sugo</binary>
+  </provides>
+  <releases>
+    <release version="1.0.0" date="2026-10-31">
+      <description>
+        <p>First release of Sugo.</p>
+        <ul>
+          <li>Work, short-break and long-break phases with configurable durations, cycle count and automatic-start modes</li>
+          <li>Timers of your own with categories and icons, starting from a classic Pomodoro that silences notifications while you work</li>
+          <li>An interface of its own, dark or light, with a command palette, keyboard shortcuts and the window buttons of your desktop</li>
+          <li>An animated welcome tour</li>
+          <li>Statistics by day, week, month and year, streaks, and breakdowns by timer, category and task</li>
+          <li>Task notes for finished work sessions, from the notification or an in-app prompt</li>
+          <li>Notification silencing and screen-sleep inhibition during work, with optional automatic pause when the screen is locked</li>
+          <li>Phase-end sounds, a one-minute pre-alarm and optional ambient focus audio</li>
+          <li>A system tray icon with a live countdown, start at login, KRunner commands and a D-Bus interface</li>
+          <li>Optional calendar events for finished work sessions (Nextcloud login or any CalDAV calendar)</li>
+          <li>Local SQLite storage with backup and restore, and a diagnostics report</li>
+          <li>An AppImage that updates itself, from the stable releases or the nightly builds</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

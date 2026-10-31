@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A version tag publishes a release: the AppImage with stable.json (the feed the program's update
+# check reads on the stable channel, see src/core/UpdateChecker.h) and the Flatpak bundle.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Third-party actions and the build image are pinned to a commit / digest (the version is in
+  # the comment): a moved tag cannot change what runs with --privileged or near the release token.
+  # Dependabot (.github/dependabot.yml) proposes the updates.
+  check:
+    name: Verify release target
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the project version
+        id: version
+        run: echo "version=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Check that the tag matches the project version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CMAKE_VERSION=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
+          METAINFO_VERSION=$(grep -o -m1 '<release version="[^"]*"' data/io.github.mineraleyt.sugo.metainfo.xml | sed 's/.*version="\([^"]*\)"/\1/')
+          echo "tag: $TAG_VERSION, CMakeLists.txt: $CMAKE_VERSION, metainfo: $METAINFO_VERSION"
+          if [ "$TAG_VERSION" != "$CMAKE_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match project(VERSION $CMAKE_VERSION) in CMakeLists.txt"
+            exit 1
+          fi
+          if [ "$TAG_VERSION" != "$METAINFO_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the newest <release> ($METAINFO_VERSION) in the metainfo"
+            exit 1
+          fi
+
+  # A version tag always means a release: every tag is built, tested and published (or fails
+  # visibly), whatever the tagged commit changed.
+  test:
+    name: Build and test
+    needs: check
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            appstream cmake ninja-build g++ dbus-daemon \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+            qt6-svg-plugins libqt6sql6-sqlite extra-cmake-modules
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run test suite
+        run: ctest --test-dir build --output-on-failure
+
+  build-flatpak:
+    name: Build Flatpak bundle (x86_64)
+    # Runs alongside the tests; publish-release still waits for both.
+    needs: check
+    runs-on: ubuntu-24.04
+    container:
+      # kde-6.11
+      image: ghcr.io/flathub-infra/flatpak-github-actions@sha256:b0a8a2acb9e420dd0e3e083ff552bea5a817e17e41532f1d2287ff49ef9aae0e
+      options: --privileged
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@79327416609af08178ad73b352877e51450790b3 # v6.8
+        with:
+          manifest-path: io.github.mineraleyt.sugo.yml
+          branch: stable
+          bundle: sugo-${{ github.ref_name }}-x86_64.flatpak
+          artifact-name: sugo-${{ github.ref_name }}-x86_64.flatpak
+          cache-key: sugo-${{ github.ref_name }}-${{ github.sha }}
+
+  appimage:
+    needs: check
+    uses: ./.github/workflows/appimage.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+      ref: ${{ github.sha }}
+
+  publish-release:
+    name: Publish GitHub release
+    needs: [check, test, build-flatpak, appimage]
+    # A manual run on a branch only builds the bundle (downloadable as an artifact);
+    # releases are made from version tags alone.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download Flatpak bundle
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sugo-${{ github.ref_name }}-x86_64.flatpak
+          path: release-assets
+
+      - name: Download the AppImage
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sugo-appimage
+          path: release-assets
+
+      - name: Write the stable feed
+        env:
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.check.outputs.version }}
+        working-directory: release-assets
+        run: |
+          file=Sugo-x86_64.AppImage
+          jq -n --arg version "$VERSION" \
+                --arg url "https://github.com/$REPO/releases/download/$GITHUB_REF_NAME/$file" \
+                --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
+                --argjson size "$(stat -c %s "$file")" \
+                --arg page "https://github.com/$REPO/releases/tag/$GITHUB_REF_NAME" \
+                '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > stable.json
+          cat stable.json
+
+      # The feed last: it must never announce a file that is not there yet. The release is the
+      # "latest" one, so releases/latest/download/stable.json points to it.
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: release-assets
+        run: |
+          assets=(Sugo-x86_64.AppImage "sugo-$GITHUB_REF_NAME-x86_64.flatpak")
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, updating its assets..."
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            echo "Creating release $GITHUB_REF_NAME..."
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "Sugo $GITHUB_REF_NAME" --generate-notes --latest
+          fi
+          gh release upload "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --clobber

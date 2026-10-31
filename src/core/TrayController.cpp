@@ -1,0 +1,441 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "TrayController.h"
+
+#include "TrayIconStyle.h"
+
+#include "AppSettings.h"
+#include "PresetModel.h"
+#include "TimerEngine.h"
+#include "TrayPresenter.h"
+
+#include "Localization.h"
+
+#include <QAction>
+#include <QActionGroup>
+#include <QCoreApplication>
+#include <QGuiApplication>
+#include <QIcon>
+#include <QMenu>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
+#include <QSystemTrayIcon>
+#include <QWindow>
+
+#include <cmath>
+
+namespace
+{
+const QString kIconName = QStringLiteral("io.github.mineraleyt.sugo");
+
+/// The outline of `rect` with rounded corners, starting at 12 o'clock and running clockwise.
+QPainterPath roundedFromTop(const QRectF &rect, double radius)
+{
+    const double d = 2 * radius;
+    QPainterPath path(QPointF(rect.center().x(), rect.top()));
+    path.arcTo(QRectF(rect.right() - d, rect.top(), d, d), 90, -90);
+    path.arcTo(QRectF(rect.right() - d, rect.bottom() - d, d, d), 0, -90);
+    path.arcTo(QRectF(rect.left(), rect.bottom() - d, d, d), 270, -90);
+    path.arcTo(QRectF(rect.left(), rect.top(), d, d), 180, -90);
+    path.closeSubpath();
+    return path;
+}
+
+/// The spiral of the application icon, from its centre out to 12 o'clock under the leaf.
+QPainterPath spiral(double size)
+{
+    constexpr double sweep = 3.2 * M_PI;
+    QPainterPath path;
+    for (double t = 0; t <= sweep + 1e-9; t += 0.08) {
+        const double r = size * (0.04 + 0.25 * t / sweep);
+        const double a = t - sweep - M_PI / 2;
+        const QPointF point(size * 0.5 + r * std::cos(a), size * 0.553 + r * std::sin(a));
+        t == 0 ? path.moveTo(point) : path.lineTo(point);
+    }
+    return path;
+}
+
+/// Strokes `path` with a faint track in `color` and, over it, its first `progress` (0..1).
+void strokeProgress(QPainter &p, const QPainterPath &path, const QColor &color, double width, double progress)
+{
+    QPen pen(TrayIconColors::track(color), width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    p.setBrush(Qt::NoBrush);
+    p.setPen(pen);
+    p.drawPath(path);
+    if (progress > 0.005) {
+        // Dash lengths are in pen widths: one dash as long as the elapsed part, then a gap past the end.
+        const double length = path.length() / width;
+        pen.setColor(color);
+        pen.setDashPattern({length * progress, length + 1});
+        p.setPen(pen);
+        p.drawPath(path);
+    }
+}
+
+/// The application icon at several sizes:
+/// - When idle (minutes < 0): the application icon.
+/// - When active (minutes >= 0): the icon's dark tile, in red for work and green for breaks, with
+///   * style 0: a border that fills clockwise as the phase runs and the remaining minutes,
+///   * style 1: a fill rising from the bottom and the remaining minutes,
+///   * style 2: the icon's spiral filling from its centre, without numbers.
+QIcon trayIcon(int minutes, int badgeStyle, double progressRatio, bool isWork, bool isPaused)
+{
+    if (minutes < 0) {
+        return QGuiApplication::windowIcon();
+    }
+
+    QIcon result;
+    for (const int size : {22, 32, 48, 64}) {
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+
+        QPainter p(&pixmap);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        if (isPaused) {
+            p.setOpacity(0.75);
+        }
+
+        // Shared with the welcome tour's picture of this icon (see TrayIconStyle.h).
+        const QColor primary = isWork ? TrayIconColors::work() : TrayIconColors::rest();
+        const double progress = qBound(0.0, progressRatio, 1.0);
+
+        const QRectF tileRect(0.5, 0.5, size - 1.0, size - 1.0);
+        const double radius = size * 0.25;
+        QPainterPath tile;
+        tile.addRoundedRect(tileRect, radius, radius);
+        p.setPen(QPen(TrayIconColors::edge(), 1.0));
+        p.setBrush(TrayIconColors::dial());
+        p.drawPath(tile);
+
+        if (badgeStyle == 2) {
+            strokeProgress(p, spiral(size), primary, qMax(1.8, size * 0.09), progress);
+            QTransform leaf;
+            leaf.translate(size * 0.5, size * 0.263);
+            leaf.rotate(20);
+            leaf.scale(size * 0.0072, size * 0.0072);
+            QPainterPath leafPath;
+            leafPath.cubicTo(-10, -6, -10, -18, -2, -24);
+            leafPath.cubicTo(10, -18, 10, -6, 0, 0);
+            p.setPen(Qt::NoPen);
+            p.setBrush(TrayIconColors::leaf());
+            p.drawPath(leaf.map(leafPath));
+        } else {
+            if (badgeStyle == 1) {
+                p.save();
+                p.setClipPath(tile);
+                p.fillRect(QRectF(0, size * (1 - progress), size, size * progress), primary);
+                p.restore();
+            } else {
+                const double penWidth = qMax(2.0, std::round(size * 0.11));
+                const double inset = 0.5 + penWidth / 2.0;
+                const QRectF borderRect = QRectF(0, 0, size, size).adjusted(inset, inset, -inset, -inset);
+                strokeProgress(p, roundedFromTop(borderRect, radius - inset), primary, penWidth, progress);
+            }
+
+            const QString text = QString::number(minutes);
+            QFont font = p.font();
+            font.setBold(true);
+            if (size <= 24) {
+                font.setPixelSize(text.length() >= 2 ? 10 : 11);
+            } else if (size <= 32) {
+                font.setPixelSize(text.length() >= 2 ? 13 : 15);
+            } else {
+                font.setPixelSize(qRound(size * (text.length() >= 2 ? 0.40 : 0.48)));
+            }
+            p.setFont(font);
+            p.setPen(TrayIconColors::digits());
+            p.drawText(QRectF(0, size <= 24 ? -0.5 : 0, size, size), Qt::AlignCenter, text);
+        }
+
+        p.end();
+        result.addPixmap(pixmap);
+    }
+    return result;
+}
+} // namespace
+
+TrayController::TrayController(TimerEngine *engine, PresetModel *presets, AppSettings *settings, QObject *parent)
+    : QObject(parent)
+    , m_engine(engine)
+    , m_presets(presets)
+    , m_settings(settings)
+{
+    connect(engine, &TimerEngine::stateChanged, this, &TrayController::refresh);
+    connect(engine, &TimerEngine::phaseChanged, this, &TrayController::refresh);
+    connect(engine, &TimerEngine::remainingChanged, this, &TrayController::refresh);
+    connect(presets, &PresetModel::currentChanged, this, &TrayController::refresh);
+    connect(presets, &PresetModel::presetChanged, this, &TrayController::refresh);
+    // Anything that can change the list of timers; rebuildTimerMenu() skips unchanged lists.
+    for (auto signal : {&PresetModel::modified, &PresetModel::currentChanged, &PresetModel::countChanged}) {
+        connect(presets, signal, this, &TrayController::rebuildTimerMenu);
+    }
+    connect(presets, &PresetModel::rowsInserted, this, &TrayController::rebuildTimerMenu);
+    connect(presets, &PresetModel::rowsRemoved, this, &TrayController::rebuildTimerMenu);
+    connect(presets, &PresetModel::rowsMoved, this, &TrayController::rebuildTimerMenu);
+    connect(presets, &PresetModel::modelReset, this, &TrayController::rebuildTimerMenu);
+    connect(presets, &PresetModel::dataChanged, this, &TrayController::rebuildTimerMenu);
+    connect(settings, &AppSettings::showTrayIconChanged, this, &TrayController::sync);
+    connect(settings, &AppSettings::trayAvailableChanged, this, &TrayController::sync);
+    connect(settings, &AppSettings::trayBadgeStyleChanged, this, &TrayController::refresh);
+    sync();
+}
+
+TrayController::~TrayController() = default;
+
+void TrayController::setWindow(QWindow *window)
+{
+    m_window = window;
+}
+
+bool TrayController::windowShown() const
+{
+    return m_window && m_window->isVisible() && !(m_window->windowStates() & Qt::WindowMinimized);
+}
+
+void TrayController::toggleWindow()
+{
+    if (windowShown()) {
+        m_window->hide();
+    } else {
+        Q_EMIT showWindowRequested();
+    }
+}
+
+void TrayController::sync()
+{
+    const bool wanted = m_settings->showTrayIcon() && m_settings->trayAvailable();
+    if (wanted && !m_item) {
+        createItem();
+    } else if (!wanted && m_item) {
+        destroyItem();
+    }
+}
+
+void TrayController::createItem()
+{
+    m_item = std::make_unique<QSystemTrayIcon>(QIcon::fromTheme(kIconName));
+    m_menu = std::make_unique<QMenu>();
+    QMenu *menu = m_menu.get();
+    m_statusAction = menu->addAction(QString());
+    m_statusAction->setEnabled(false);
+    menu->addSeparator();
+    m_toggleAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-playback-start")), QString(), this, [this]() {
+        m_engine->toggle();
+    });
+    m_stopAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-playback-stop")), QString(), this, [this]() {
+        m_engine->stop();
+    });
+    m_skipAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-skip-forward")), QString(), this, [this]() {
+        m_engine->skip();
+    });
+    menu->addSeparator();
+    m_timerMenu = menu->addMenu(QIcon::fromTheme(QStringLiteral("chronometer")), QString());
+    m_timerGroup = new QActionGroup(m_timerMenu);
+    m_timerGroup->setExclusive(true);
+    menu->addSeparator();
+    m_statsAction = menu->addAction(QIcon::fromTheme(QStringLiteral("office-chart-bar")), QString(), this, [this]() {
+        Q_EMIT openPageRequested(QStringLiteral("stats"));
+    });
+    m_settingsAction = menu->addAction(QIcon::fromTheme(QStringLiteral("configure")), QString(), this, [this]() {
+        Q_EMIT openPageRequested(QStringLiteral("settings"));
+    });
+    menu->addSeparator();
+    m_windowAction = menu->addAction(QString(), this, &TrayController::toggleWindow);
+    m_quitAction = menu->addAction(QIcon::fromTheme(QStringLiteral("application-exit")), QString(), qApp, &QCoreApplication::quit);
+    // The clock in the status line is refreshed only when the menu opens, never on a tick.
+    connect(menu, &QMenu::aboutToShow, this, [this]() {
+        updateStatusLine();
+        rebuildTimerMenu();
+        if (m_windowAction) {
+            m_windowAction->setText(windowShown() ? i18n("Hide Window") : i18n("Show Window"));
+        }
+    });
+    m_item->setContextMenu(menu);
+    connect(m_item.get(), &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
+        if (reason == QSystemTrayIcon::Trigger) {
+            toggleWindow();
+        }
+    });
+
+    updateTexts();
+    m_item->show();
+}
+
+void TrayController::destroyItem()
+{
+    m_item.reset();
+    m_menu.reset(); // also deletes the actions
+}
+
+void TrayController::updateTexts()
+{
+    if (!m_item) {
+        return;
+    }
+    if (m_statsAction) {
+        m_statsAction->setText(i18n("Statistics"));
+    }
+    if (m_settingsAction) {
+        m_settingsAction->setText(i18n("Settings"));
+    }
+    if (m_timerMenu) {
+        m_timerMenu->setTitle(i18n("Timer"));
+    }
+    if (m_stopAction) {
+        m_stopAction->setText(i18n("Stop"));
+    }
+    if (m_skipAction) {
+        m_skipAction->setText(i18n("Skip"));
+    }
+    if (m_quitAction) {
+        m_quitAction->setText(i18n("Quit"));
+    }
+    if (m_windowAction) {
+        m_windowAction->setText(windowShown() ? i18n("Hide Window") : i18n("Show Window"));
+    }
+    m_iconKey.clear();
+    m_toolTip.clear();
+    m_menuKey.clear();
+    m_timerMenuKey.clear();
+    rebuildTimerMenu();
+    refresh();
+}
+
+void TrayController::updateStatusLine()
+{
+    if (m_statusAction) {
+        const QString text = menuStatusLine(m_engine->state(), m_engine->phase(), m_engine->remainingSeconds(),
+                                            m_presets->currentPreset().name);
+        if (m_statusAction->text() != text) {
+            m_statusAction->setText(text);
+        }
+    }
+}
+
+void TrayController::rebuildTimerMenu()
+{
+    if (!m_item || !m_timerMenu || !m_timerGroup) {
+        return;
+    }
+    const QList<TimerPreset> &list = m_presets->presets();
+    // The key covers what the menu entries are made of, NOT which timer is current: choosing another
+    // timer must only move the check mark. Rebuilding the entries on every choice gave the desktop a
+    // brand-new menu while it still showed the old one, and it ended up with two timers ticked.
+    QString key;
+    for (int row = 0; row < list.size(); ++row) {
+        key += list.at(row).uuid + QLatin1Char('\t') + list.at(row).name + QLatin1Char('\t')
+            + m_presets->data(m_presets->index(row), PresetModel::IconNameRole).toString() + QLatin1Char('\n');
+    }
+    if (key != m_timerMenuKey) {
+        m_timerMenuKey = key;
+        m_timerMenu->clear(); // deletes the old actions, which leaves the group
+        for (int row = 0; row < list.size(); ++row) {
+            const TimerPreset &preset = list.at(row);
+            const QString iconName = m_presets->data(m_presets->index(row), PresetModel::IconNameRole).toString();
+            QAction *action = m_timerMenu->addAction(iconName.isEmpty() ? QIcon() : QIcon::fromTheme(iconName), preset.name);
+            action->setCheckable(true);
+            action->setData(preset.uuid);
+            m_timerGroup->addAction(action);
+            const QString uuid = preset.uuid;
+            connect(action, &QAction::triggered, this, [this, uuid]() {
+                m_presets->setCurrentUuid(uuid);
+                // If the choice was refused the clicked entry must not stay ticked.
+                syncTimerChecks();
+            });
+        }
+    }
+    syncTimerChecks();
+}
+
+void TrayController::syncTimerChecks()
+{
+    if (!m_timerGroup) {
+        return;
+    }
+    // The group is exclusive: ticking the current timer unticks every other one, and only the
+    // actions whose state really changes are announced to the desktop.
+    const QString current = m_presets->currentUuid();
+    const QList<QAction *> actions = m_timerGroup->actions();
+    for (QAction *action : actions) {
+        if (action->data().toString() == current && !action->isChecked()) {
+            action->setChecked(true);
+            return;
+        }
+    }
+}
+
+void TrayController::refresh()
+{
+    if (!m_item) {
+        return;
+    }
+
+    const TrayStatus status = describeTray(m_engine->state(), m_engine->phase(), m_engine->remainingSeconds(),
+                                           m_presets->currentPreset().name);
+    const int badgeStyle = m_settings ? m_settings->trayBadgeStyle() : 0;
+    const bool isWork = m_engine->phase() == TimerEngine::Phase::Work;
+    const bool isPaused = m_engine->isPaused();
+    // The ring is drawn in 1/16 degree steps; 1/200 of a turn is finer than any tray size shows.
+    const int progressStep = status.badgeMinutes >= 0 ? qRound(m_engine->progress() * 200.0) : 0;
+
+    // Repainting and sending pixmaps over D-Bus is costly: do it only when the picture changes.
+    const QString iconKey = QStringLiteral("%1/%2/%3/%4/%5")
+                                .arg(status.badgeMinutes)
+                                .arg(badgeStyle)
+                                .arg(progressStep)
+                                .arg(isWork ? 1 : 0)
+                                .arg(isPaused ? 1 : 0);
+    if (iconKey != m_iconKey) {
+        m_iconKey = iconKey;
+        m_badgeMinutes = status.badgeMinutes;
+        const QIcon icon = trayIcon(m_badgeMinutes, badgeStyle, progressStep / 200.0, isWork, isPaused);
+        m_item->setIcon(icon);
+    }
+    const QString toolTip = status.toolTipText.isEmpty() ? status.toolTipTitle : status.toolTipTitle + QLatin1Char('\n') + status.toolTipText;
+    if (toolTip != m_toolTip) {
+        m_toolTip = toolTip;
+        m_item->setToolTip(toolTip);
+    }
+
+    if (m_toggleAction) {
+        const bool idle = m_engine->state() == TimerEngine::State::Idle;
+        const bool paused = m_engine->isPaused();
+        QString text;
+        if (paused) {
+            text = i18n("Resume");
+        } else if (idle) {
+            text = m_engine->phase() == TimerEngine::Phase::Work ? i18n("Start") : i18n("Start break");
+        } else {
+            text = i18n("Pause");
+        }
+        if (m_toggleAction->text() != text) {
+            m_toggleAction->setText(text);
+            m_toggleAction->setIcon(QIcon::fromTheme(idle || paused ? QStringLiteral("media-playback-start")
+                                                                     : QStringLiteral("media-playback-pause")));
+        }
+    }
+
+    // Everything below changes only with the state, the phase or the timer, not with each tick.
+    const bool active = m_engine->isActive();
+    // While idle the clock is the full phase length and can change with the timer; while a phase
+    // runs it ticks, so it stays out of the key.
+    const QString stableKey = QStringLiteral("%1/%2/%3/%4/%5")
+                                  .arg(int(m_engine->state()))
+                                  .arg(int(m_engine->phase()))
+                                  .arg(m_presets->currentPreset().name, m_presets->currentUuid())
+                                  .arg(active ? -1 : m_engine->remainingSeconds());
+    if (stableKey != m_menuKey) {
+        m_menuKey = stableKey;
+        updateStatusLine();
+        if (m_stopAction) {
+            m_stopAction->setVisible(active);
+        }
+        if (m_skipAction) {
+            m_skipAction->setVisible(active);
+        }
+        if (m_timerMenu) {
+            m_timerMenu->setEnabled(!active);
+        }
+    }
+}
