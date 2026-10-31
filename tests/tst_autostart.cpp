@@ -5,11 +5,13 @@
 #include <QDBusObjectPath>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLoggingCategory>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
+#include "AppImage.h"
 #include "Autostart.h"
 #include "PrivateDBus.h"
 
@@ -78,10 +80,33 @@ private Q_SLOTS:
     void anAppImageStartsItsFileNotItsMount()
     {
         qunsetenv("APPIMAGE");
+        qunsetenv("APPDIR");
         QCOMPARE(autostartProgram(), QCoreApplication::applicationFilePath());
+        // As if this test ran from an AppImage mounted at its own folder's parent.
+        const QString mount = QFileInfo(QCoreApplication::applicationDirPath()).absolutePath();
         qputenv("APPIMAGE", "/home/someone/Applications/Sugo-x86_64.AppImage");
+        qputenv("APPDIR", mount.toUtf8());
         QCOMPARE(autostartProgram(), QStringLiteral("/home/someone/Applications/Sugo-x86_64.AppImage"));
         qunsetenv("APPIMAGE");
+        qunsetenv("APPDIR");
+    }
+
+    void anotherAppImagesVariablesAreNotOurs()
+    {
+        // A build from source started in a terminal of another AppImage inherits its variables.
+        const QString other = QStringLiteral("/home/someone/Applications/Editor.AppImage");
+        QCOMPARE(AppImage::path(other, QStringLiteral("/tmp/.mount_Editor1"), QStringLiteral("/home/someone/sugo/build/bin/sugo")), QString());
+        QCOMPARE(AppImage::path(other, QStringLiteral("/tmp/.mount_Sugo"), QStringLiteral("/tmp/.mount_Sugo2/usr/bin/sugo")), QString());
+        QCOMPARE(AppImage::path(other, QString(), QStringLiteral("/tmp/.mount_Sugo/usr/bin/sugo")), QString());
+        QCOMPARE(AppImage::path(QString(), QStringLiteral("/tmp/.mount_Sugo"), QStringLiteral("/tmp/.mount_Sugo/usr/bin/sugo")), QString());
+        QCOMPARE(AppImage::path(other, QStringLiteral("/tmp/.mount_Sugo/"), QStringLiteral("/tmp/.mount_Sugo/usr/bin/sugo")), other);
+
+        qputenv("APPIMAGE", other.toUtf8());
+        qputenv("APPDIR", "/tmp/.mount_Editor1");
+        QCOMPARE(autostartProgram(), QCoreApplication::applicationFilePath());
+        QCOMPARE(AppImage::path(), QString());
+        qunsetenv("APPIMAGE");
+        qunsetenv("APPDIR");
     }
 
     void enablingWritesAValidEntry()

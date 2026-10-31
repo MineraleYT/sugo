@@ -114,7 +114,7 @@ public:
     /// The feed of `channel` (see the class description).
     static QUrl feedUrl(const QString &channel);
 
-    // Tests: the AppImage to replace (instead of $APPIMAGE), the feed to read (instead of the
+    // Tests: the AppImage to replace (instead of AppImage::path()), the feed to read (instead of the
     // channel's), and where downloads may come from (instead of this project's GitHub releases).
     void setAppImagePathForTesting(const QString &path) { m_appImagePath = path; }
     void setFeedUrlForTesting(const QUrl &url) { m_feedUrlOverride = url; }

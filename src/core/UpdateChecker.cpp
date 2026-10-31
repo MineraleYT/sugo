@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "UpdateChecker.h"
 
+#include "AppImage.h"
 #include "AppSettings.h"
 #include "Localization.h"
 #include <QCoreApplication>
@@ -116,7 +117,7 @@ int naturalCompare(const QString &a, const QString &b)
 
 UpdateChecker::UpdateChecker(QObject *parent)
     : QObject(parent)
-    , m_appImagePath(qEnvironmentVariable("APPIMAGE"))
+    , m_appImagePath(AppImage::path())
     , m_downloadPrefix(kDownloadPrefix)
 {
     m_scheduleTimer.setSingleShot(true);

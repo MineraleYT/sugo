@@ -100,6 +100,6 @@ private:
 /// other platforms.
 std::unique_ptr<Autostart> createAutostart();
 
-/// The program a login entry starts: the AppImage file when running from one ($APPIMAGE), else
-/// this executable.
+/// The program a login entry starts: the AppImage file when running from one (AppImage::path()),
+/// else this executable.
 QString autostartProgram();

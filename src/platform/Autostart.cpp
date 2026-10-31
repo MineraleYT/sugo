@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Autostart.h"
+#include "AppImage.h"
 
 #include <QCoreApplication>
 #include <QDBusMessage>
@@ -294,7 +295,7 @@ bool PortalAutostart::setEnabled(bool enabled)
 QString autostartProgram()
 {
     // An AppImage runs from a mount that is gone once it quits: the login entry starts the file.
-    const QString appImage = qEnvironmentVariable("APPIMAGE");
+    const QString appImage = AppImage::path();
     return appImage.isEmpty() ? QCoreApplication::applicationFilePath() : appImage;
 }
 

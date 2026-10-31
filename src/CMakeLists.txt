@@ -120,6 +120,8 @@ target_sources(sugo_core PRIVATE
     platform/SecretStore.cpp
     platform/DesktopStyle.h
     platform/DesktopStyle.cpp
+    platform/AppImage.h
+    platform/AppImage.cpp
     platform/ThemeIcons.h
     platform/ThemeIcons.cpp
     db/Database.h
