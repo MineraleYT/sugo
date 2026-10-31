@@ -4,6 +4,7 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: dev # where the daily work is; the file itself is read from main
     schedule:
       interval: weekly
     # All the updates of a week in one pull request.
