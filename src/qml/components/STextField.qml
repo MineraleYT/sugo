@@ -18,6 +18,16 @@ QQC2.TextField {
     font.pixelSize: Theme.fontBody
     hoverEnabled: true
 
+    // Without focus, show the start of a text too long to fit, not its end.
+    function showStart(): void {
+        if (!activeFocus) {
+            cursorPosition = 0;
+        }
+    }
+    onTextChanged: showStart()
+    onActiveFocusChanged: showStart()
+    Component.onCompleted: showStart()
+
     background: Rectangle {
         radius: Theme.radius
         color: Theme.background
