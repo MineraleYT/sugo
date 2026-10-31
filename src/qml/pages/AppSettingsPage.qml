@@ -1090,7 +1090,7 @@ QQC2.Page {
                 SettingRow {
                     title: i18n("D-Bus commands")
                     description: i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
-                                      "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status")
+                                      "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
                     Item { implicitWidth: 1 }
                 }
                 Rectangle {

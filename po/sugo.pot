@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-31 04:26+0100\n"
+"POT-Creation-Date: 2026-10-31 14:39+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -581,6 +581,14 @@ msgstr ""
 
 #: src/platform/DBusTimerService.cpp:22
 msgid "Control by other programs is turned off in Sugo's settings."
+msgstr ""
+
+#: src/platform/DBusTimerService.cpp:59
+msgid "A timer is running. Stop it before choosing another timer."
+msgstr ""
+
+#: src/platform/DBusTimerService.cpp:84
+msgid "There is no timer named \"%1\"."
 msgstr ""
 
 #: src/platform/KRunnerService.cpp:85

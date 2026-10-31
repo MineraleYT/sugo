@@ -155,6 +155,11 @@ Sugo exposes a D-Bus interface:
 | `qdbus io.github.mineraleyt.sugo /Timer stop` | Stop and reset |
 | `qdbus io.github.mineraleyt.sugo /Timer skip` | Skip to the next phase |
 | `qdbus io.github.mineraleyt.sugo /Timer status` | Print `state:phase:seconds` |
+| `qdbus io.github.mineraleyt.sugo /Timer presets` | List the names of the timers, one per line |
+| `qdbus io.github.mineraleyt.sugo /Timer selectPreset "Deep work"` | Choose a timer by name (not case-sensitive) or uuid |
+| `qdbus io.github.mineraleyt.sugo /Timer nextPreset` | Choose the next timer in the list (wraps around) |
+| `qdbus io.github.mineraleyt.sugo /Timer previousPreset` | Choose the previous timer (wraps around) |
+| `qdbus io.github.mineraleyt.sugo /Timer startPreset "Deep work"` | Choose a timer and start it |
 
 `status` returns three colon-separated fields, for example `running:work:1342`:
 
@@ -162,7 +167,9 @@ Sugo exposes a D-Bus interface:
 - **phase**: `work`, `short_break` or `long_break` (when idle, the phase that starts next);
 - **seconds**: time left in the phase, in whole seconds.
 
-These commands, and the KRunner ones, can be turned off in **Settings → Global Shortcuts and Automation → Allow other programs to control the timer**. They then answer with the error `io.github.mineraleyt.sugo.Error.ControlDisabled` and change nothing; `status` keeps working.
+These commands, and the KRunner ones, can be turned off in **Settings → Global Shortcuts and Automation → Allow other programs to control the timer**. They then answer with the error `io.github.mineraleyt.sugo.Error.ControlDisabled` and change nothing; `status` and `presets` keep working.
+
+Changing the timer resets it, so while a phase is running or paused `selectPreset`, `nextPreset`, `previousPreset` and `startPreset` refuse with the error `io.github.mineraleyt.sugo.Error.TimerActive` and change nothing (stop the timer first). Choosing the timer that is already selected is always allowed, and `startPreset` then starts or resumes it. An unknown name or uuid gives `io.github.mineraleyt.sugo.Error.UnknownPreset`.
 
 Depending on your distribution, `qdbus` may be called `qdbus6` or `qdbus-qt6`. If Sugo is not running, calling the service starts it hidden in the system tray (D-Bus activation). You can also start it that way yourself with `sugo --background`.
 

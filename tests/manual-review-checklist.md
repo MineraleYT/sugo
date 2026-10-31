@@ -21,7 +21,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Test the focus sound and its volume, then disable playback and confirm it stops.
 - [ ] Open the system-tray menu and verify timer controls, current phase, and show/hide behavior.
 - [ ] Enable login startup and verify the desktop entry is created. Confirm the setting is reported as unavailable in Flatpak.
-- [ ] Call the documented D-Bus `status`, `start`, `pause`, `skip`, `stop`, and `toggle` methods.
+- [ ] Call the documented D-Bus `status`, `start`, `pause`, `skip`, `stop`, and `toggle` methods, and the timer ones (`presets`, `selectPreset`, `nextPreset`, `previousPreset`, `startPreset`), including the refusal while a timer is running.
 - [ ] Launch a second instance and confirm it activates the existing window instead of opening another database-backed instance.
 
 ## Data and statistics

@@ -182,7 +182,7 @@ int main(int argc, char *argv[])
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
     auto *timerDBusObject = new TimerDBusObject(timer);
-    auto *dbusTimer = new DBusTimerService(timer, timerDBusObject);
+    auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
     auto *krunner = new KRunnerService(timer, presets, &services);

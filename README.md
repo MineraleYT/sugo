@@ -81,7 +81,7 @@ Sugo needs Qt 6.8+ (and extra-cmake-modules 6.8+ to build). Dependencies for Fed
 - **First start:** a short animated tour shows how timers work and sets up the tray and starting at login.
 - **From the tray:** click the Sugo icon for a menu with the status, **Start/Pause**, **Stop**, **Skip**, a **Timer** submenu to switch timers, and shortcuts to Statistics and Settings.
 - **From KRunner** (`Alt+Space`): type `pomodoro 25` to start a 25-minute session, or `pomodoro` to see the status and controls.
-- **From a script:** `qdbus io.github.mineraleyt.sugo /Timer toggle`, handy for a global shortcut.
+- **From a script:** `qdbus io.github.mineraleyt.sugo /Timer toggle`, handy for a global shortcut; `startPreset "Deep work"`, `nextPreset` and `previousPreset` choose the timer.
 
 ---
 
