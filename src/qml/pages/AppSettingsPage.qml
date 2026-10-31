@@ -963,6 +963,8 @@ QQC2.Page {
                                 required property int index
                                 width: ListView.view ? ListView.view.width : calChoiceBox.width
                                 implicitHeight: Theme.controlHeight
+                                // The style's padding leaves the row too little room: the text would sit low.
+                                verticalPadding: 0
                                 highlighted: calChoiceBox.highlightedIndex === index
                                 hoverEnabled: true
                                 background: Rectangle {
