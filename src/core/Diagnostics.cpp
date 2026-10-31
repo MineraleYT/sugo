@@ -98,10 +98,10 @@ void Diagnostics::setVerboseLogging(bool verbose)
     // Always: KIO's file dialog model (loaded by Plasma's platform theme) warns once per file of
     // the folder when that folder changes while the dialog closes, as a backup or an export
     // written there does. Harmless, but it floods the terminal with the user's file names.
-    QString rules = QStringLiteral("kf.kio.widgets.kdirmodel.warning=false");
-    if (verbose) {
-        rules += QStringLiteral("\nsugo.*.debug=true");
-    }
+    // Sugo's debug messages are set both ways: whether Qt shows debug messages by default
+    // depends on the distribution (Fedora turns them off, Ubuntu leaves them on).
+    QString rules = QStringLiteral("kf.kio.widgets.kdirmodel.warning=false\nsugo.*.debug=");
+    rules += verbose ? QStringLiteral("true") : QStringLiteral("false");
     QLoggingCategory::setFilterRules(rules);
     QMutexLocker locker(&logMutex());
     s_verbose = verbose;

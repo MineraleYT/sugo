@@ -65,9 +65,10 @@ public:
     static void clearLogs();
 
     /// Verbose logging: Sugo's debug messages are let through (sugo.* categories) and the log
-    /// buffer holds more lines. Off goes back to Qt's default rules. Either way KIO's file dialog
-    /// model is kept from flooding the terminal (kf.kio.widgets.kdirmodel warnings). QT_LOGGING_RULES
-    /// from the environment wins over all of this. Follows AppSettings::verboseLogging once attached.
+    /// buffer holds more lines. Off keeps them out, whatever the distribution's default. Either
+    /// way KIO's file dialog model is kept from flooding the terminal (kf.kio.widgets.kdirmodel
+    /// warnings). QT_LOGGING_RULES from the environment wins over all of this. Follows
+    /// AppSettings::verboseLogging once attached.
     static void setVerboseLogging(bool verbose);
     static bool verboseLogging();
     /// How many log lines the buffer keeps now.
