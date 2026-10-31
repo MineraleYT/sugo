@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: CC-BY-SA-4.0
+name: Bug report
+description: Something in Sugo doesn't work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a work phase
+        2. ...
+  - type: input
+    id: version
+    attributes:
+      label: Sugo version
+      placeholder: e.g. 1.2.0 or 1.2.1-nightly.20261031.1
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: How you installed Sugo
+      options:
+        - AppImage
+        - Flatpak
+        - Built from source
+        - Distribution package
+    validations:
+      required: true
+  - type: input
+    id: desktop
+    attributes:
+      label: Distribution and desktop
+      placeholder: e.g. Fedora 44, KDE Plasma 6.5, Wayland
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostic report
+      description: Settings → Advanced → Troubleshooting & Diagnostics → Copy to Clipboard, then paste here. Usernames and personal paths are already removed.
+      render: markdown
