@@ -483,6 +483,7 @@ QQC2.Page {
                         readonly property var phases: cycleColumn.parent.phases
                         readonly property real gaps: Theme.hairline * 3 * (phases.length - 1)
                         Row {
+                            id: cycleBlocks
                             anchors.fill: parent
                             spacing: Theme.hairline * 3
                             Repeater {
@@ -510,6 +511,40 @@ QQC2.Page {
                                     }
                                 }
                             }
+                        }
+                        // Drag a phase by one of its edges, as when resizing a partition: the half you grab is the
+                        // edge that moves, so dragging outwards lengthens it (every phase of its kind follows).
+                        // Lives on the row, not the blocks: each change rebuilds the blocks and would drop the grab.
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeHorCursor
+                            preventStealing: true
+                            property var box: null
+                            property int startValue: 0
+                            property real startX: 0
+                            // +1 when the right edge was grabbed, -1 for the left one.
+                            property int direction: 1
+                            // Frozen at press, so the scale does not shift under the pointer while dragging.
+                            property real pixelsPerMinute: 1
+                            onPressed: mouse => {
+                                const block = cycleBlocks.childAt(mouse.x, mouse.y);
+                                box = block && block.modelData ? (block.modelData.work ? workBox : block.modelData.long ? longBox : shortBox) : null;
+                                if (!box) {
+                                    mouse.accepted = false;
+                                    return;
+                                }
+                                startValue = box.value;
+                                startX = mouse.x;
+                                direction = mouse.x < block.x + block.width / 2 ? -1 : 1;
+                                pixelsPerMinute = Math.max(1, (cycleRow.width - cycleRow.gaps) / Math.max(1, cycleColumn.parent.totalMinutes));
+                            }
+                            onPositionChanged: mouse => {
+                                if (box) {
+                                    box.setValue(startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute));
+                                }
+                            }
+                            onReleased: box = null
+                            onCanceled: box = null
                         }
                     }
                 }
@@ -557,7 +592,7 @@ QQC2.Page {
                         Layout.leftMargin: Theme.spaceSm
                         from: 1
                         to: PresetModel.maxWorkMinutes
-                        value: Math.round(page.preset.workSeconds / 60)
+                        value: Math.max(1, Math.round(page.preset.workSeconds / 60))
                         unit: i18nc("minutes, short", "min")
                         Accessible.name: i18n("Work")
                     }
@@ -566,9 +601,9 @@ QQC2.Page {
                     title: i18n("Short break")
                     NumberField {
                         id: shortBox
-                        from: 0
+                        from: 1
                         to: PresetModel.maxBreakMinutes
-                        value: Math.round(page.preset.shortBreakSeconds / 60)
+                        value: Math.max(1, Math.round(page.preset.shortBreakSeconds / 60))
                         unit: i18nc("minutes, short", "min")
                         Accessible.name: i18n("Short break")
                     }
@@ -577,9 +612,9 @@ QQC2.Page {
                     title: i18n("Long break")
                     NumberField {
                         id: longBox
-                        from: 0
+                        from: 1
                         to: PresetModel.maxBreakMinutes
-                        value: Math.round(page.preset.longBreakSeconds / 60)
+                        value: Math.max(1, Math.round(page.preset.longBreakSeconds / 60))
                         unit: i18nc("minutes, short", "min")
                         Accessible.name: i18n("Long break")
                     }
