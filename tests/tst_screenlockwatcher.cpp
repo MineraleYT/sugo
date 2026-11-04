@@ -196,6 +196,9 @@ private Q_SLOTS:
 
     void onlyTheScreenSaverItselfCanReportALock()
     {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#endif
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");
@@ -230,6 +233,9 @@ private Q_SLOTS:
 
     void logindSignalOnTheSystemBusPausesTheTimer()
     {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#endif
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");

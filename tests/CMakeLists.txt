@@ -19,15 +19,12 @@ sugo_add_test(tst_database Qt6::Core Qt6::Sql)
 sugo_add_test(tst_presetrepository Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
-sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
 sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
 sugo_add_test(tst_autostart Qt6::Core Qt6::Gui Qt6::DBus)
 sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
 sugo_add_test(tst_traypresenter Qt6::Core Qt6::Qml)
-sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
 sugo_add_test(tst_statsaggregator Qt6::Core Qt6::Sql)
 sugo_add_test(tst_statsmodel Qt6::Core Qt6::Qml Qt6::Sql)
-sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
 sugo_add_test(tst_updatechecker Qt6::Core Qt6::Qml Qt6::Network)
 sugo_add_test(tst_screenlockwatcher Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
 sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::DBus)
@@ -41,40 +38,49 @@ sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
 # A GUI application (AppSettings); no display on CI.
 set_tests_properties(tst_phasenotifier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)
 sugo_add_test(tst_traynotifier Qt6::Core Qt6::Gui Qt6::Widgets)
 set_tests_properties(tst_traynotifier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_traycontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus)
 set_tests_properties(tst_traycontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_dbustimerservice Qt6::Core Qt6::Qml Qt6::DBus)
 sugo_add_test(tst_desktopstyle Qt6::Core Qt6::Qml)
 sugo_add_test(tst_themeicons Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
-sugo_add_test(tst_secretstore Qt6::Core Qt6::DBus)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
     COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
 )
 
-# Starts the program on a private bus, uses /Timer, quits with SIGTERM: the teardown must be clean.
-add_test(NAME tst_app_shutdown
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/shutdown_app.sh $<TARGET_FILE:sugo>
-)
-set_tests_properties(tst_app_shutdown PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
+# Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,
+# the single-instance bus name and the /Timer service), and the shutdown test (D-Bus, GNU tools).
+if(NOT APPLE)
+    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
+    sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
+    sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
+    sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)
+    sugo_add_test(tst_dbustimerservice Qt6::Core Qt6::Qml Qt6::DBus)
+    sugo_add_test(tst_secretstore Qt6::Core Qt6::DBus)
 
-# Colours in the interface come from the theme (or TrayIconStyle), never from literals.
-add_test(NAME tst_qml_colours
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/check_qml_colours.sh ${CMAKE_SOURCE_DIR}/src/qml
-)
+    # Starts the program on a private bus, uses /Timer, quits with SIGTERM: the teardown must be clean.
+    add_test(NAME tst_app_shutdown
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/shutdown_app.sh $<TARGET_FILE:sugo>
+    )
+    set_tests_properties(tst_app_shutdown PROPERTIES TIMEOUT 30 SKIP_RETURN_CODE 77)
 
-add_test(NAME tst_qml_sizes
-    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/check_qml_sizes.sh ${CMAKE_SOURCE_DIR}/src/qml
-)
+    # They check the sources, the same on every system: Linux runs them.
+    # Colours in the interface come from the theme (or TrayIconStyle), never from literals.
+    add_test(NAME tst_qml_colours
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/check_qml_colours.sh ${CMAKE_SOURCE_DIR}/src/qml
+    )
+
+    add_test(NAME tst_qml_sizes
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/check_qml_sizes.sh ${CMAKE_SOURCE_DIR}/src/qml
+    )
+endif()
 
 add_test(NAME tst_app_startup
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo>

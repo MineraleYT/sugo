@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <QStringList>
 #include <QUuid>
+#include <QtGlobal>
 
 #include <algorithm>
 
@@ -104,6 +105,11 @@ int Database::latestSchemaVersion()
 
 QString Database::defaultPath()
 {
+    // Tests and smoke runs (see Settings::defaultPath()).
+    const QString dataDir = qEnvironmentVariable("SUGO_DATA_DIR");
+    if (!dataDir.isEmpty()) {
+        return dataDir + QStringLiteral("/sugo.db");
+    }
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
         + QStringLiteral("/sugo/sugo.db");
 }

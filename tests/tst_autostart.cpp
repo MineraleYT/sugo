@@ -282,6 +282,9 @@ private Q_SLOTS:
 
     void thePortalIsAskedInsideFlatpakAndItsAnswerIsKept()
     {
+#ifndef Q_OS_LINUX
+        QSKIP("Flatpak and its portal exist on Linux only");
+#endif
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");

@@ -7,22 +7,69 @@ mode=${2:-startup}
 runtime_dir=$(mktemp -d "${TMPDIR:-/tmp}/sugo-smoke.XXXXXX")
 trap 'rm -rf "$runtime_dir"' EXIT
 
+# Like GNU `timeout --signal=TERM --kill-after=2s <seconds>`, also with bash 3.2 and BSD tools
+# (macOS): runs the command, sends SIGTERM after <seconds>, SIGKILL 2 s later. Exit status: the
+# command's, 124 if it was stopped with SIGTERM, 137 if it needed SIGKILL.
+run_with_timeout() {
+    local seconds=$1
+    shift
+    rm -f "$runtime_dir/timed-out" "$runtime_dir/killed"
+    "$@" &
+    local pid=$!
+    (
+        ticks=$((seconds * 10))
+        while ((ticks > 0)) && kill -0 "$pid" 2>/dev/null; do
+            sleep 0.1
+            ticks=$((ticks - 1))
+        done
+        kill -0 "$pid" 2>/dev/null || exit 0
+        : >"$runtime_dir/timed-out"
+        kill -TERM "$pid" 2>/dev/null
+        ticks=20
+        while ((ticks > 0)) && kill -0 "$pid" 2>/dev/null; do
+            sleep 0.1
+            ticks=$((ticks - 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+            : >"$runtime_dir/killed"
+            kill -KILL "$pid" 2>/dev/null
+        fi
+    ) </dev/null >/dev/null 2>&1 &
+    local watcher=$!
+    local status=0
+    wait "$pid" || status=$?
+    wait "$watcher" 2>/dev/null || true
+    if [[ -e $runtime_dir/killed ]]; then
+        return 137
+    elif [[ -e $runtime_dir/timed-out ]]; then
+        return 124
+    fi
+    return "$status"
+}
+
+# Isolated data: SUGO_DATA_DIR holds the database and the settings on every system (on macOS
+# QStandardPaths ignores the XDG variables); the XDG variables isolate everything else on Linux.
+mkdir -p "$runtime_dir/data/sugo"
+isolation="SUGO_DATA_DIR=$runtime_dir/data/sugo"
+
 set +e
 if [[ $mode != startup ]]; then
     if [[ $mode == stats ]]; then
-        env QT_QPA_PLATFORM=offscreen \
-        SUGO_STATS_SMOKE_TEST=1 \
-        DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
-        XDG_DATA_HOME="$runtime_dir/data" \
-        XDG_CONFIG_HOME="$runtime_dir/config" \
-        timeout --signal=TERM --kill-after=2s 8s "$app"
+        run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \
+            SUGO_STATS_SMOKE_TEST=1 \
+            DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
+            "$isolation" \
+            XDG_DATA_HOME="$runtime_dir/data" \
+            XDG_CONFIG_HOME="$runtime_dir/config" \
+            "$app"
     else
-        env QT_QPA_PLATFORM=offscreen \
-        SUGO_SMOKE_PAGE="$mode" \
-        DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
-        XDG_DATA_HOME="$runtime_dir/data" \
-        XDG_CONFIG_HOME="$runtime_dir/config" \
-        timeout --signal=TERM --kill-after=2s 8s "$app"
+        run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \
+            SUGO_SMOKE_PAGE="$mode" \
+            DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
+            "$isolation" \
+            XDG_DATA_HOME="$runtime_dir/data" \
+            XDG_CONFIG_HOME="$runtime_dir/config" \
+            "$app"
     fi
     status=$?
     set -e
@@ -33,11 +80,12 @@ if [[ $mode != startup ]]; then
     exit 0
 fi
 
-env QT_QPA_PLATFORM=offscreen \
+run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \
     DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
+    "$isolation" \
     XDG_DATA_HOME="$runtime_dir/data" \
     XDG_CONFIG_HOME="$runtime_dir/config" \
-    timeout --signal=TERM --kill-after=2s 8s "$app"
+    "$app"
 status=$?
 set -e
 

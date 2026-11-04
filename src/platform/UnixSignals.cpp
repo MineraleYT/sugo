@@ -40,9 +40,18 @@ void onSignal(int)
 
 void installQuitSignalHandlers(QObject *parent)
 {
+#ifdef SOCK_CLOEXEC
     if (::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, signalSocket) != 0) {
         return;
     }
+#else
+    // Darwin has no SOCK_CLOEXEC: set close-on-exec on both ends right after creating them.
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, signalSocket) != 0) {
+        return;
+    }
+    ::fcntl(signalSocket[0], F_SETFD, FD_CLOEXEC);
+    ::fcntl(signalSocket[1], F_SETFD, FD_CLOEXEC);
+#endif
     // The handler must never block, whatever is (not) reading the other end.
     ::fcntl(signalSocket[0], F_SETFL, ::fcntl(signalSocket[0], F_GETFL) | O_NONBLOCK);
 

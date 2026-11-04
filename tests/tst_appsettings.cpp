@@ -606,6 +606,20 @@ private Q_SLOTS:
         QStandardPaths::setTestModeEnabled(false);
     }
 
+    void dataDirVariableReplacesDefaultLocation()
+    {
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        const bool wasSet = qEnvironmentVariableIsSet("SUGO_DATA_DIR");
+        QTemporaryDir dir;
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dir.path()));
+        QCOMPARE(Settings::defaultPath(), dir.filePath(QStringLiteral("sugo.conf")));
+        qunsetenv("SUGO_DATA_DIR");
+        QVERIFY(Settings::defaultPath().endsWith(QLatin1String("/sugo/sugo.conf")));
+        if (wasSet) {
+            qputenv("SUGO_DATA_DIR", saved);
+        }
+    }
+
     void onlySoundNamesAndAbsolutePathsArePlayed()
     {
         for (const QString &good : {QStringLiteral("complete"), QStringLiteral("alarm-clock-elapsed"), QStringLiteral("bell.window"),

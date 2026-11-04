@@ -158,7 +158,32 @@ target_link_libraries(sugo_core PRIVATE
     Qt6::Multimedia
 )
 
-add_executable(sugo main.cpp)
+set(sugo_app_sources main.cpp)
+if(APPLE)
+    # Sugo.app: the icon (Contents/Resources/Sugo.icns, from packaging/macos/render-icons.sh's PNGs)
+    # and an Info.plist whose version is only X.Y.Z (nightly suffixes are not valid there).
+    include(ECMAddAppIcon)
+    file(GLOB sugo_macos_icons "${PROJECT_SOURCE_DIR}/data/icons/macos/*-apps-io.github.mineraleyt.sugo.png")
+    if(sugo_macos_icons)
+        ecm_add_app_icon(sugo_app_sources ICONS ${sugo_macos_icons} OUTFILE_BASENAME Sugo)
+    endif()
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" SUGO_BUNDLE_VERSION "${sugo_version}")
+    if(NOT SUGO_BUNDLE_VERSION)
+        set(SUGO_BUNDLE_VERSION "${PROJECT_VERSION}")
+    endif()
+    set(SUGO_BUNDLE_EXECUTABLE Sugo)
+    configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
+endif()
+
+# A plain program on Linux; Sugo.app on macOS (MACOSX_BUNDLE is ignored elsewhere).
+add_executable(sugo MACOSX_BUNDLE ${sugo_app_sources})
+if(APPLE)
+    set_target_properties(sugo PROPERTIES
+        OUTPUT_NAME Sugo
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.mineraleyt.sugo
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+    )
+endif()
 
 # The timer icons, shown through PresetModel::iconSource() as qrc:/icons/<name>.svg.
 qt6_add_resources(sugo "preseticons"
@@ -186,9 +211,11 @@ qt6_add_resources(sugo "appicon"
     FILES "${CMAKE_SOURCE_DIR}/data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg"
 )
 
+# The QML plugin first, then the library it links privately: listed the other way round, CMake repeats
+# libsugo_core.a after the plugin to keep the static link order (Apple's ld warns about duplicates).
 target_link_libraries(sugo PRIVATE
-    sugo_core
     sugo_qml
+    sugo_core
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -200,4 +227,9 @@ target_link_libraries(sugo PRIVATE
     Qt6::Network
 )
 
-install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+if(APPLE)
+    # KDE_INSTALL_TARGETS_DEFAULT_ARGS would put the bundle in /Applications/KDE (absolute).
+    install(TARGETS sugo BUNDLE DESTINATION . RUNTIME DESTINATION ${KDE_INSTALL_BINDIR})
+else()
+    install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+endif()

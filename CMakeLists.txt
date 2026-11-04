@@ -1,9 +1,23 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.20)
 
+# macOS: the oldest system the bundle runs on (the Qt it is built with supports macOS 13 and later).
+# Only a default: it must be known before project(), and the packaging scripts pass it anyway.
+if(APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
+endif()
+
 project(Sugo VERSION 1.0.0 LANGUAGES CXX)
 
-set(QT_MIN_VERSION 6.8.0)  # QStyleHints::setColorScheme
+if(APPLE)
+    # The few macOS-only sources are Objective-C++ (.mm, compiled with -fobjc-arc).
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 17)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(QT_MIN_VERSION 6.9.0)  # Qt::ExpandedClientAreaHint for the native title bar
+else()
+    set(QT_MIN_VERSION 6.8.0)  # QStyleHints::setColorScheme
+endif()
 set(ECM_MIN_VERSION 6.8.0)
 
 find_package(ECM ${ECM_MIN_VERSION} REQUIRED NO_MODULE)
@@ -16,6 +30,10 @@ include(FeatureSummary)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(APPLE)
+    # KDECompilerSettings sets the warnings for C++ only: the same ones for Objective-C++.
+    add_compile_options("$<$<COMPILE_LANGUAGE:OBJCXX>:-Wall;-Wextra>")
+endif()
 
 # The version the program shows and compares when it looks for updates. Nightly builds set it to
 # a pre-release of the coming version, "1.0.1-nightly.20261031.42": newer than 1.0.0, older than
@@ -52,16 +70,19 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-install(FILES data/io.github.mineraleyt.sugo.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+# Linux desktop integration. The configured files stay on every system (tst_runner_version reads one).
 # KRunner only looks for D-Bus runners in share/krunner/dbusplugins. The plugin version
 # comes from project() so it can never fall behind a release.
 configure_file(data/io.github.mineraleyt.sugo.runner.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop DESTINATION ${KDE_INSTALL_DATADIR}/krunner/dbusplugins)
 # D-Bus activation: KRunner or a `qdbus` call can start Sugo (hidden in the tray) on demand.
 configure_file(data/io.github.mineraleyt.sugo.service.in ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.service @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.service DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR})
-install(FILES data/io.github.mineraleyt.sugo.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
-install(FILES data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg
-        DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
+if(NOT APPLE)
+    install(FILES data/io.github.mineraleyt.sugo.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop DESTINATION ${KDE_INSTALL_DATADIR}/krunner/dbusplugins)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.service DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR})
+    install(FILES data/io.github.mineraleyt.sugo.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
+    install(FILES data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg
+            DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
+endif()
 
 feature_summary(WHAT ALL INCLUDE_QUIET_PACKAGES FATAL_ON_MISSING_REQUIRED_PACKAGES)
