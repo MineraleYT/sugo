@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "CalendarSync.h"
+#include "FakeSecretStore.h"
 #include "SecretStore.h"
 #include "Settings.h"
 
@@ -50,44 +51,6 @@ private:
 };
 
 const QString kPassword = QStringLiteral("s3cretPW-xyz");
-
-/// An in-memory keyring; copies share their contents, like a real keyring across restarts.
-class FakeSecretStore : public SecretStore
-{
-public:
-    std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
-    std::shared_ptr<bool> available = std::make_shared<bool>(true);
-    /// The user answers "Deny" when asked (macOS after an update); writing a new item works.
-    std::shared_ptr<bool> refuses = std::make_shared<bool>(false);
-    std::shared_ptr<int> reads = std::make_shared<int>(0);
-
-    std::optional<QString> read(const QString &key) override
-    {
-        ++*reads;
-        m_refused = *available && *refuses;
-        if (!*available || *refuses) {
-            return std::nullopt;
-        }
-        return secrets->value(key);
-    }
-    bool write(const QString &key, const QString &secret) override
-    {
-        if (!*available) {
-            return false;
-        }
-        *refuses = false; // the new item is this program's own
-        if (secret.isEmpty()) {
-            secrets->remove(key);
-        } else {
-            secrets->insert(key, secret);
-        }
-        return true;
-    }
-    bool lastReadRefused() const override { return m_refused; }
-
-private:
-    bool m_refused = false;
-};
 
 QByteArray basic(const QString &user, const QString &pw)
 {
