@@ -337,6 +337,20 @@ QQC2.ApplicationWindow {
                 fail(29, "The volume slider no longer follows the setting after a drag: " + slider.value);
                 return;
             }
+            // The Focus card (shortcuts that silence notifications) exists on macOS only, and
+            // openSettings() shows the category it is in.
+            const focusCard = findItem(page, item => item.objectName === "focusModeCard");
+            if (!focusCard || focusCard.available !== DesktopStyle.macos) {
+                fail(44, "The Focus card is missing, or shown outside macOS");
+                return;
+            }
+            root.openSettings("focus");
+            const focusShown = page.category === "focus" && focusCard.visible === DesktopStyle.macos;
+            page.category = "general";
+            if (!focusShown) {
+                fail(44, "openSettings(\"focus\") did not show the Focus category: " + page.category);
+                return;
+            }
             // Disconnecting the calendar asks first.
             page.requestDisconnect();
             if (!page.disconnectConfirming) {
@@ -674,6 +688,21 @@ QQC2.ApplicationWindow {
     /// For the C++ side (tray menu): a destination by name.
     function openPage(name: string): void {
         navigate(name);
+    }
+
+    /// The settings category the settings page opens on next ("" for its default).
+    property string pendingSettingsCategory: ""
+
+    /// Opens the settings on one category, e.g. "focus".
+    function openSettings(category: string): void {
+        pendingSettingsCategory = category;
+        navigate("settings");
+        // Already open: navigate() kept the page, so tell it here.
+        const top = pageStack.currentItem;
+        if (top && top.categories !== undefined && pendingSettingsCategory.length > 0) {
+            top.category = pendingSettingsCategory;
+            pendingSettingsCategory = "";
+        }
     }
 
     /// Opens a timer's page; `reload` shows it afresh (after a reset, or dropped changes).

@@ -107,9 +107,39 @@ QQC2.Page {
     // visit should show up: reload it when the page opens, if the calendar is on and signed in,
     // unless it was fetched a short while ago (the refresh button always reloads).
     Component.onCompleted: {
+        // Opened on one category (the timer page's "Set Up in Settings").
+        const window = applicationWindow();
+        if (window && window.pendingSettingsCategory && window.pendingSettingsCategory.length > 0) {
+            page.category = window.pendingSettingsCategory;
+            window.pendingSettingsCategory = "";
+        }
+        if (DesktopStyle.macos) {
+            AppSettings.refreshFocusShortcuts();
+        }
         if (CalendarSync && CalendarSync.enabled && CalendarSync.hasPassword && !calWaiting) {
             CalendarSync.refreshCalendarsIfStale();
         }
+    }
+
+    // macOS: the user's shortcuts, as last read, for the Focus card.
+    property var focusShortcutNames: AppSettings.focusShortcutNames()
+    Connections {
+        target: AppSettings
+        function onFocusShortcutNamesChanged() {
+            page.focusShortcutNames = AppSettings.focusShortcutNames();
+        }
+    }
+    readonly property bool focusOnFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
+    readonly property bool focusOffFound: focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
+
+    /// The entries of a Focus shortcut list: the user's shortcuts, and the chosen one if it is
+    /// not among them (so the box still shows what is set).
+    function focusShortcutModel(chosen: string): var {
+        const list = page.focusShortcutNames.map(name => ({ text: name, value: name }));
+        if (chosen.length > 0 && page.focusShortcutNames.indexOf(chosen) < 0) {
+            list.unshift({ text: i18nc("a shortcut of the Shortcuts app that does not exist", "%1 (not found)", chosen), value: chosen });
+        }
+        return list;
     }
 
     /// Disconnect forgets the password: asked first.
@@ -757,6 +787,81 @@ QQC2.Page {
                 }
             }
 
+            // macOS: silencing notifications through a Focus, run by two of the user's shortcuts.
+            SettingsCard {
+                id: focusModeCard
+                objectName: "focusModeCard"
+                category: "focus"
+                available: DesktopStyle.macos
+                title: i18n("Focus while working")
+                iconName: "notifications-disabled"
+                SettingRow {
+                    first: true
+                    title: i18n("Silence notifications with a Focus")
+                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on, one that turns it off. Choose them below, then switch on \"Silence notifications while working\" in a timer's options.")
+                    SButton {
+                        text: i18n("Open Shortcuts")
+                        iconName: "external"
+                        onClicked: Qt.openUrlExternally("shortcuts://")
+                    }
+                    SButton {
+                        kind: "ghost"
+                        iconOnly: true
+                        iconName: "refresh"
+                        text: i18n("Look for the shortcuts again")
+                        Accessible.name: text
+                        QQC2.ToolTip.text: text
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.delay: Theme.toolTipDelay
+                        onClicked: AppSettings.refreshFocusShortcuts()
+                    }
+                }
+                SettingRow {
+                    title: i18n("Shortcut that turns the Focus on")
+                    description: i18n("Runs when a work phase starts.")
+                    enabled: AppSettings.focusShortcutsSupported
+                    SComboBox {
+                        objectName: "focusOnShortcutBox"
+                        textRole: "text"
+                        valueRole: "value"
+                        model: page.focusShortcutModel(AppSettings.focusOnShortcut)
+                        currentIndex: page.valueIndex(model, AppSettings.focusOnShortcut)
+                        Accessible.name: i18n("Shortcut that turns the Focus on")
+                        onActivated: AppSettings.focusOnShortcut = currentValue
+                    }
+                }
+                SettingRow {
+                    title: i18n("Shortcut that turns the Focus off")
+                    description: i18n("Runs when the work phase ends, is paused or stopped, and when Sugo quits.")
+                    enabled: AppSettings.focusShortcutsSupported
+                    SComboBox {
+                        objectName: "focusOffShortcutBox"
+                        textRole: "text"
+                        valueRole: "value"
+                        model: page.focusShortcutModel(AppSettings.focusOffShortcut)
+                        currentIndex: page.valueIndex(model, AppSettings.focusOffShortcut)
+                        Accessible.name: i18n("Shortcut that turns the Focus off")
+                        onActivated: AppSettings.focusOffShortcut = currentValue
+                    }
+                }
+                Banner {
+                    objectName: "focusShortcutStatus"
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.spaceXs
+                    Layout.bottomMargin: Theme.spaceMd
+                    tone: AppSettings.focusShortcutsSupported && page.focusOnFound && page.focusOffFound ? "info" : "warning"
+                    text: !AppSettings.focusShortcutsSupported
+                          ? i18n("The Shortcuts app is not available: silencing notifications needs macOS 12 or later.")
+                          : page.focusOnFound && page.focusOffFound
+                            ? i18n("Both shortcuts were found: timers can silence notifications while you work.")
+                            : !page.focusOnFound && !page.focusOffFound
+                              ? i18n("The shortcuts \"%1\" and \"%2\" were not found. Create them in the Shortcuts app, or choose others.",
+                                     AppSettings.focusOnShortcut, AppSettings.focusOffShortcut)
+                              : i18n("The shortcut \"%1\" was not found. Create it in the Shortcuts app, or choose another.",
+                                     page.focusOnFound ? AppSettings.focusOffShortcut : AppSettings.focusOnShortcut)
+                }
+            }
+
             SettingsCard {
                 category: "focus"
                 title: i18n("Streak and notes")
@@ -1180,20 +1285,25 @@ QQC2.Page {
 
             SettingsCard {
                 category: "advanced"
-                // D-Bus and KRunner: not on macOS.
+                // D-Bus and KRunner on Linux, sugo:// links on macOS.
                 available: AppSettings.externalControlSupported
-                title: i18n("Global Shortcuts and Automation")
+                title: DesktopStyle.macos ? i18n("Shortcuts and Automation") : i18n("Global Shortcuts and Automation")
                 iconName: "configure-shortcuts"
                 SettingRow {
                     first: true
                     title: i18n("Allow other programs to control the timer")
-                    description: i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
+                    description: DesktopStyle.macos
+                        ? i18n("Scripts, the Shortcuts app and other programs can start, pause, skip and stop it by opening sugo:// links. Turn this off if you only use Sugo's own window and menu bar icon.")
+                        : i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
                     SettingSwitch { setting: "allowExternalControl" }
                 }
                 SettingRow {
-                    title: i18n("D-Bus commands")
-                    description: i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
-                                      "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
+                    title: DesktopStyle.macos ? i18n("Links") : i18n("D-Bus commands")
+                    description: DesktopStyle.macos
+                        ? i18n("Open a sugo:// link to control Sugo: in Terminal or a script with the command below, or in the Shortcuts app with the \"Open URLs\" action (give it a keyboard shortcut there). Available links: %1.",
+                               "sugo://toggle, start, pause, resume, stop, skip, show, start/<timer>, preset/<timer>")
+                        : i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
+                               "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
                     Item { implicitWidth: 1 }
                 }
                 Rectangle {
@@ -1215,7 +1325,7 @@ QQC2.Page {
                             Layout.fillWidth: true
                             readOnly: true
                             selectByMouse: true
-                            text: "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
+                            text: DesktopStyle.macos ? "open sugo://toggle" : "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
                             color: Theme.foreground
                             selectionColor: Theme.alpha(Theme.brand, 0.35)
                             font.family: Theme.monoFamily

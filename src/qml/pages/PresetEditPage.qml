@@ -653,15 +653,25 @@ QQC2.Page {
                 FormRow {
                     title: i18n("Silence notifications while working")
                     description: SilenceController.available
-                        ? i18n("Turns off all system notifications for the work phase and back on for the break.")
+                        ? (DesktopStyle.macos
+                           ? i18n("Turns your Focus on for the work phase and off for the break, through the shortcuts chosen in Settings.")
+                           : i18n("Turns off all system notifications for the work phase and back on for the break."))
                         : DesktopStyle.macos
-                          ? i18n("macOS does not let apps silence notifications. Use a Focus mode instead.")
+                          ? i18n("Needs two shortcuts of the Shortcuts app that turn a Focus on and off. Set them up in Settings → Focus.")
                           : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
-                    enabled: SilenceController.available
+                    enabled: SilenceController.available || DesktopStyle.macos
+                    // macOS: until the shortcuts exist, a way to set them up instead of the switch.
+                    SButton {
+                        objectName: "silenceSetupButton"
+                        visible: DesktopStyle.macos && !SilenceController.available
+                        text: i18n("Set Up…")
+                        iconName: "settings"
+                        onClicked: applicationWindow().openSettings("focus")
+                    }
                     SSwitch {
                         id: silenceBox
-                        // macOS: only the explanation, no switch that can never be turned on.
-                        visible: !DesktopStyle.nativeChrome
+                        visible: SilenceController.available || !DesktopStyle.macos
+                        enabled: SilenceController.available
                         Accessible.name: i18n("Silence notifications while working")
                         checked: (page.preset.options && page.preset.options.silenceWhileWorking !== undefined)
                             ? Boolean(page.preset.options.silenceWhileWorking)

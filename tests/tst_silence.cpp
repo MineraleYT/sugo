@@ -340,6 +340,23 @@ private Q_SLOTS:
         QVERIFY(!ran);
     }
 
+    void followsTheInhibitorBecomingAvailable()
+    {
+        // A macOS Focus: the shortcuts are created while Sugo runs.
+        inhibitor->available = false;
+        enableSilenceOnDefaultTimer();
+        QSignalSpy availableChanged(silence.get(), &SilenceController::availableChanged);
+        engine->start();
+        QVERIFY(!silence->available());
+        QVERIFY(!silence->active());
+
+        inhibitor->available = true;
+        Q_EMIT inhibitor->availableChanged();
+        QCOMPARE(availableChanged.count(), 1);
+        QVERIFY(silence->available());
+        QVERIFY(silence->active());
+    }
+
     void waitUntilReleasedReportsTimeoutAndSuccess()
     {
         inhibitor->inhibit(QStringLiteral("x"));

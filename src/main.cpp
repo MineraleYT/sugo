@@ -6,9 +6,11 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QDebug>
 #include <QEvent>
+#include <QFileOpenEvent>
 #include <QPointer>
 #include <QUrl>
 #include <QQmlContext>
@@ -40,11 +42,13 @@
 #include "DockController.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
+#include "ShortcutsFocusInhibitor.h"
 #else
 #include "SingleInstance.h"
 #endif
 #include "StatsModel.h"
 #include "TimerBinding.h"
+#include "TimerCommands.h"
 #include "TimerEngine.h"
 #include "TrayController.h"
 #include "UnixSignals.h"
@@ -77,16 +81,30 @@ namespace
  *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
  *   so this also covers the menu bar icon's Quit. The running phase is then saved as
  *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
+ * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
+ *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
+ *   also activates the application; that must not pop the hidden window up for a command like
+ *   toggle, so a hidden window is shown a moment after the activation, unless a link arrives
+ *   meanwhile or has just arrived (the order of the two events is not fixed).
  */
 class MacApplicationEvents : public QObject
 {
 public:
-    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, bool armed, QObject *parent)
+    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, std::function<void(const QUrl &)> openUrl,
+                         bool armed, QObject *parent)
         : QObject(parent)
         , m_window(window)
         , m_showWindow(std::move(showWindow))
+        , m_openUrl(std::move(openUrl))
         , m_armed(armed)
     {
+        m_pendingShow.setSingleShot(true);
+        m_pendingShow.setInterval(kActivationDelayMs);
+        connect(&m_pendingShow, &QTimer::timeout, this, [this]() {
+            if (m_window && !m_window->isVisible()) {
+                m_showWindow();
+            }
+        });
     }
 
     void arm() { m_armed = true; }
@@ -95,20 +113,35 @@ public:
     {
         if (watched == QCoreApplication::instance() && m_window) {
             if (event->type() == QEvent::ApplicationActivate) {
-                if (m_armed && !m_window->isVisible()) {
-                    m_showWindow();
+                const bool justOpenedUrl = m_lastUrl.isValid() && m_lastUrl.elapsed() < kUrlActivationMs;
+                if (m_armed && !m_window->isVisible() && !justOpenedUrl) {
+                    m_pendingShow.start();
                 }
             } else if (event->type() == QEvent::Quit) {
                 m_window->setProperty("platformQuitting", true);
+            } else if (event->type() == QEvent::FileOpen) {
+                const QUrl url = static_cast<QFileOpenEvent *>(event)->url();
+                if (url.scheme().compare(QLatin1String("sugo"), Qt::CaseInsensitive) == 0) {
+                    m_pendingShow.stop();
+                    m_lastUrl.start();
+                    m_openUrl(url);
+                    return true;
+                }
             }
         }
         return QObject::eventFilter(watched, event);
     }
 
 private:
+    static constexpr int kActivationDelayMs = 250; ///< How long a link may follow its activation.
+    static constexpr int kUrlActivationMs = 1000;  ///< How long an activation may follow its link.
+
     QPointer<QQuickWindow> m_window;
     std::function<void()> m_showWindow;
+    std::function<void(const QUrl &)> m_openUrl;
     bool m_armed;
+    QTimer m_pendingShow;
+    QElapsedTimer m_lastUrl;
 };
 } // namespace
 #endif
@@ -259,6 +292,20 @@ int main(int argc, char *argv[])
         qCritical() << "Cannot create the QML singletons";
         return EXIT_FAILURE;
     }
+#ifdef Q_OS_MACOS
+    // The Focus shortcuts the user chose in the settings; their list is read again whenever Sugo
+    // comes to the front (the user may just have created them in the Shortcuts app). Never in a
+    // smoke run: it starts the timer, and must not run the user's real shortcuts.
+    auto *focusShortcuts = qobject_cast<ShortcutsFocusInhibitor *>(inhibitor.get());
+    if (focusShortcuts && !smokeTest) {
+        settings->attachFocusShortcuts(focusShortcuts);
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, focusShortcuts, [focusShortcuts](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) {
+                focusShortcuts->refreshShortcutList();
+            }
+        });
+    }
+#endif
     silence->attach(timer, presets, inhibitor.get());
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
@@ -399,8 +446,26 @@ int main(int argc, char *argv[])
         QObject::connect(&singleInstance, &AppSingleInstance::activateRequested, window, activateWindow);
 
 #ifdef Q_OS_MACOS
-        // The Dock icon, and quitting from the system (see MacApplicationEvents).
-        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, !background, &services);
+        // sugo:// links: the same commands as D-Bus on Linux, under the same setting. A refused
+        // or failed command shows the window with the reason, so it does not fail silently.
+        auto urlCommands = std::make_shared<TimerCommands>(timer, presets);
+        urlCommands->setControlAllowed(externalControlAllowed);
+        const auto openUrl = [urlCommands, window, activateWindow](const QUrl &url) {
+            const TimerCommands::UrlCommand command = TimerCommands::parseUrl(url);
+            const TimerCommands::Result result = urlCommands->run(command);
+            if (result.ok() && command.action != TimerCommands::UrlCommand::Action::Show) {
+                return;
+            }
+            if (!result.ok()) {
+                qWarning().noquote() << "Cannot follow" << url.toDisplayString() << ":" << result.message;
+            }
+            activateWindow();
+            if (!result.ok()) {
+                QMetaObject::invokeMethod(window, "showPassiveNotification", Q_ARG(QString, result.message), Q_ARG(QVariant, QVariant()));
+            }
+        };
+        // The Dock icon, links, and quitting from the system (see MacApplicationEvents).
+        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, openUrl, !background, &services);
         app.installEventFilter(macEvents);
         if (background) {
             QTimer::singleShot(1000, macEvents, [macEvents]() { macEvents->arm(); });

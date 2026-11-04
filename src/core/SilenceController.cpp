@@ -7,11 +7,6 @@
 
 #include "Localization.h"
 
-namespace
-{
-constexpr int kShutdownWaitMs = 1000;
-}
-
 SilenceController::SilenceController(QObject *parent)
     : QObject(parent)
 {
@@ -27,6 +22,11 @@ void SilenceController::attach(TimerEngine *engine, PresetModel *presets, Notifi
     connect(engine, &TimerEngine::stateChanged, this, &SilenceController::update);
     // `active` follows what the desktop actually granted (or lost).
     connect(inhibitor, &NotificationInhibitor::inhibitedChanged, this, &SilenceController::update);
+    // The shortcuts of a macOS Focus can be created, renamed or chosen at any time.
+    connect(inhibitor, &NotificationInhibitor::availableChanged, this, [this]() {
+        Q_EMIT availableChanged();
+        update();
+    });
     connect(presets, &PresetModel::currentChanged, this, &SilenceController::update);
     // Only the current timer's options matter; editing another timer changes nothing here.
     connect(presets, &PresetModel::presetChanged, this, [this](const QString &uuid) {
@@ -79,5 +79,6 @@ void SilenceController::shutdown()
     m_engine = nullptr; // turns update() off: nothing may silence again while quitting
     m_wanted = false;
     m_inhibitor->release();
-    m_inhibitor->waitUntilReleased(kShutdownWaitMs);
+    // Running a shortcut (macOS) takes longer than a D-Bus call: each inhibitor says how long.
+    m_inhibitor->waitUntilReleased(m_inhibitor->releaseTimeoutMs());
 }

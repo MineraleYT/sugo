@@ -3,6 +3,10 @@
 
 #include "NoopInhibitor.h"
 
+#ifdef Q_OS_MACOS
+#include "ShortcutsFocusInhibitor.h"
+#endif
+
 #ifdef Q_OS_LINUX
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -40,5 +44,10 @@ std::unique_ptr<NotificationInhibitor> createNotificationInhibitor(QObject *pare
         qCInfo(lcInhibitorFactory) << "The notification server has no Inhibit method; silencing is unavailable";
     }
 #endif
+#ifdef Q_OS_MACOS
+    // A Focus through the user's two shortcuts; unavailable until they exist and are chosen.
+    return std::make_unique<ShortcutsFocusInhibitor>(ShortcutsFocusInhibitor::DefaultProgram, parent);
+#else
     return std::make_unique<NoopInhibitor>(parent);
+#endif
 }

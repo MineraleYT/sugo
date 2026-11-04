@@ -137,3 +137,8 @@ target_compile_definitions(tst_appsettings PRIVATE SUGO_BUNDLED_SOUNDS_ROOT="${P
 # --- macOS port: W2-B Dock integration and fallback icons ---
 sugo_add_test(tst_dockcontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus)
 set_tests_properties(tst_dockcontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# --- macOS port: W2-A (Focus through Shortcuts, sugo:// links) ---
+# Both run on Linux too: the Focus with a fake `shortcuts` script (tests/FakeShortcuts.h).
+sugo_add_test(tst_shortcutsfocusinhibitor Qt6::Core)
+sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)
