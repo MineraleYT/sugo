@@ -32,10 +32,30 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
+      - name: Read the pinned versions
+        id: pins
+        run: |
+          for pin in QT_VERSION AQT_VERSION ECM_TAG LINUXDEPLOY_TAG LINUXDEPLOY_QT_TAG; do
+            value=$(sed -n "s/^$pin=//p" packaging/appimage/build.sh)
+            test -n "$value"
+            echo "$pin=$value" >> "$GITHUB_OUTPUT"
+          done
+
+      # Qt, extra-cmake-modules and linuxdeploy, where build.sh looks for them before downloading
+      # (it checks linuxdeploy's SHA-256 either way).
+      - name: Restore Qt, extra-cmake-modules and linuxdeploy
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/sugo-appimage/qt
+            ~/sugo-appimage/ecm
+            ~/sugo-appimage/linuxdeploy*.AppImage
+          key: appimage-deps-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}-ld${{ steps.pins.outputs.LINUXDEPLOY_TAG }}-ldqt${{ steps.pins.outputs.LINUXDEPLOY_QT_TAG }}
+
       - name: Build
         env:
           VERSION: ${{ inputs.version }}
-        run: bash packaging/appimage/build.sh "$VERSION" "$GITHUB_WORKSPACE/out"
+        run: WORK="$HOME/sugo-appimage" bash packaging/appimage/build.sh "$VERSION" "$GITHUB_WORKSPACE/out"
 
       - name: Start it without a display
         working-directory: out
