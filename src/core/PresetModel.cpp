@@ -179,11 +179,18 @@ QStringList PresetModel::applyFields(TimerPreset &preset, const QVariantMap &fie
 
     for (const auto &desc : PresetSettings::descriptors()) {
         if (fields.contains(desc.key)) {
-            const QVariant value = coercedOption(desc, fields.value(desc.key));
-            if (desc.type == QLatin1String("int") && value.toInt() != fields.value(desc.key).toInt()) {
-                adjusted.append(desc.key);
+            const QVariant given = fields.value(desc.key);
+            if (desc.type == QLatin1String("int")) {
+                bool ok = false;
+                const int n = given.toInt(&ok);
+                if (!ok || std::clamp(n, desc.minimum, desc.maximum) != n) {
+                    adjusted.append(desc.key);
+                }
+                if (!ok) {
+                    continue; // unreadable: the current value stays, as for the fields above
+                }
             }
-            preset.options.insert(desc.key, value);
+            preset.options.insert(desc.key, coercedOption(desc, given));
         }
     }
     return adjusted;

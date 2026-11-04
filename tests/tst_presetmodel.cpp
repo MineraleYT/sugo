@@ -96,6 +96,14 @@ private Q_SLOTS:
         QCOMPARE(p.value(QStringLiteral("shortBreakSeconds")).toInt(), 0);
         QCOMPARE(p.value(QStringLiteral("cyclesBeforeLong")).toInt(), 4);
         QCOMPARE(p.value(QStringLiteral("longBreakSeconds")).toInt(), 10 * 60);
+
+        // An unreadable option is reported too, and keeps its value (even one that reads as 0).
+        QVERIFY(model->setOption(uuid, PresetOption::AutoStartMode, 1));
+        adjusted.clear();
+        QVERIFY(model->update(uuid, {{PresetOption::AutoStartMode, QStringLiteral("abc")}}));
+        QCOMPARE(adjusted.count(), 1);
+        QCOMPARE(adjusted.first().at(1).toStringList(), QStringList{PresetOption::AutoStartMode});
+        QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 1);
     }
 
         void namesAreLimitedLikeTheEditorFields()
