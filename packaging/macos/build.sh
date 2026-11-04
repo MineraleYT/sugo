@@ -85,7 +85,7 @@ CONTENTS="$APP/Contents"
 # The libraries a Mach-O file loads, once each (a universal file lists them for each architecture,
 # under a header line per architecture; the dependencies are the indented lines).
 deps() {
-    otool -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
+    otool -arch all -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
 }
 
 # --- Qt in the bundle ----------------------------------------------------------------------------
@@ -117,7 +117,7 @@ done
 # The build's own rpaths to Qt would make the app look for Qt where it was built; the bundled
 # frameworks are found through @executable_path/../Frameworks.
 rpaths() {
-    otool -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
+    otool -arch all -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
 }
 rpaths | while read -r rpath; do
     case "$rpath" in
@@ -154,7 +154,7 @@ fi
 if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
     users=$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -not -path '*/QtDBus.framework/*' -print0 \
         | while IFS= read -r -d '' f; do
-              if otool -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
+              if otool -arch all -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
           done)
     [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
     echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
@@ -192,7 +192,7 @@ while IFS= read -r -d '' f; do
     done
     dir=$(dirname "$f")
     # A library lists its own install name among its dependencies: skip it.
-    own=$(otool -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
+    own=$(otool -arch all -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
     while read -r dep; do
         [ -n "$dep" ] && [ "$dep" != "$own" ] || continue
         case "$dep" in
