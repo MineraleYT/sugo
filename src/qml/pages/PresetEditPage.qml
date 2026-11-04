@@ -701,13 +701,15 @@ QQC2.Page {
                 }
                 FormRow {
                     title: i18n("Silence notifications while working")
-                    description: SilenceController.available
-                        ? (DesktopStyle.macos
-                           ? i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts.")
-                           : i18n("Turns off all system notifications for the work phase and back on for the break."))
-                        : DesktopStyle.macos
-                          ? i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")
-                          : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
+                    // Availability can change while the page is open (the shortcuts installed, the
+                    // notification service appearing): the row keeps the height of the taller text.
+                    readonly property var silenceTexts: DesktopStyle.macos
+                        ? [i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts."),
+                           i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")]
+                        : [i18n("Turns off all system notifications for the work phase and back on for the break."),
+                           i18n("Not available: this desktop's notification service cannot be silenced by applications.")]
+                    description: silenceTexts[SilenceController.available ? 0 : 1]
+                    descriptionVariants: silenceTexts
                     enabled: SilenceController.available || DesktopStyle.macos
                     // macOS: until the shortcuts exist, a way to set them up instead of the switch.
                     SButton {
