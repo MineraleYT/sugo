@@ -207,7 +207,18 @@ QQC2.Page {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: -Theme.spaceMd
             Accessible.role: Accessible.StaticText
-            Accessible.name: i18nc("time left", "%1 minutes %2 seconds left", page.minutesText, page.secondsText)
+            // In words, unit by unit ("1 hour 5 minutes 3 seconds left"), not the clock's "1:05".
+            Accessible.name: {
+                const total = TimerEngine.remainingSeconds;
+                const minutes = Math.floor((total % 3600) / 60);
+                const parts = [];
+                if (page.hours > 0) {
+                    parts.push(i18np("%1 hour", "%1 hours", page.hours));
+                }
+                parts.push(i18np("%1 minute", "%1 minutes", minutes));
+                parts.push(i18np("%1 second", "%1 seconds", total % 60));
+                return i18nc("time left, e.g. 5 minutes 3 seconds", "%1 left", parts.join(" "));
+            }
             opacity: TimerEngine.paused ? 0.55 : 1
             Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
 
