@@ -255,6 +255,30 @@ private Q_SLOTS:
         QVERIFY(current.count() >= 1);
     }
 
+    void removalListenersAlreadySeeTheNewSelection()
+    {
+        // The built-in timer, edited: its values are no longer the factory ones.
+        QVERIFY(model->update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 40 * 60}}));
+        const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("Temp")}});
+        model->setCurrentUuid(uuid);
+
+        QList<int> indexes;
+        QList<int> workSeconds;
+        const auto record = [&] {
+            indexes.append(model->currentIndex());
+            workSeconds.append(model->currentPreset().workSeconds);
+        };
+        const auto removed = connect(model.get(), &QAbstractItemModel::rowsRemoved, this, record);
+        const auto counted = connect(model.get(), &PresetModel::countChanged, this, record);
+
+        const bool ok = model->remove(uuid);
+        disconnect(removed); // the slot reads locals of this test
+        disconnect(counted);
+        QVERIFY(ok);
+        QCOMPARE(indexes, (QList<int>{0, 0}));
+        QCOMPARE(workSeconds, (QList<int>{40 * 60, 40 * 60}));
+    }
+
     void removingOtherPresetKeepsSelection()
     {
         const QString a = model->create({{QStringLiteral("name"), QStringLiteral("A")}});

@@ -153,6 +153,8 @@ private Q_SLOTS:
         QVERIFY(f.commands.status().startsWith(QStringLiteral("idle:work:")));
         QVERIFY(f.commands.presets().contains(QStringLiteral("Deep Work")));
         QCOMPARE(f.commands.resolvePreset(QStringLiteral("DEEP WORK")), f.deep);
+        QCOMPARE(f.commands.resolvePreset(QStringLiteral("  deep work ")), f.deep);
+        QVERIFY(f.commands.resolvePreset(QStringLiteral("   ")).isEmpty());
         QCOMPARE(f.commands.resolvePreset(f.deep), f.deep);
         QVERIFY(f.commands.stepPreset(1).ok());
     }
