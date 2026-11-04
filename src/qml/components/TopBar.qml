@@ -60,9 +60,17 @@ Rectangle {
         target: null
         onActiveChanged: if (active) bar.moveRequested()
     }
+    // When the status pill was last clicked. The bar's handler sees that click too, and the pill
+    // goes away with it (it opens the timer page): a second click there must not complete a
+    // double-click that maximises the window.
+    property double statusClickedAt: 0
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onDoubleTapped: bar.toggleMaximizeRequested()
+        onDoubleTapped: {
+            if (Date.now() - bar.statusClickedAt > Qt.styleHints.mouseDoubleClickInterval) {
+                bar.toggleMaximizeRequested();
+            }
+        }
     }
 
     RowLayout {
@@ -138,7 +146,10 @@ Rectangle {
             Layout.maximumWidth: implicitWidth
             Layout.fillWidth: true
             TapHandler {
-                onTapped: bar.statusClicked()
+                onTapped: {
+                    bar.statusClickedAt = Date.now();
+                    bar.statusClicked();
+                }
             }
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor
