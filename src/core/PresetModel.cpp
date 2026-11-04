@@ -442,6 +442,16 @@ bool PresetModel::remove(const QString &uuid)
     return true;
 }
 
+void PresetModel::markAllModified()
+{
+    const qint64 now = nowMs();
+    for (TimerPreset &preset : m_presets) {
+        preset.updatedAt = now;
+        preset.updatedBy.clear();
+    }
+    Q_EMIT modified();
+}
+
 bool PresetModel::reset(const QString &uuid)
 {
     const int row = indexOf(uuid);

@@ -108,6 +108,10 @@ public:
     /// other presets.
     Q_INVOKABLE bool reset(const QString &uuid);
 
+    /// Stamps every preset as changed now by this computer and emits modified(): after a backup
+    /// restore, so Sugo Sync publishes the restored timers over what other computers hold.
+    void markAllModified();
+
     Q_INVOKABLE QVariant option(const QString &uuid, const QString &key) const;
     /// Unknown keys are rejected. Values are coerced to the option's type.
     Q_INVOKABLE bool setOption(const QString &uuid, const QString &key, const QVariant &value);

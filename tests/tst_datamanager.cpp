@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QFileInfo>
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -125,7 +126,15 @@ private Q_SLOTS:
         QVERIFY(presetRepository->saveAll({}));
         presetModel->setPresets({}, QString());
 
+        QSignalSpy modified(presetModel.get(), &PresetModel::modified);
+        const qint64 before = QDateTime::currentMSecsSinceEpoch();
         QVERIFY(manager->restoreDatabase(backup));
+        // Changed now by this computer, so Sugo Sync publishes the restored timers.
+        QCOMPARE(modified.count(), 1);
+        for (const TimerPreset &preset : presetModel->presets()) {
+            QVERIFY(preset.updatedAt >= before);
+            QVERIFY(preset.updatedBy.isEmpty());
+        }
         QCOMPARE(manager->sessionCount(), 1);
         const auto restored = sessions->between(0, 2000);
         QCOMPARE(restored.size(), 1);
