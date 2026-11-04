@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QFile>
+#include <QMediaDevices>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
@@ -7,6 +8,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <cstring>
 #include <memory>
 
 #include "FakeClock.h"
@@ -43,11 +45,20 @@ private:
     /// The process exists and has not ended (a zombie not yet reaped counts as ended).
     static bool isRunning(qint64 pid)
     {
+#ifdef Q_OS_LINUX
         QFile stat(QStringLiteral("/proc/%1/stat").arg(pid));
         if (!stat.open(QIODevice::ReadOnly)) return false;
         const QByteArray line = stat.readAll();
         const qsizetype end = line.lastIndexOf(')');
         return end >= 0 && line.size() > end + 2 && line.at(end + 2) != 'Z' && line.at(end + 2) != 'X';
+#else
+        // No /proc (macOS): ask ps for the process state; nothing printed if it is gone.
+        QProcess ps;
+        ps.start(QStringLiteral("ps"), {QStringLiteral("-o"), QStringLiteral("stat="), QStringLiteral("-p"), QString::number(pid)});
+        if (!ps.waitForFinished(3000)) return false;
+        const QByteArray state = ps.readAllStandardOutput().trimmed();
+        return !state.isEmpty() && !state.startsWith('Z');
+#endif
     }
 
     bool playerRunning() const
@@ -108,6 +119,10 @@ private Q_SLOTS:
         clock = FakeClock();
         engine = std::make_unique<TimerEngine>(&clock, nullptr);
         sounds = std::make_unique<FocusSoundController>();
+#ifndef Q_OS_LINUX
+        // Elsewhere (macOS) the default is QAudioSink; these tests watch the fake pw-play.
+        sounds->setBackendForTesting(FocusSoundController::Backend::PwPlay);
+#endif
         sounds->attach(engine.get(), nullptr);
         sounds->setMode(static_cast<int>(FocusSoundController::Mode::WhiteNoise));
         sounds->setVolume(45);
@@ -249,6 +264,68 @@ private Q_SLOTS:
         QCOMPARE(sounds->mode(), FocusSoundController::LastMode);
         sounds->setMode(-2);
         QCOMPARE(sounds->mode(), 0);
+    }
+    void theBackendFollowsThePlayersThereAre()
+    {
+        using Backend = FocusSoundController::Backend;
+        const auto with = [](QStringList programs) {
+            return FocusSoundController::chooseBackend([programs](const QString &p) { return programs.contains(p); });
+        };
+#ifdef Q_OS_MACOS
+        QCOMPARE(with({QStringLiteral("pw-play"), QStringLiteral("aplay")}), Backend::AudioSink);
+#else
+        QCOMPARE(with({QStringLiteral("pw-play"), QStringLiteral("aplay")}), Backend::PwPlay);
+        QCOMPARE(with({QStringLiteral("aplay")}), Backend::Aplay);
+        QCOMPARE(with({}), Backend::AudioSink);
+#endif
+    }
+
+    void monoAudioIsConvertedForTheDevice()
+    {
+        QByteArray mono(4, Qt::Uninitialized);
+        const qint16 in[2] = {16384, -32768};
+        std::memcpy(mono.data(), in, sizeof(in));
+
+        QCOMPARE(FocusSoundController::convertMonoS16(mono, 1, false), mono);
+        const QByteArray stereo = FocusSoundController::convertMonoS16(mono, 2, false);
+        QCOMPARE(stereo.size(), 8);
+        const auto *s16 = reinterpret_cast<const qint16 *>(stereo.constData());
+        QCOMPARE(s16[0], qint16(16384));
+        QCOMPARE(s16[1], qint16(16384));
+        QCOMPARE(s16[2], qint16(-32768));
+        QCOMPARE(s16[3], qint16(-32768));
+
+        const QByteArray floats = FocusSoundController::convertMonoS16(mono, 2, true);
+        QCOMPARE(floats.size(), 16);
+        float f[4];
+        std::memcpy(f, floats.constData(), sizeof(f));
+        QCOMPARE(f[0], 0.5f);
+        QCOMPARE(f[1], 0.5f);
+        QCOMPARE(f[2], -1.0f);
+        QCOMPARE(f[3], -1.0f);
+    }
+
+    void theAudioSinkBackendCopesWithoutADevice()
+    {
+        // With an audio device it plays (silently here) and stops; without one (CI) it only logs.
+        const bool haveDevice = !QMediaDevices::defaultAudioOutput().isNull();
+        sounds->setBackendForTesting(FocusSoundController::Backend::AudioSink);
+        sounds->setVolume(0);
+        engine->start();
+        if (haveDevice) {
+            QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        } else {
+            QTest::qWait(1500); // failed, retried
+            QVERIFY(!sounds->isPlaying());
+        }
+        engine->pause();
+        QTRY_VERIFY_WITH_TIMEOUT(!sounds->isPlaying(), 5000); // nothing audible to fade: stopped
+        engine->resume();
+        if (haveDevice) {
+            QTRY_VERIFY_WITH_TIMEOUT(sounds->isPlaying(), 3000);
+        }
+        QVERIFY(startedPlayers().isEmpty()); // no player process
+        sounds.reset();
     }
 };
 

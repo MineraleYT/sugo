@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -668,6 +669,64 @@ private Q_SLOTS:
         // The duration is not known yet: only the fade-in applies.
         QCOMPARE(AppSettings::alertFadeGain(150, 0), 0.5);
         QCOMPARE(AppSettings::alertFadeGain(5000, 0), 1.0);
+    }
+    void soundsAreFoundUnderTheGivenRootsInThemeOrder()
+    {
+        QTemporaryDir first;
+        QTemporaryDir second;
+        QVERIFY(first.isValid() && second.isValid());
+        const auto touch = [](const QString &file) {
+            QVERIFY(QDir().mkpath(QFileInfo(file).absolutePath()));
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        };
+        touch(first.filePath(QStringLiteral("sounds/freedesktop/stereo/bell.oga")));
+        touch(second.filePath(QStringLiteral("sounds/ocean/stereo/bell.wav")));
+        touch(second.filePath(QStringLiteral("sounds/freedesktop/stereo/complete.oga")));
+        const QStringList roots = {first.path(), second.path()};
+
+        // Any theme's file in Ocean comes before freedesktop's, whatever root holds it.
+        QCOMPARE(AppSettings::findSoundFile(QStringLiteral("bell"), roots), second.filePath(QStringLiteral("sounds/ocean/stereo/bell.wav")));
+        QCOMPARE(AppSettings::findSoundFile(QStringLiteral("complete"), roots),
+                 second.filePath(QStringLiteral("sounds/freedesktop/stereo/complete.oga")));
+        QVERIFY(AppSettings::findSoundFile(QStringLiteral("missing"), roots).isEmpty());
+        QVERIFY(AppSettings::findSoundFile(QStringLiteral("bell"), {}).isEmpty());
+        // An absolute path is used as is, if it is a file.
+        const QString absolute = first.filePath(QStringLiteral("sounds/freedesktop/stereo/bell.oga"));
+        QCOMPARE(AppSettings::findSoundFile(absolute, {}), absolute);
+        QVERIFY(AppSettings::findSoundFile(first.filePath(QStringLiteral("nothing.oga")), {}).isEmpty());
+    }
+
+    void theSearchRootsIncludeTheSystemSounds()
+    {
+        const QStringList roots = AppSettings::soundSearchRoots();
+        QVERIFY(roots.contains(QStringLiteral("/usr/share")));
+        QVERIFY(roots.contains(QStringLiteral("/run/host/usr/share")));
+    }
+
+    void everyOfferedSoundIsBundled()
+    {
+        // The names in the two sound lists of AppSettingsPage.qml; macOS has only these files.
+        for (const char *name : {"alarm-clock-elapsed", "complete", "message-new-instant", "dialog-information", "bell",
+                                 "completion-success", "service-login", "window-attention", "phone-incoming-call", "message"}) {
+            const QString file = AppSettings::findSoundFile(QLatin1String(name), {QStringLiteral(SUGO_BUNDLED_SOUNDS_ROOT)});
+            QVERIFY2(!file.isEmpty(), name);
+            QVERIFY2(QFileInfo::exists(file + QStringLiteral(".license")), name);
+        }
+    }
+
+    void afplayGetsOnlyFormatsItReads()
+    {
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.wav")));
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.AIFF")));
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.caf")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell.oga")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell.ogg")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell")));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), 80),
+                 (QStringList{QStringLiteral("-v"), QStringLiteral("0.80"), QStringLiteral("/x/bell.wav")}));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), 150).at(1), QStringLiteral("1.00"));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), -5).at(1), QStringLiteral("0.00"));
     }
 };
 
