@@ -126,7 +126,7 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
     insertOption.prepare(QStringLiteral("INSERT INTO preset_option (preset_id, key, value) VALUES (?, ?, ?)"));
 
     QSet<QString> keep;
-    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
     for (int i = 0; i < presets.size(); ++i) {
         const TimerPreset &p = presets.at(i);
         keep.insert(p.uuid);

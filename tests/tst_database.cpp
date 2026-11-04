@@ -92,8 +92,8 @@ private Q_SLOTS:
 
         QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
         QCOMPARE(tableNames(db.connectionName()),
-                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"),
-                              QStringLiteral("preset_option"), QStringLiteral("session")}));
+                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"), QStringLiteral("preset_option"),
+                              QStringLiteral("preset_tombstone"), QStringLiteral("session")}));
     }
 
     void foreignKeysAreEnforced()
@@ -177,8 +177,8 @@ private Q_SLOTS:
         // The new database is complete and stamped.
         QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
         QCOMPARE(tableNames(db.connectionName()),
-                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"),
-                              QStringLiteral("preset_option"), QStringLiteral("session")}));
+                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"), QStringLiteral("preset_option"),
+                              QStringLiteral("preset_tombstone"), QStringLiteral("session")}));
         QCOMPARE(scalar(db.connectionName(), QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
 
         // The old file survives untouched under a new name.
