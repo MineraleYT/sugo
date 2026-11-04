@@ -742,7 +742,7 @@ void CalendarSync::setServerUrl(const QString &url)
     QString error;
     const QString normalized = normalizeUrl(url, &error);
     if (!error.isEmpty()) {
-        setLastError(error);
+        rejectInput(error);
         return;
     }
     if (normalized == m_serverUrl) {
@@ -800,7 +800,7 @@ void CalendarSync::setCalendarUrl(const QString &url)
     QString error;
     const QString normalized = normalizeUrl(url, &error);
     if (!error.isEmpty() || !calendarOnServer(normalized, &error)) {
-        setLastError(error);
+        rejectInput(error);
         return;
     }
     if (normalized == m_calendarUrl) {
@@ -966,6 +966,12 @@ void CalendarSync::setLastError(const QString &error)
     }
     m_lastError = scrubbed;
     Q_EMIT lastErrorChanged();
+}
+
+void CalendarSync::rejectInput(const QString &error)
+{
+    setLastError(error);
+    Q_EMIT inputRejected(scrub(error));
 }
 
 QString CalendarSync::scrub(const QString &text) const
