@@ -52,7 +52,7 @@ sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia q
 #### openSUSE Tumbleweed
 ```sh
 sudo zypper install cmake ninja gcc-c++ \
-    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel extra-cmake-modules
+    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel qt6-sql-sqlite extra-cmake-modules
 ```
 
 #### macOS 13 or newer
