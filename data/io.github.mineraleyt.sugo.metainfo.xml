@@ -10,7 +10,7 @@
   <name>Sugo</name>
   <summary>Pomodoro timer with configurable presets and session statistics</summary>
   <description>
-    <p>Sugo is a Pomodoro timer for Linux desktops, at home on KDE Plasma. It provides configurable work and break phases, timer presets, session history, and productivity statistics.</p>
+    <p>Sugo is a Pomodoro timer for Linux desktops, at home on KDE Plasma, and for macOS. It provides configurable work and break phases, timer presets, session history, and productivity statistics.</p>
     <p>Sugo is an independent project and is not an official KDE application.</p>
     <ul>
       <li>Work, short-break, and long-break phases with configurable durations and cycle count</li>
@@ -34,6 +34,21 @@
     <binary>sugo</binary>
   </provides>
   <releases>
+    <release version="1.0.1" date="2026-11-04">
+      <description>
+        <p>Welcome macOS: Sugo now runs on macOS 13 or later, on Apple Silicon and Intel Macs.</p>
+        <ul>
+          <li>A native Mac app: menu-bar countdown, Dock badge and menu, app menu and shortcuts, native notifications, Keychain and login item</li>
+          <li>On macOS, notifications are silenced during work with a Focus through Shortcuts, the timer can be controlled with sugo:// links, and the app updates itself from the release disk image</li>
+          <li>Export the session history as CSV or JSON, and remove only the sessions older than a few months</li>
+          <li>Reset the settings to their defaults, show the welcome tour again, and open the database folder from the settings</li>
+          <li>More focus sounds, with sounds and alerts that fade in and out</li>
+          <li>Resize the phases of the cycle bar with the mouse, and choose the timer over D-Bus</li>
+          <li>Diagnostics can record Sugo's debug messages on request</li>
+          <li>Fixes: our window buttons hide when KWin forces its title bar, and the layout no longer moves when a message comes or goes</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-31">
       <description>
         <p>First release of Sugo.</p>
