@@ -4,7 +4,7 @@
 Stato: bozza di lavoro (4 novembre 2026, ramo `dev` @ 7ce94c3). **Server:** fasi 2.1–2.4 e test fatti nel
 repository `sugo-sync` (`worker/`, contratto dell'API in `docs/api.md`, che fa fede sui dettagli), ambiente
 dev online su `https://sugo-sync-dev.minerale.workers.dev`; produzione su `api.sugo.stream` non ancora.
-**Client:** nessuna riga scritta del sync; già pronti `createSecretStore()` e `MacKeychainStore` (3.5, arrivati col port macOS, PR #1). Quello che dipende da servizi esterni o da comportamenti da provare è
+**Client:** Fase 1 fatta sul ramo `sync/phase1-core` (migrazione, timestamp, tombstone, formato e unione, cifratura, libsodium, test); già pronti `createSecretStore()` e `MacKeychainStore` (3.5, arrivati col port macOS, PR #1). Quello che dipende da servizi esterni o da comportamenti da provare è
 segnato **[verificare]**.
 Effort: **S** < mezza giornata, **M** 1–2 giorni, **L** più di 2 giorni.
 
@@ -202,13 +202,13 @@ device_id, expires_at, used_at)`, `device_code(…)`, `sealed_key(device_id, fro
 
 | ID | Cosa | File | Effort |
 |---|---|---|---|
-| 1.1 | **Migrazione 2** (in coda a `migrations()`): `preset.updated_at INTEGER NOT NULL DEFAULT 0`, tabella `preset_tombstone(uuid TEXT PRIMARY KEY, deleted_at INTEGER NOT NULL)`. | `src/db/Database.cpp:20` | S |
-| 1.2 | `TimerPreset` con `createdAt`, `updatedAt`; `PresetModel` li imposta in `create/update/setOption/reset/duplicate` con un orologio iniettabile (wall clock, non il `Clock` monotono del timer). | `src/core/TimerPreset.h`, `src/core/PresetModel.cpp` | S–M |
-| 1.3 | `PresetRepository`: legge e scrive i due campi, scrive il tombstone in `saveAll` quando cancella (`:188-200`), `tombstones()`, eliminazione dei vecchi. | `src/db/PresetRepository.{h,cpp}` | S–M |
-| 1.4 | `PresetSyncFormat`: JSON ↔ preset e tombstone, `merge(local, remote) → {result, changedLocal, changedRemote}`. | nuovi `src/sync/PresetSyncFormat.{h,cpp}` | M |
-| 1.5 | `SyncCrypto`: involucro di libsodium (XChaCha20-Poly1305, `crypto_box` autenticato tra dispositivi, codice di recupero, codice di verifica a 6 cifre dalle due chiavi pubbliche). Wipe della memoria con `sodium_memzero`. | nuovi `src/sync/SyncCrypto.{h,cpp}` | M |
-| 1.6 | **libsodium** come dipendenza: `pkg_check_modules(sodium REQUIRED IMPORTED_TARGET libsodium)` in `CMakeLists.txt`; aggiunta al manifest Flatpak se non è nel runtime **[verificare]**, allo script AppImage, a Homebrew e al DMG (piano macOS 3.1); `docs/DEVELOPMENT.md` (pacchetti per distro). | `CMakeLists.txt:39`, `io.github.mineraleyt.sugo.yml`, `packaging/appimage/build.sh` | S–M |
-| 1.7 | Test: `tst_presetsyncformat` (unione: modifica contro modifica, modifica contro cancellazione, predefinito, opzioni sconosciute, formato futuro), `tst_synccrypto` (vettori noti, AD sbagliata rifiutata), migrazione in `tst_database`. | `tests/` | M |
+| 1.1 | ✅ **Migrazione 2** (in coda a `migrations()`): `preset.updated_at INTEGER NOT NULL DEFAULT 0`, `preset.updated_by TEXT NOT NULL DEFAULT ''`, tabella `preset_tombstone(uuid TEXT PRIMARY KEY, deleted_at INTEGER NOT NULL, deleted_by TEXT NOT NULL DEFAULT '')`. Gli autori (id del dispositivo, vuoto = questo computer) servono a conservare `updatedBy`/`deletedBy` arrivati da un altro dispositivo. I tempi dei preset diventano millisecondi: la migrazione converte `created_at` (secondi nella versione 1). | `src/db/Database.cpp:20` | S |
+| 1.2 | ✅ `TimerPreset` con `createdAt`, `updatedAt`, `updatedBy`; `PresetModel` li imposta in `create/update/setOption/reset/duplicate` con `setNowProvider()` (wall clock, non il `Clock` monotono del timer). Una modifica che non cambia nulla lascia l'ora; una modifica fatta qui svuota l'autore. | `src/core/TimerPreset.h`, `src/core/PresetModel.cpp` | S–M |
+| 1.3 | ✅ `PresetRepository`: legge e scrive tempi e autore; `saveAll(presets, received = {})` lascia un tombstone per ogni preset cancellato, quello ricevuto (con il suo `deletedAt`/`deletedBy`) o uno nuovo con l'ora locale; mai per il predefinito né per un preset presente, che perde il suo. `tombstones()`, scadenza a 180 giorni (`TombstoneLifetimeMs`), `setNowProvider()`. | `src/db/PresetRepository.{h,cpp}` | S–M |
+| 1.4 | ✅ `PresetSyncFormat`: `toJson(data, deviceId)`, `fromJson(json) → {ok, format, data}`, `merge(local, remote, deviceId, nowMs, remoteFormat) → {result, changedLocal, changedRemote}`, `Format = 1`. | nuovi `src/sync/PresetSyncFormat.{h,cpp}` | M |
+| 1.5 | ✅ `SyncCrypto`: involucro di libsodium (`encryptBlob`/`decryptBlob` XChaCha20-Poly1305, `generateKeyPair`/`publicKeyFor`, `box`/`openBox` con `crypto_box` autenticato, `verificationCode` indipendente dall'ordine, `newRecoveryCode`/`formatRecoveryCode`/`parseRecoveryCode`, `sealWithRecovery`/`openWithRecovery`). Segreti in `SecretBytes`, cancellati con `sodium_memzero`. Il codice di recupero ha 12 bit di controllo: 28 caratteri in 7 gruppi da 4. | nuovi `src/sync/SyncCrypto.{h,cpp}` | M |
+| 1.6 | ✅ **libsodium** (≥ 1.0.18) come dipendenza: `pkg_check_modules` in `CMakeLists.txt`; modulo 1.0.22 nel manifest Flatpak (verificato: non è né nel runtime KDE 6.11 né in freedesktop-sdk 25.08); `libsodium-dev` nello script AppImage, che controlla che la libreria sia nell'AppDir; job Linux della CI; pacchetti per distro in `docs/DEVELOPMENT.md`. macOS (libsodium universale e statica, DMG, job macOS della CI) nella PR #3. | `CMakeLists.txt:39`, `io.github.mineraleyt.sugo.yml`, `packaging/appimage/build.sh` | S–M |
+| 1.7 | ✅ Test: `tst_presetsyncformat` (unione: modifica contro modifica, modifica contro cancellazione, predefinito, opzioni sconosciute, formato futuro), `tst_synccrypto` (vettori calcolati con PyNaCl, AD sbagliata rifiutata, box da mittente sbagliato rifiutato), migrazione in `tst_database`, tempi e tombstone in `tst_presetmodel` e `tst_presetrepository`. | `tests/` | M |
 
 ## Fase 2 — Server
 
@@ -229,7 +229,7 @@ device_id, expires_at, used_at)`, `device_code(…)`, `sealed_key(device_id, fro
 | 3.1 | `SyncApi`: chiamate HTTP con `QNetworkAccessManager` secondo `docs/api.md` di `sugo-sync`; errori tipizzati (rete, `401`, `412`, `428`, `413`, `slow_down`, `device_limit_reached`, formato). **Rinnovo del token in un solo punto, mai due in parallelo, con il nuovo refresh token salvato in `SecretStore` prima di qualunque altra cosa** (un token ruotato riusato blocca il dispositivo). URL base iniettabile per i test. | nuovi `src/sync/SyncApi.{h,cpp}` | M |
 | 3.2 | `SyncAccount`: accesso con codice (attesa con "Disconnect a device on sugo.stream" se il limite è pieno), chiave (creazione, approvazione con `crypto_box` e verifica di `from_public_key`, recupero, conferma con `DELETE /v1/key`), dispositivi in attesa da `Sugo-Pending-Devices`, lista e scollegamento. Token e chiave in `SecretStore` (`sync-refresh-token`, `sync-data-key`). | nuovi `src/sync/SyncAccount.{h,cpp}` | M–L |
 | 3.3 | `SyncController` (singleton QML, `QML_ELEMENT`/`QML_SINGLETON`, `attach()` da `main.cpp` come gli altri): stato (`off`, `signingIn`, `waitingForApproval`, `idle`, `syncing`, `error`), `lastSync`, ritardo dell'invio, ricezione periodica e all'attivazione della finestra. | nuovi `src/sync/SyncController.{h,cpp}`, `src/main.cpp:174-201` | M |
-| 3.4 | Collegamento a `PresetPersistence` (nuovo segnale `saved()`) e a `DataManager` (ripristino). | `src/db/PresetPersistence.{h,cpp}`, `src/core/DataManager.cpp` | S |
+| 3.4 | Collegamento a `PresetPersistence` (nuovo segnale `saved()`) e a `DataManager` (ripristino: oggi copia le colonne della versione 1, quindi i preset ripristinati arrivano con `updated_at` 0 e i tombstone restano quelli di prima; qui vanno marcati come modificati ora). | `src/db/PresetPersistence.{h,cpp}`, `src/core/DataManager.cpp` | S |
 | 3.5 | ✅ `SecretStore` su macOS (`MacKeychainStore`, piano macOS 5.1) e factory comune `createSecretStore()`, usata da `CalendarSync` e dal sync. | `src/platform/SecretStore.{h,cpp}`, `src/core/CalendarSync.cpp:348` | M |
 | 3.6 | Test con un finto server (`QTcpServer` locale, come i test di `CalendarSync`): accesso, limite, `412` e nuova unione, token scaduto, server irraggiungibile, formato futuro. Nessuna dipendenza da D-Bus: girano su Linux e macOS. | `tests/tst_synccontroller.cpp` | M–L |
 
@@ -277,9 +277,11 @@ Totale: circa **3–4 settimane** per una persona.
 
 ## Da verificare
 
-- libsodium nel runtime KDE di Flatpak o come modulo del manifest; nel Qt/Homebrew del Mac (universale).
+- ~~libsodium nel runtime KDE di Flatpak~~: non c'è, è un modulo del manifest. Sul Mac: universale e statica, PR #3.
 - Limiti attuali di Workers, R2, D1 e del piano gratuito di Clerk. (Verificato: i rate limit dei Workers
   sono disponibili nel piano gratuito.)
 - ~~Verifica della sessione Clerk dentro un Worker~~: fatta con JWKS e `jose`, senza `@clerk/backend`.
 - Secret Service assente su alcuni desktop Linux (regola S4) e Portachiavi con build non firmate (piano macOS D1).
+  Su macOS leggere un segreto che non esiste risponde "vuoto" anche senza Portachiavi (PR #3): per la regola S4 conta
+  l'esito di una scrittura, non di una lettura.
 - `QNetworkInformation` per riprovare quando torna la rete, su Linux e macOS.
