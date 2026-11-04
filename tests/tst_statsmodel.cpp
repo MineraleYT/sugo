@@ -30,6 +30,7 @@ private Q_SLOTS:
     void testReactiveUpdateOnRecord();
     void testFormatters();
     void testBreakdownModes();
+    void testBreakdownAndStreaksLeaveTheChartAlone();
     void testDateRolloverMovesTodayAlong();
     void testDateRolloverKeepsAPastPeriod();
     void testRolloverIsNoticedAfterAnEarlierRefresh();
@@ -213,6 +214,28 @@ void TestStatsModel::testBreakdownModes()
     QCOMPARE(list.size(), 2);
     QCOMPARE(list.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Refactor auth"));
     QCOMPARE(list.at(1).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Without note"));
+}
+
+void TestStatsModel::testBreakdownAndStreaksLeaveTheChartAlone()
+{
+    // Every statsChanged rebuilds the page's chart: only what changes is announced.
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(9, 0), QTimeZone::utc()));
+    QSignalSpy statsSpy(m_model.get(), &StatsModel::statsChanged);
+    QSignalSpy breakdownSpy(m_model.get(), &StatsModel::breakdownChanged);
+    QSignalSpy streaksSpy(m_model.get(), &StatsModel::streaksChanged);
+
+    m_model->refresh();
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(breakdownSpy.count(), 1);
+    QCOMPARE(streaksSpy.count(), 1);
+
+    m_model->setBreakdownMode(StatsModel::BreakdownMode::ByCategory);
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(breakdownSpy.count(), 2);
+
+    m_model->setProtectWeekendStreak(!m_model->protectWeekendStreak());
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(streaksSpy.count(), 2);
 }
 
 void TestStatsModel::testPreviousPeriodComparesTheSameStretch()

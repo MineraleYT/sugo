@@ -151,7 +151,7 @@ void StatsModel::setBreakdownMode(BreakdownMode mode)
     }
     m_breakdownMode = mode;
     Q_EMIT breakdownModeChanged();
-    Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 QString StatsModel::title() const
@@ -319,6 +319,7 @@ void StatsModel::recompute()
         m_bucketsVariant.clear();
         m_daysVariant.clear();
         Q_EMIT statsChanged();
+        Q_EMIT breakdownChanged();
         return;
     }
 
@@ -444,6 +445,7 @@ void StatsModel::recompute()
         m_daysVariant.append(map);
     }
     Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 void StatsModel::recomputeStreaks()
@@ -452,7 +454,6 @@ void StatsModel::recomputeStreaks()
         m_currentStreak = 0;
         m_bestStreak = 0;
         Q_EMIT streaksChanged();
-        Q_EMIT statsChanged();
         return;
     }
 
@@ -469,8 +470,8 @@ void StatsModel::recomputeStreaks()
     m_currentStreak = Stats::currentStreak(days, today, m_protectWeekendStreak);
     m_bestStreak = Stats::bestStreak(days, m_protectWeekendStreak);
 
+    // Only the streaks: every statsChanged property comes from recompute().
     Q_EMIT streaksChanged();
-    Q_EMIT statsChanged();
 }
 
 void StatsModel::setProtectWeekendStreak(bool protect)

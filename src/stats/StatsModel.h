@@ -88,7 +88,8 @@ public:
     Q_PROPERTY(bool protectWeekendStreak READ protectWeekendStreak WRITE setProtectWeekendStreak NOTIFY protectWeekendStreakChanged FINAL)
 
     Q_PROPERTY(QVariantList buckets READ buckets NOTIFY statsChanged FINAL)
-    Q_PROPERTY(QVariantList breakdown READ breakdown NOTIFY statsChanged FINAL)
+    /// Where the time went, by the breakdown mode. Its own signal: a new mode changes nothing else.
+    Q_PROPERTY(QVariantList breakdown READ breakdown NOTIFY breakdownChanged FINAL)
     /// Every day of the shown period, in order:
     /// { date, weekday (0 = Sunday), dayOfMonth, month (1-12), workSeconds, isToday, tooltip }.
     /// Work time counts by the day the session started, like the chart.
@@ -143,6 +144,7 @@ Q_SIGNALS:
     void periodChanged();
     void breakdownModeChanged();
     void statsChanged();
+    void breakdownChanged();
     void streaksChanged();
     void protectWeekendStreakChanged();
 
