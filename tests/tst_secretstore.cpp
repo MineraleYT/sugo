@@ -34,6 +34,7 @@ struct KeyringState {
     bool locked = false;
     bool dismissPrompt = false;
     int prompts = 0;
+    int unlocks = 0; ///< Unlock calls.
     QString sessionAlgorithm;
     QSet<QString> sessions; ///< Open sessions; a restarted keyring forgets them.
     int sessionsOpened = 0;
@@ -199,6 +200,7 @@ public Q_SLOTS:
     QList<QDBusObjectPath> Unlock(const QList<QDBusObjectPath> &objects, QDBusObjectPath &prompt)
     {
         QMutexLocker lock(&m_state->mutex);
+        ++m_state->unlocks;
         if (!m_state->locked) {
             prompt = QDBusObjectPath(QStringLiteral("/"));
             return objects;
@@ -358,6 +360,57 @@ private Q_SLOTS:
         m_keyring->state.dismissPrompt = true;
         QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
         QVERIFY(!store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw2")));
+    }
+
+    void aDismissedPromptIsNotShownAgainAtOnce()
+    {
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        store.setRetryIntervalForTesting(300);
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        m_keyring->state.locked = true;
+        m_keyring->state.dismissPrompt = true;
+        const int unlocksBefore = m_keyring->state.unlocks;
+
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
+        QCOMPARE(m_keyring->state.unlocks, unlocksBefore + 1);
+        QCOMPARE(m_keyring->state.prompts, 1);
+        // Read again right away (the next work session): no second prompt.
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
+        QCOMPARE(m_keyring->state.unlocks, unlocksBefore + 1);
+        QCOMPARE(m_keyring->state.prompts, 1);
+
+        // After the retry interval the prompt comes again, and this time it is answered.
+        m_keyring->state.dismissPrompt = false;
+        QTRY_COMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QStringLiteral("pw")));
+        QCOMPARE(m_keyring->state.unlocks, unlocksBefore + 2);
+        QCOMPARE(m_keyring->state.prompts, 2);
+    }
+
+    void aWriteAsksAgainRightAfterADismissedPrompt()
+    {
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        store.setRetryIntervalForTesting(60 * 1000);
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        m_keyring->state.locked = true;
+        m_keyring->state.dismissPrompt = true;
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
+        QCOMPARE(m_keyring->state.prompts, 1);
+
+        // The user saves a password at once: the prompt comes again, and is answered.
+        m_keyring->state.dismissPrompt = false;
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw2")));
+        QCOMPARE(m_keyring->state.prompts, 2);
+        QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QStringLiteral("pw2")));
+
+        // Disconnecting right after another refused prompt still removes it from the keyring.
+        m_keyring->state.locked = true;
+        m_keyring->state.dismissPrompt = true;
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
+        QCOMPARE(m_keyring->state.prompts, 3);
+        m_keyring->state.dismissPrompt = false;
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QString()));
+        QCOMPARE(m_keyring->state.prompts, 4);
+        QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QString()));
     }
 
     void aRestartedKeyringGetsANewSession()

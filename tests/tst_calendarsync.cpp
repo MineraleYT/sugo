@@ -57,9 +57,11 @@ class FakeSecretStore : public SecretStore
 public:
     std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
     std::shared_ptr<bool> available = std::make_shared<bool>(true);
+    std::shared_ptr<int> reads = std::make_shared<int>(0);
 
     std::optional<QString> read(const QString &key) override
     {
+        ++*reads;
         if (!*available) {
             return std::nullopt;
         }
@@ -190,6 +192,8 @@ public:
     QString loginServer;               ///< `server` in the final login answer.
     QString loginPage;                 ///< `login` (the page to open) in the first answer; empty: on this server.
     QString loginName = QStringLiteral("alice");
+    QString userId;                    ///< Names the DAV folders; empty: the login name.
+    bool principalLookup = true;       ///< Says where the user's calendars are, as Nextcloud does.
     QString appPassword = kPassword;
     QByteArray token = "tok123";
     bool onlyOneCalendar = false;
@@ -279,13 +283,23 @@ private:
         }
         if (req.method == "PROPFIND") {
             QByteArray body;
+            const QByteArray principal = "/remote.php/dav/principals/users/" + user() + "/";
             if (path.startsWith("/custom/calendar")) {
                 body = "<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/custom/calendar/</d:href><d:propstat><d:prop>"
                        "<d:resourcetype><d:collection/><c:calendar xmlns:c=\"urn:ietf:params:xml:ns:caldav\"/></d:resourcetype>"
                        "<d:displayname>Mine</d:displayname></d:prop></d:propstat></d:response>"
                        "<d:response><d:href>/custom/calendar/one.ics</d:href><d:propstat><d:prop><d:resourcetype/></d:prop></d:propstat></d:response>"
                        "</d:multistatus>";
-            } else if (path.startsWith("/remote.php/dav/calendars/alice")) {
+            } else if (path == "/remote.php/dav/" && principalLookup) {
+                body = "<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/remote.php/dav/</d:href><d:propstat><d:prop>"
+                       "<d:current-user-principal><d:href>" + principal + "</d:href></d:current-user-principal>"
+                       "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>";
+            } else if (path == principal) {
+                const QByteArray home = "/remote.php/dav/calendars/" + user() + "/";
+                body = "<d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:response><d:href>" + principal
+                    + "</d:href><d:propstat><d:prop><c:calendar-home-set><d:href>" + home + "</d:href></c:calendar-home-set>"
+                      "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>";
+            } else if (path == "/remote.php/dav/calendars/alice/") {
                 body = multistatus(prefix);
                 if (noPersonal) {
                     body.replace("/personal/", "/private/");
@@ -318,6 +332,8 @@ private:
         }
         reply(s, 405);
     }
+
+    QByteArray user() const { return (userId.isEmpty() ? loginName : userId).toUtf8(); }
 
     QTcpServer m_server;
     QHash<QTcpSocket *, QByteArray> m_buffers;
@@ -597,6 +613,56 @@ private Q_SLOTS:
         QVERIFY(CalendarSync::parseCalendars("<not xml", QUrl(QStringLiteral("https://x.org/"))).isEmpty());
     }
 
+    void parseCalendarsSkipsPropertiesTheServerDoesNotHave()
+    {
+        // Properties asked for but not defined come back in a propstat of their own, with status
+        // 404. An empty component set there says nothing: absent means any component (RFC 4791).
+        const QByteArray xml =
+            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">"
+            "<d:response><d:href>/dav/cal/home/</d:href>"
+            "<d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype>"
+            // (A status line with more than one space between its words is still read.)
+            "<d:displayname>Home</d:displayname></d:prop><d:status>HTTP/1.1  200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><c:supported-calendar-component-set/><d:displayname>Not this</d:displayname></d:prop>"
+            "<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>"
+            "</d:response>"
+            // Only a failed propstat says it is a calendar: it is not one.
+            "<d:response><d:href>/dav/cal/other/</d:href>"
+            "<d:propstat><d:prop><d:displayname>Other</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><d:resourcetype><c:calendar/></d:resourcetype></d:prop>"
+            "<d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat>"
+            "</d:response>"
+            "</d:multistatus>";
+        const auto cals = CalendarSync::parseCalendars(xml, QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).name, QStringLiteral("Home"));
+        QCOMPARE(cals.at(0).url, QStringLiteral("https://dav.example.net/dav/cal/home"));
+    }
+
+    void parseCalendarsTakesTheDefaultPortForTheSameServer()
+    {
+        const auto response = [](const QString &href) {
+            return QStringLiteral("<d:response><d:href>%1</d:href><d:propstat><d:prop><d:resourcetype><d:collection/>"
+                                  "<c:calendar/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                                  "</d:response>")
+                .arg(href);
+        };
+        const QString xml = QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" "
+                                           "xmlns:c=\"urn:ietf:params:xml:ns:caldav\">")
+            + response(QStringLiteral("https://cloud.example.org/dav/cal/plain/"))
+            + response(QStringLiteral("https://cloud.example.org:443/dav/cal/explicit/"))
+            + response(QStringLiteral("https://cloud.example.org:8443/dav/cal/elsewhere/"))
+            + QStringLiteral("</d:multistatus>");
+        // The port written out or not, https://host and https://host:443 are the same server;
+        // another port is not.
+        for (const QString &request : {QStringLiteral("https://cloud.example.org/dav/cal/"), QStringLiteral("https://cloud.example.org:443/dav/cal/")}) {
+            const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(request));
+            QCOMPARE(cals.size(), 2);
+            QVERIFY(cals.at(0).url.endsWith(QStringLiteral("/dav/cal/plain")));
+            QVERIFY(cals.at(1).url.endsWith(QStringLiteral("/dav/cal/explicit")));
+        }
+    }
+
     void discoveryNextcloud()
     {
         m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
@@ -612,18 +678,67 @@ private Q_SLOTS:
         QCOMPARE(cals.size(), 2);
         QCOMPARE(cals.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Personal"));
         QVERIFY(cals.at(1).toMap().value(QStringLiteral("url")).toString().endsWith(QStringLiteral("/work-team")));
+        // The server says where the user's calendars are: principal, then calendar home.
         const auto propfind = m_server->of("PROPFIND");
-        QCOMPARE(propfind.size(), 1);
-        QCOMPARE(propfind.first().path, QByteArray("/remote.php/dav/calendars/alice/"));
-        QCOMPARE(propfind.first().headers.value("depth"), QByteArray("1"));
-        QVERIFY(propfind.first().headers.value("user-agent").startsWith("Sugo/"));
-        QVERIFY(propfind.first().body.contains("resourcetype"));
+        QCOMPARE(propfind.size(), 3);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(0).headers.value("depth"), QByteArray("0"));
+        QVERIFY(propfind.at(0).body.contains("current-user-principal"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/principals/users/alice/"));
+        QCOMPARE(propfind.at(1).headers.value("depth"), QByteArray("0"));
+        QVERIFY(propfind.at(1).body.contains("calendar-home-set"));
+        QCOMPARE(propfind.at(2).path, QByteArray("/remote.php/dav/calendars/alice/"));
+        QCOMPARE(propfind.at(2).headers.value("depth"), QByteArray("1"));
+        QVERIFY(propfind.at(2).headers.value("user-agent").startsWith("Sugo/"));
+        QVERIFY(propfind.at(2).body.contains("resourcetype"));
+        for (const auto &req : propfind) {
+            QCOMPARE(req.headers.value("authorization"), basic(QStringLiteral("alice"), kPassword));
+        }
         // Not configured until a calendar is chosen.
         QCOMPARE(m_sync->status(), CalendarSync::NotConfigured);
         m_sync->selectCalendar(cals.at(1).toMap().value(QStringLiteral("url")).toString(), QStringLiteral("Work"));
         QCOMPARE(m_sync->status(), CalendarSync::Ready);
         QCOMPARE(m_sync->calendarName(), QStringLiteral("Work"));
         checkNoSecrets();
+    }
+
+    void discoveryNextcloudWithoutAPrincipalLooksUnderTheLoginName()
+    {
+        m_server->principalLookup = false; // the server does not say where the calendars are
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 2);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+    }
+
+    void discoveryNextcloudRefusedAtThePrincipalStopsThere()
+    {
+        // A wrong password: one refused request, not a second one at the fallback address (the
+        // server's brute-force protection counts each).
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("other"));
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 1);
+        QCOMPARE(propfind.first().path, QByteArray("/remote.php/dav/"));
+        QVERIFY(m_sync->calendars().isEmpty());
+        checkNoSecrets();
+
+        // The right password finds the calendars.
+        m_sync->setPassword(QStringLiteral("other"));
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        QVERIFY(m_sync->lastError().isEmpty());
     }
 
     void discoveryCustomIsCalendar()
@@ -999,6 +1114,27 @@ private Q_SLOTS:
         QCOMPARE(again->username(), QStringLiteral("alice"));
         QCOMPARE(again->calendarUrl(), m_sync->calendarUrl());
         QVERIFY(again->enabled());
+    }
+
+    void loginFlowWithALoginNameThatIsNotTheUserId()
+    {
+        // Signed in with an e-mail address: the DAV folders are named after the user id.
+        m_server->loginName = QStringLiteral("alice@example.org");
+        m_server->userId = QStringLiteral("alice");
+        m_server->expectedAuth = basic(QStringLiteral("alice@example.org"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->startNextcloudLogin();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QCOMPARE(m_sync->username(), QStringLiteral("alice@example.org"));
+        QCOMPARE(m_sync->calendarName(), QStringLiteral("Personal"));
+        QCOMPARE(m_sync->calendarUrl(), m_server->base() + QStringLiteral("/remote.php/dav/calendars/alice/personal"));
+        QCOMPARE(m_server->of("PROPFIND").last().path, QByteArray("/remote.php/dav/calendars/alice/"));
+
+        // Events go there, signed in with the login name.
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(m_server->of("PUT").first().path.startsWith("/remote.php/dav/calendars/alice/personal/"));
     }
 
     void loginFlowSingleCalendarIsPicked()
@@ -1741,6 +1877,39 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QVERIFY(m_sync->hasPassword());
         QCOMPARE(m_server->stored.size(), 1);
+    }
+
+    void finishedWorkSessionsDoNotWaitForTheKeyring()
+    {
+        FakeSecretStore keyring;
+        m_sync = makeSyncWithKeyring(keyring);
+        configureCustom();
+        QVERIFY(m_sync->isPasswordInKeyring());
+
+        // The keyring does not give the password (its unlock prompt was dismissed).
+        *keyring.available = false;
+        m_sync = makeSyncWithKeyring(keyring);
+        QVERIFY(!m_sync->hasPassword());
+        QTest::qWait(50);
+        const int reads = *keyring.reads;
+
+        // Several sessions end in a row: the keyring is not asked while each one is recorded
+        // (the timer is ending the phase then), and is asked only once afterwards.
+        m_sync->enqueueWorkSession(record(1));
+        m_sync->enqueueWorkSession(record(2));
+        m_sync->enqueueWorkSession(record(3));
+        QCOMPARE(*keyring.reads, reads);
+        QCOMPARE(m_sync->pendingCount(), 3);
+        QTRY_COMPARE(*keyring.reads, reads + 1);
+        QTest::qWait(100);
+        QCOMPARE(*keyring.reads, reads + 1);
+        QVERIFY(m_server->requests.isEmpty());
+
+        // Once the keyring answers, the next session sends them all.
+        *keyring.available = true;
+        m_sync->enqueueWorkSession(record(4));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 4);
     }
 
     void defaults()

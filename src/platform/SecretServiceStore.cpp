@@ -125,15 +125,25 @@ std::optional<QList<QDBusObjectPath>> SecretServiceStore::search(const QString &
 
 bool SecretServiceStore::unlock(const QList<QDBusObjectPath> &objects)
 {
+    // The user said no (or was not there): reads do not ask again on every call, each of which
+    // would show the prompt and wait for it.
+    if (!m_unlockRetryAfter.hasExpired()) {
+        return false;
+    }
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("Unlock"));
     call << QVariant::fromValue(objects);
     const QDBusMessage reply = m_bus.call(call, QDBus::Block, kCallTimeoutMs);
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().size() < 2) {
         qCWarning(lcSecretStore) << "Unlocking the keyring failed:" << reply.errorMessage();
+        m_unlockRetryAfter.setRemainingTime(m_retryIntervalMs);
         return false;
     }
     const auto prompt = qvariant_cast<QDBusObjectPath>(reply.arguments().at(1));
-    return prompt.path() == kNoObject || runPrompt(prompt);
+    if (prompt.path() == kNoObject || runPrompt(prompt)) {
+        return true;
+    }
+    m_unlockRetryAfter.setRemainingTime(m_retryIntervalMs);
+    return false;
 }
 
 bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
@@ -208,6 +218,10 @@ std::optional<QString> SecretServiceStore::read(const QString &key)
 
 bool SecretServiceStore::write(const QString &key, const QString &secret)
 {
+    // A write is the user's own doing (a password saved, an account disconnected): it asks again
+    // even right after a refused unlock, or the password would end up in the settings file and a
+    // disconnected account's password would stay in the keyring.
+    m_unlockRetryAfter = QDeadlineTimer();
     if (!ensureSession()) {
         return false;
     }

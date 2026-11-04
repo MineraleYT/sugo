@@ -40,7 +40,9 @@ void registerSecretServiceTypes();
  * session bus. Items go into the default collection, tagged with the application id and `key`.
  *
  * The calls are synchronous. A locked collection is unlocked through the service's own prompt;
- * the call then waits (running the event loop) until the user answers it or it times out.
+ * the call then waits (running the event loop) until the user answers it or it times out. Once
+ * the unlock was refused (the prompt dismissed or not answered), reads that need it fail at once
+ * for a while instead of prompting again; a write always asks.
  */
 class SecretServiceStore final : public SecretStore
 {
@@ -64,6 +66,7 @@ private:
     QString m_applicationId;
     QDBusObjectPath m_session;
     QDeadlineTimer m_retryAfter; ///< Running while a failed OpenSession is not tried again.
+    QDeadlineTimer m_unlockRetryAfter; ///< Running while a refused unlock is not asked again by reads.
     int m_retryIntervalMs = 60 * 1000;
     int m_promptTimeoutMs = 120 * 1000;
 };
