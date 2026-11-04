@@ -288,7 +288,8 @@ Q_SIGNALS:
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
-    /// The login entry could not be changed (read-only home, full disk, ...).
+    /// The login entry could not be changed (read-only home, full disk, run from the disk image,
+    /// ...). Emitted after the startAtLoginChanged() that restores the real state.
     void autostartFailed(const QString &message);
 
 private:

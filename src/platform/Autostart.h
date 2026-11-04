@@ -20,6 +20,9 @@ public:
     virtual bool setEnabled(bool enabled) = 0;
     /// Brings an existing entry up to date, e.g. after the program moved. No-op if disabled.
     virtual void repair() {}
+    /// This copy of the program will be gone by the next login (macOS: run from the disk image
+    /// or a translocated copy), so an entry starting it cannot be set up: setEnabled(true) fails.
+    virtual bool runsFromTemporaryLocation() const { return false; }
 };
 
 /**
