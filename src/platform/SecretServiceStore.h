@@ -53,6 +53,7 @@ public:
     bool write(const QString &key, const QString &secret) override;
 
     void setRetryIntervalForTesting(int ms) { m_retryIntervalMs = ms; }
+    void setPromptTimeoutForTesting(int ms) { m_promptTimeoutMs = ms; }
 
 private:
     bool ensureSession();
@@ -69,4 +70,5 @@ private:
     QDeadlineTimer m_unlockRetryAfter; ///< Running while a refused unlock is not asked again by reads.
     int m_retryIntervalMs = 60 * 1000;
     int m_promptTimeoutMs = 120 * 1000;
+    bool m_prompting = false; ///< A prompt is open: its wait runs the event loop, which may call us again.
 };

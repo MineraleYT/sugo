@@ -608,6 +608,35 @@ private Q_SLOTS:
 
     // ----- Discovery -----
 
+    void parseCalendarsColours_data()
+    {
+        QTest::addColumn<QString>("sent");
+        QTest::addColumn<QString>("shown");
+        // CalDAV's #RRGGBBAA would be #AARRGGBB to QML: the alpha is left out.
+        QTest::newRow("rgba") << QStringLiteral("#0082C9FF") << QStringLiteral("#0082c9");
+        QTest::newRow("rgba transparent") << QStringLiteral("#FF000000") << QStringLiteral("#ff0000");
+        QTest::newRow("rgb") << QStringLiteral("#3a87ad") << QStringLiteral("#3a87ad");
+        QTest::newRow("spaces") << QStringLiteral("  #3A87AD ") << QStringLiteral("#3a87ad");
+        QTest::newRow("none") << QString() << QString();
+        QTest::newRow("not a colour") << QStringLiteral("#12345") << QString();
+        QTest::newRow("garbage") << QStringLiteral("blue-ish") << QString();
+    }
+    void parseCalendarsColours()
+    {
+        QFETCH(QString, sent);
+        QFETCH(QString, shown);
+        const QString xml =
+            QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" "
+                           "xmlns:a=\"http://apple.com/ns/ical/\"><d:response><d:href>/dav/cal/home/</d:href><d:propstat><d:prop>"
+                           "<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>Home</d:displayname>"
+                           "<a:calendar-color>%1</a:calendar-color></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                           "</d:response></d:multistatus>")
+                .arg(sent);
+        const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).color, shown);
+    }
+
     void parseCalendarsTolerant()
     {
         for (const QString &prefix : {QString(), QStringLiteral("d"), QStringLiteral("D"), QStringLiteral("ns0")}) {
@@ -616,7 +645,7 @@ private Q_SLOTS:
             QCOMPARE(cals.size(), 2);
             QCOMPARE(cals.at(0).name, QStringLiteral("Personal"));
             QCOMPARE(cals.at(0).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/personal"));
-            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9FF"));
+            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9")); // sent as #0082c9FF
             QCOMPARE(cals.at(1).name, QStringLiteral("Work"));
             QCOMPARE(cals.at(1).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/work-team"));
         }
@@ -932,6 +961,55 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
         QVERIFY(!m_sync->isSendingPaused());
         QTRY_COMPARE(m_sync->pendingCount(), 0);
+    }
+
+    void put403IsTheCalendarRefusingNotTheLogin()
+    {
+        // A calendar shared read-only: the login is fine, the calendar does not take events.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        QCOMPARE(m_sync->pendingCount(), 1); // kept, not skipped
+        checkNoSecrets();
+
+        // Tried again later: once the calendar takes it, it is sent.
+        m_server->defaultPut = 201;
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::newRow("400 (would skip the event)") << 400;
+        QTest::newRow("403 (would delay it)") << 403;
+        QTest::newRow("404 (would delay it)") << 404;
+    }
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne()
+    {
+        QFETCH(int, http);
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->putStatuses = {http};
+        m_sync->enqueueWorkSession(record());
+        QCOMPARE(m_server->count("PUT"), 0); // on its way to the first calendar
+        m_sync->selectCalendar(m_server->base() + QStringLiteral("/cal/work/"), QStringLiteral("Work"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        const auto puts = m_server->of("PUT");
+        QCOMPARE(puts.size(), 2);
+        QVERIFY(puts.at(0).path.startsWith("/cal/personal/"));
+        QVERIFY(puts.at(1).path.startsWith("/cal/work/"));
+        QCOMPARE(m_server->stored.size(), 1);
+        QVERIFY(m_server->stored.cbegin().key().startsWith("/cal/work/"));
+        QVERIFY(!m_sync->isSendingPaused());
+        QCOMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
     }
 
     void put404And500RetryWithBackoff()
@@ -1460,6 +1538,18 @@ private Q_SLOTS:
         QFile f(configPath());
         QVERIFY(f.open(QIODevice::ReadOnly));
         QVERIFY(!f.readAll().contains(kPassword.toUtf8()));
+    }
+
+    void passwordIsStoredAsTyped()
+    {
+        configureCustom();
+        const QString spaced = QStringLiteral(" pass word ");
+        m_server->expectedAuth = basic(QStringLiteral("alice"), spaced);
+        m_sync->setPassword(spaced);
+        QCOMPARE(diskGroup().group(QStringLiteral("caldav")).readEntry("AppPassword", QString()), spaced);
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->of("PUT").first().headers.value("authorization"), basic(QStringLiteral("alice"), spaced));
     }
 
     // ----- Per-provider settings -----

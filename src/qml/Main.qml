@@ -381,6 +381,30 @@ QQC2.ApplicationWindow {
                 fail(45, "The Focus card's install button is missing, or on in a smoke run");
                 return;
             }
+            // A calendar address still being typed (its field keeps the focus: a click on a
+            // button does not take it) is stored before Log in, Test or Find calendars use it.
+            if (CalendarSync) {
+                const serverField = findItem(page, item => item.objectName === "calendarServerField");
+                if (!serverField) {
+                    fail(53, "The calendar server field was not found");
+                    return;
+                }
+                page.category = "calendar";
+                CalendarSync.enabled = true;
+                serverField.forceActiveFocus();
+                const focused = serverField.activeFocus;
+                serverField.text = "https://cloud.example.org";
+                page.commitCalendarFields();
+                const stored = CalendarSync.serverUrl;
+                CalendarSync.serverUrl = "";
+                CalendarSync.enabled = false;
+                page.category = "general";
+                if (!focused || stored !== "https://cloud.example.org") {
+                    fail(53, "The typed calendar address was not stored before the action: focused=" + focused
+                         + " stored=" + stored);
+                    return;
+                }
+            }
             // Disconnecting the calendar asks first.
             page.requestDisconnect();
             if (!page.disconnectConfirming) {

@@ -127,6 +127,16 @@ QQC2.Page {
         }
         return -1;
     }
+    // The calendar fields store what was typed when they lose the focus (editingFinished). A
+    // click on a button does not take it from them (SButton takes the focus by Tab only), so each
+    // button that uses what they hold calls this first: the focus moves here, the field being
+    // edited stores its text, and the action runs with what is on screen.
+    Item {
+        id: calFocusSink
+    }
+    function commitCalendarFields(): void {
+        calFocusSink.forceActiveFocus();
+    }
 
     // The calendar list is not kept between runs, and calendars made on the server since the last
     // visit should show up: reload it when the page opens, if the calendar is on and signed in,
@@ -951,6 +961,7 @@ QQC2.Page {
                             Layout.fillWidth: !page.wide
                             Layout.preferredWidth: Theme.space4xl * 5
                             placeholderText: "https://cloud.example.org"
+                            objectName: "calendarServerField"
                             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                             text: CalendarSync ? CalendarSync.serverUrl : ""
                             Accessible.name: i18n("Server address")
@@ -982,7 +993,10 @@ QQC2.Page {
                             visible: !page.calConnected && !page.calWaiting
                             text: i18n("Log in")
                             iconName: "external"
-                            onClicked: CalendarSync.startNextcloudLogin()
+                            onClicked: {
+                                page.commitCalendarFields();
+                                CalendarSync.startNextcloudLogin();
+                            }
                         }
                         SButton {
                             visible: page.calWaiting
@@ -1001,6 +1015,7 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
                                 // Nothing was started (e.g. not signed in yet): a later request's
@@ -1074,7 +1089,9 @@ QQC2.Page {
                             Accessible.name: i18n("Password")
                             onTextEdited: dirty = true
                             onEditingFinished: {
-                                if (dirty && CalendarSync) {
+                                // Left empty, it keeps the stored password: only Disconnect, which
+                                // asks first, forgets it.
+                                if (dirty && text.length > 0 && CalendarSync) {
                                     CalendarSync.setPassword(text);
                                 }
                                 dirty = false;
@@ -1096,6 +1113,7 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
                                 // Nothing was started (e.g. not signed in yet): a later request's
@@ -1177,6 +1195,7 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "refresh";
                                 CalendarSync.refreshCalendars();
                                 // Nothing was started (e.g. not signed in yet): a later request's

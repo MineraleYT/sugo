@@ -6,6 +6,7 @@
 #include <QDBusVariant>
 #include <QEventLoop>
 #include <QLoggingCategory>
+#include <QScopedValueRollback>
 #include <QTimer>
 
 Q_LOGGING_CATEGORY(lcSecretStore, "sugo.platform.secretstore")
@@ -148,6 +149,7 @@ bool SecretServiceStore::unlock(const QList<QDBusObjectPath> &objects)
 
 bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
 {
+    const QScopedValueRollback<bool> prompting(m_prompting, true);
     PromptWaiter waiter;
     QEventLoop loop;
     QObject::connect(&waiter, &PromptWaiter::done, &loop, &QEventLoop::quit);
@@ -158,12 +160,23 @@ bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
     QDBusMessage call = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Prompt"));
     call << QString(); // no parent window id
     const QDBusMessage reply = m_bus.call(call, QDBus::Block, kCallTimeoutMs);
+    bool timedOut = false;
     if (reply.type() == QDBusMessage::ReplyMessage && !waiter.completed) {
         QTimer::singleShot(m_promptTimeoutMs, &loop, &QEventLoop::quit);
         loop.exec();
+        timedOut = !waiter.completed;
     }
     m_bus.disconnect(kService, prompt.path(), kPromptInterface, QStringLiteral("Completed"), &waiter,
                      SLOT(onCompleted(bool, QDBusVariant)));
+    if (timedOut) {
+        // Not answered in time: the dialog is closed, or it would stay on screen and the next
+        // unlock would open a second one on top of it.
+        const QDBusMessage dismiss = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Dismiss"));
+        const QDBusMessage dismissed = m_bus.call(dismiss, QDBus::Block, kCallTimeoutMs);
+        if (dismissed.type() != QDBusMessage::ReplyMessage) {
+            qCWarning(lcSecretStore) << "Closing the keyring prompt failed:" << dismissed.errorMessage();
+        }
+    }
     if (!waiter.completed || waiter.dismissed) {
         qCWarning(lcSecretStore) << "The keyring prompt was dismissed or not answered";
         return false;
@@ -190,6 +203,11 @@ bool SecretServiceStore::deleteItems(const QList<QDBusObjectPath> &items)
 std::optional<QString> SecretServiceStore::read(const QString &key)
 {
     if (!ensureSession()) {
+        return std::nullopt;
+    }
+    if (m_prompting) {
+        // Called from the event loop that waits for an open prompt: asking now would stack a
+        // second prompt on top of it.
         return std::nullopt;
     }
     const auto items = search(key);
@@ -224,6 +242,9 @@ bool SecretServiceStore::write(const QString &key, const QString &secret)
     m_unlockRetryAfter = QDeadlineTimer();
     if (!ensureSession()) {
         return false;
+    }
+    if (m_prompting) {
+        return false; // as in read(): no second prompt while one is open
     }
     if (secret.isEmpty()) {
         const auto items = search(key);

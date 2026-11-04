@@ -5,6 +5,7 @@
 
 #include "Localization.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QJsonArray>
@@ -147,6 +148,17 @@ bool isSuccess(int http)
 QByteArray basicAuth(const QString &user, const QString &password)
 {
     return "Basic " + (user + QLatin1Char(':') + password).toUtf8().toBase64();
+}
+
+/// A calendar-color as the interface can show it: "#rrggbb", or empty. Servers send it as
+/// #RRGGBBAA (Apple's property), which QML would read as #AARRGGBB: the alpha is left out.
+/// Anything else QColor cannot read is dropped too, rather than warned about by QML.
+QString calendarColor(const QString &value)
+{
+    static const QRegularExpression rgba(QStringLiteral("^#[0-9A-Fa-f]{8}$"));
+    const QString rgb = rgba.match(value).hasMatch() ? value.left(7) : value;
+    const QColor color = QColor::fromString(rgb);
+    return color.isValid() ? color.name(QColor::HexRgb) : QString();
 }
 } // namespace
 
@@ -404,6 +416,9 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
     }
     if (xml.hasError()) {
         return {};
+    }
+    for (CalendarInfo &info : result) {
+        info.color = calendarColor(info.color);
     }
     return result;
 }
@@ -786,9 +801,9 @@ void CalendarSync::setUsername(const QString &username)
 
 void CalendarSync::setPassword(const QString &password)
 {
-    const QString pw = password.trimmed();
+    // Stored as typed: a space at either end may be part of it.
     const bool had = hasPassword();
-    storePassword(pw);
+    storePassword(password);
     if (had != hasPassword()) {
         Q_EMIT hasPasswordChanged();
     }
@@ -1259,8 +1274,8 @@ void CalendarSync::trySend()
     m_inFlightRecord = it->record;
     const QByteArray ics = buildIcs(it->record, m_includeNote, it->uid);
     request("PUT", eventUrl(it->uid), ics, {{"Content-Type", "text/calendar; charset=utf-8"}}, true,
-            [this, account, password = m_password](const Result &r) {
-                onSendFinished(r, account != currentAccount() || password != m_password);
+            [this, account, password = m_password, calendar = m_calendarUrl](const Result &r) {
+                onSendFinished(r, account != currentAccount() || password != m_password || calendar != m_calendarUrl);
             });
 }
 
@@ -1328,19 +1343,20 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
 
-    if ((r.http == 401 || r.http == 403) && credentialsChangedMeanwhile) {
-        // Refused with the old credentials: says nothing about the new ones, which get their turn now.
+    if (credentialsChangedMeanwhile) {
+        // Refused with the old credentials or by the calendar chosen before: says nothing about
+        // the new ones, which get their turn now (not paused, skipped or delayed for it).
         trySend();
         return;
     }
-    const QString message = describeFailure(r);
-    if (r.http == 401 || r.http == 403) {
+    if (r.http == 401) {
+        const QString message = describeFailure(r);
         m_paused = true;
         setLastError(message);
         setStatus(Failed, message);
         return;
     }
-    if (r.http >= 400 && r.http < 500 && r.http != 404 && r.http != 408 && r.http != 429) {
+    if (r.http >= 400 && r.http < 500 && r.http != 403 && r.http != 404 && r.http != 408 && r.http != 429) {
         // This event will never be accepted; do not let it hold back the others.
         m_queue.removeAt(index);
         setLastError(i18n("The server refused an event (HTTP %1); it was skipped.", r.http));
@@ -1349,7 +1365,12 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
     m_sendFailing = true;
-    setLastError(message);
+    // 403: the server knows who we are, but the calendar does not take new events (shared
+    // read-only, a full quota). The password is not the problem, so sending is not paused on it:
+    // the events wait, and go once the calendar accepts them or another one is chosen.
+    setLastError(r.http == 403 ? i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
+                                      "or choose another calendar.")
+                               : describeFailure(r));
     refreshIdleStatus();
     scheduleRetry();
 }
