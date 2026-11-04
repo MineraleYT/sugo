@@ -59,3 +59,4 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] On a timer's page and in Settings, Tab into a number field (e.g. "Work") and press Shift+Tab: the focus goes back to the control before it and is not kept in the field.
 - [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.
 - [ ] macOS: minimise the window (Cmd+M), then choose Window › Sugo in the menu bar: the window comes out of the Dock, maximised (zoomed) again if it was.
+- [ ] macOS: start a work phase, close the window (Cmd+W), then press Cmd+Q (or choose Sugo › Quit Sugo): the window comes back with "Quit Sugo?". Do the same with the window minimised.

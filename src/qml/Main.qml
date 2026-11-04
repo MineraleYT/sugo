@@ -117,6 +117,11 @@ QQC2.ApplicationWindow {
             return;
         }
         if (TimerEngine.active) {
+            // Asked with the window closed or in the Dock (Cmd+Q, Sugo › Quit Sugo on macOS,
+            // where closing only hides the window): the question must be seen.
+            if (!root.visible || root.visibility === Window.Minimized) {
+                root.bringToFront();
+            }
             quitDialog.open();
         } else {
             root.quitNow();
@@ -382,13 +387,18 @@ QQC2.ApplicationWindow {
                 return;
             }
                         // Quitting while a phase runs asks first.
+            // Also with the window closed (Cmd+Q on macOS): the window comes back to ask.
             TimerEngine.start();
+            root.hide();
             root.requestQuit();
             const asked = root.quitConfirming;
+            const shown = root.visible;
             quitDialog.close();
             TimerEngine.stop();
             if (!asked) {
                 fail(28, "Quitting during a work session did not ask first");
+            } else if (!shown) {
+                fail(38, "Quitting with the window closed asked in the hidden window");
             }
         }
 
