@@ -161,6 +161,9 @@ jobs:
           ECM_TAG: ${{ steps.pins.outputs.ECM_TAG }}
         run: |
           command -v ninja >/dev/null || brew install ninja
+          command -v ccache >/dev/null || brew install ccache
+          # Where the cache step looks (ccache's own default here is ~/Library/Caches/ccache).
+          echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
           # GNU timeout, which the smoke tests use.
           command -v timeout >/dev/null || brew install coreutils
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
@@ -182,14 +185,29 @@ jobs:
           done
           echo "SUGO_ECM=$deps/ecm" >> "$GITHUB_ENV"
 
+      - name: Restore the compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.base_ref || 'main' }}-
+            ccache-${{ runner.os }}-${{ runner.arch }}-main-
+
       - name: Configure
         run: |
           test -n "${SUGO_QT:-}"
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
-            -DCMAKE_PREFIX_PATH="$SUGO_QT;$SUGO_ECM" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+            -DCMAKE_PREFIX_PATH="$SUGO_QT;$SUGO_ECM" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build --parallel
+        run: |
+          ccache --zero-stats
+          cmake --build build --parallel
+          ccache --show-stats
+          ccache --evict-older-than 7200s
 
       # One test per core (the tests sharing a folder hold a RESOURCE_LOCK, see tests/CMakeLists.txt).
       - name: Run test suite
