@@ -383,14 +383,33 @@ QQC2.Page {
                     }
                 }
 
-                SButton {
+                // A disabled button gets no hover events, so the wrapper says why it cannot start.
+                Item {
                     visible: !page.isNew
-                    kind: page.isCurrent && TimerEngine.active ? "ghost" : "primary"
-                    iconName: page.isCurrent && TimerEngine.active ? "dot" : "play"
-                    text: page.isCurrent && TimerEngine.active ? i18n("Running") : i18n("Start")
-                    enabled: !TimerEngine.active && !page.modified
-                    toolTipText: TimerEngine.active && !page.isCurrent ? i18n("Stop the timer to switch to a different timer.") : ""
-                    onClicked: page.start()
+                    implicitWidth: startButton.implicitWidth
+                    implicitHeight: startButton.implicitHeight
+                    HoverHandler {
+                        id: startHover
+                    }
+                    QQC2.ToolTip.visible: !startButton.enabled && startHover.hovered && startButton.blockedBy.length > 0
+                    QQC2.ToolTip.text: startButton.blockedBy
+                    QQC2.ToolTip.delay: Theme.toolTipDelay
+                    SButton {
+                        id: startButton
+                        readonly property bool running: page.isCurrent && TimerEngine.active
+                        /// Why Start is disabled ("Running" says it for this timer).
+                        readonly property string blockedBy: running ? ""
+                            : TimerEngine.active ? i18n("Stop the timer to switch to a different timer.")
+                            : page.modified ? i18n("Save your changes to start this timer.")
+                            : ""
+                        anchors.fill: parent
+                        kind: running ? "ghost" : "primary"
+                        iconName: running ? "dot" : "play"
+                        text: running ? i18n("Running") : i18n("Start")
+                        labels: [i18n("Start"), i18n("Running")]
+                        enabled: !TimerEngine.active && !page.modified
+                        onClicked: page.start()
+                    }
                 }
                 SButton {
                     visible: !page.isNew

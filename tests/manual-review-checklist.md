@@ -9,6 +9,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Create a timer with a name, category, icon, work duration, break durations, and long-break interval. Save it and confirm the displayed values.
 - [ ] Edit a user timer, duplicate it, select each resulting timer, and delete the duplicate.
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
+- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
 - [ ] Check automatic phase start in each supported mode, Manual, Breaks only and All phases.
