@@ -411,14 +411,15 @@ bool PresetModel::remove(const QString &uuid)
     if (row < 0 || m_presets.at(row).builtin) {
         return false;
     }
+    // The selection moves first, so a listener to the removal never finds the current timer
+    // missing (currentIndex() -1, currentPreset() the factory defaults).
+    if (uuid == m_currentUuid) {
+        m_currentUuid = DefaultUuid;
+    }
     beginRemoveRows({}, row, row);
     m_presets.removeAt(row);
     endRemoveRows();
     Q_EMIT countChanged();
-
-    if (uuid == m_currentUuid) {
-        m_currentUuid = DefaultUuid;
-    }
     Q_EMIT currentChanged();
     Q_EMIT modified();
     return true;
