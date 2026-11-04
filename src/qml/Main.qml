@@ -292,6 +292,7 @@ QQC2.ApplicationWindow {
         property string userUuid: ""
         property string builtinUuid: ""
         property bool paletteRan: false
+        property real wideWidth: 0
         property real welcomePanelY: 0
 
         function findItem(item: var, predicate: var): var {
@@ -521,8 +522,19 @@ QQC2.ApplicationWindow {
                 PresetModel.currentUuid = userUuid;
                 root.openTimer(userUuid);
                 TimerEngine.start();
+                // The top bar at the narrowest window, with the section and the pill shown.
+                wideWidth = root.width;
+                root.width = Theme.windowMinWidth;
                 return false;
             case 1: {
+                const insideWindow = item => !item || !item.visible || item.mapToItem(root.contentItem, item.width, 0).x <= root.width + 1;
+                const pill = findItem(root.contentItem, item => item.objectName === "statusPill");
+                const buttons = findItem(root.contentItem, item => item.objectName === "topBarWindowButtons");
+                if (root.width > Theme.windowMinWidth || !pill || !pill.visible || !insideWindow(pill) || !insideWindow(buttons)) {
+                    fail(37, "The top bar does not fit a narrow window: width " + root.width + ", pill " + (pill ? pill.visible : "missing"));
+                    return true;
+                }
+                root.width = wideWidth;
                 const button = findItem(root.pageStack.currentItem, item => item.objectName === "deleteButton-" + userUuid);
                 if (!button || button.enabled) {
                     fail(25, "Delete button of the running timer: " + (button ? "enabled" : "missing"));
