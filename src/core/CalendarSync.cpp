@@ -5,6 +5,7 @@
 
 #include "Localization.h"
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QJsonArray>
@@ -107,6 +108,17 @@ bool isSuccess(int http)
 QByteArray basicAuth(const QString &user, const QString &password)
 {
     return "Basic " + (user + QLatin1Char(':') + password).toUtf8().toBase64();
+}
+
+/// A calendar-color as the interface can show it: "#rrggbb", or empty. Servers send it as
+/// #RRGGBBAA (Apple's property), which QML would read as #AARRGGBB: the alpha is left out.
+/// Anything else QColor cannot read is dropped too, rather than warned about by QML.
+QString calendarColor(const QString &value)
+{
+    static const QRegularExpression rgba(QStringLiteral("^#[0-9A-Fa-f]{8}$"));
+    const QString rgb = rgba.match(value).hasMatch() ? value.left(7) : value;
+    const QColor color = QColor::fromString(rgb);
+    return color.isValid() ? color.name(QColor::HexRgb) : QString();
 }
 } // namespace
 
@@ -334,6 +346,9 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
     }
     if (xml.hasError()) {
         return {};
+    }
+    for (CalendarInfo &info : result) {
+        info.color = calendarColor(info.color);
     }
     return result;
 }

@@ -582,6 +582,35 @@ private Q_SLOTS:
 
     // ----- Discovery -----
 
+    void parseCalendarsColours_data()
+    {
+        QTest::addColumn<QString>("sent");
+        QTest::addColumn<QString>("shown");
+        // CalDAV's #RRGGBBAA would be #AARRGGBB to QML: the alpha is left out.
+        QTest::newRow("rgba") << QStringLiteral("#0082C9FF") << QStringLiteral("#0082c9");
+        QTest::newRow("rgba transparent") << QStringLiteral("#FF000000") << QStringLiteral("#ff0000");
+        QTest::newRow("rgb") << QStringLiteral("#3a87ad") << QStringLiteral("#3a87ad");
+        QTest::newRow("spaces") << QStringLiteral("  #3A87AD ") << QStringLiteral("#3a87ad");
+        QTest::newRow("none") << QString() << QString();
+        QTest::newRow("not a colour") << QStringLiteral("#12345") << QString();
+        QTest::newRow("garbage") << QStringLiteral("blue-ish") << QString();
+    }
+    void parseCalendarsColours()
+    {
+        QFETCH(QString, sent);
+        QFETCH(QString, shown);
+        const QString xml =
+            QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" "
+                           "xmlns:a=\"http://apple.com/ns/ical/\"><d:response><d:href>/dav/cal/home/</d:href><d:propstat><d:prop>"
+                           "<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>Home</d:displayname>"
+                           "<a:calendar-color>%1</a:calendar-color></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                           "</d:response></d:multistatus>")
+                .arg(sent);
+        const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).color, shown);
+    }
+
     void parseCalendarsTolerant()
     {
         for (const QString &prefix : {QString(), QStringLiteral("d"), QStringLiteral("D"), QStringLiteral("ns0")}) {
@@ -590,7 +619,7 @@ private Q_SLOTS:
             QCOMPARE(cals.size(), 2);
             QCOMPARE(cals.at(0).name, QStringLiteral("Personal"));
             QCOMPARE(cals.at(0).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/personal"));
-            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9FF"));
+            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9")); // sent as #0082c9FF
             QCOMPARE(cals.at(1).name, QStringLiteral("Work"));
             QCOMPARE(cals.at(1).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/work-team"));
         }
