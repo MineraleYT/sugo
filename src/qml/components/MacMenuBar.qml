@@ -144,11 +144,8 @@ Item {
             Platform.MenuItem {
                 text: i18nc("@action:inmenu", "Sugo")
                 role: Platform.MenuItem.NoRole
-                onTriggered: {
-                    menus.app.show();
-                    menus.app.raise();
-                    menus.app.requestActivate();
-                }
+                // Also out of the Dock: show() and raise() leave a minimised window there.
+                onTriggered: menus.app.bringToFront()
             }
         }
     }

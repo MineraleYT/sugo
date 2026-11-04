@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QStringList>
+#include <QWindow>
 #include <QtQml/qqmlregistration.h>
 
 /**
@@ -58,6 +59,10 @@ public:
     /// A shortcut as the system writes it ("Ctrl+K", "⌘K" on macOS), from a portable sequence
     /// such as "Ctrl+K" (Ctrl is Command on macOS).
     Q_INVOKABLE static QString shortcutText(const QString &sequence);
+
+    /// Shows a hidden or minimised window as it was before: a maximised or full-screen window
+    /// stays so. Only the minimised state is cleared (showNormal() would clear them all).
+    Q_INVOKABLE static void showRestored(QWindow *window);
 
     struct Layout {
         QStringList left;

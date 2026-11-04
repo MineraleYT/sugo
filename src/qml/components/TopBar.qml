@@ -60,9 +60,17 @@ Rectangle {
         target: null
         onActiveChanged: if (active) bar.moveRequested()
     }
+    // When the status pill was last clicked. The bar's handler sees that click too, and the pill
+    // goes away with it (it opens the timer page): a second click there must not complete a
+    // double-click that maximises the window.
+    property double statusClickedAt: 0
     TapHandler {
         acceptedButtons: Qt.LeftButton
-        onDoubleTapped: bar.toggleMaximizeRequested()
+        onDoubleTapped: {
+            if (Date.now() - bar.statusClickedAt > Qt.styleHints.mouseDoubleClickInterval) {
+                bar.toggleMaximizeRequested();
+            }
+        }
     }
 
     RowLayout {
@@ -98,12 +106,17 @@ Rectangle {
             onClicked: bar.backRequested()
         }
 
-        // Where we are: "Timers / Pomodoro", or the page's title alone.
+        // Where we are: "Timers / Pomodoro", or the page's title alone. The section, the title
+        // and the pill give way in a narrow window, so the window buttons stay inside it.
         Text {
             visible: !bar.minimal && !!bar.page && !!bar.page.section
             text: bar.page && bar.page.section ? bar.page.section : ""
             color: Theme.muted
             font.pixelSize: Theme.fontTitle
+            elide: Text.ElideRight
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: implicitWidth + 1
+            Layout.fillWidth: true
         }
         Text {
             visible: !bar.minimal && !!bar.page && !!bar.page.section
@@ -123,13 +136,20 @@ Rectangle {
         }
 
         StatusPill {
+            objectName: "statusPill"
             visible: bar.statusText.length > 0 && !bar.minimal && bar.showStatus
             text: bar.statusText
             dotColor: TimerEngine.paused ? Theme.warning
                     : TimerEngine.phase === TimerEngine.Phase.Work ? Theme.brand : Theme.breakColor
             pulsing: TimerEngine.active && !TimerEngine.paused
+            Layout.minimumWidth: compactWidth
+            Layout.maximumWidth: implicitWidth
+            Layout.fillWidth: true
             TapHandler {
-                onTapped: bar.statusClicked()
+                onTapped: {
+                    bar.statusClickedAt = Date.now();
+                    bar.statusClicked();
+                }
             }
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor
@@ -142,6 +162,7 @@ Rectangle {
 
         // The window's own buttons on this side, as the desktop draws them.
         WindowButtons {
+            objectName: "topBarWindowButtons"
             visible: DesktopStyle.rightButtons.length > 0
             Layout.fillHeight: DesktopStyle.style === "windows"
             Layout.rightMargin: DesktopStyle.style === "windows" ? -Theme.spaceLg : 0

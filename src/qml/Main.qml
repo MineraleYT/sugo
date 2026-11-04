@@ -106,12 +106,25 @@ QQC2.ApplicationWindow {
         }
     }
 
+    /// Shows the window in front: from hidden, or from the Dock or the taskbar as it was (a
+    /// maximised window stays maximised), as main.cpp does for the tray and second launches.
+    function bringToFront(): void {
+        DesktopStyle.showRestored(root);
+        root.raise();
+        root.requestActivate();
+    }
+
     /// Quits, after asking when that would cut a running or paused phase short.
     function requestQuit(): void {
         if (quitDialog.visible) {
             return;
         }
         if (TimerEngine.active) {
+            // Asked with the window closed or in the Dock (Cmd+Q, Sugo › Quit Sugo on macOS,
+            // where closing only hides the window): the question must be seen.
+            if (!root.visible || root.visibility === Window.Minimized) {
+                root.bringToFront();
+            }
             quitDialog.open();
         } else {
             root.quitNow();
@@ -304,6 +317,7 @@ QQC2.ApplicationWindow {
         property string userUuid: ""
         property string builtinUuid: ""
         property bool paletteRan: false
+        property real wideWidth: 0
         property real welcomePanelY: 0
         // The stage at which the timer page's track check began (0: not yet).
         property int trackCheckStage: 0
@@ -412,13 +426,18 @@ QQC2.ApplicationWindow {
                 return;
             }
                         // Quitting while a phase runs asks first.
+            // Also with the window closed (Cmd+Q on macOS): the window comes back to ask.
             TimerEngine.start();
+            root.hide();
             root.requestQuit();
             const asked = root.quitConfirming;
+            const shown = root.visible;
             quitDialog.close();
             TimerEngine.stop();
             if (!asked) {
                 fail(28, "Quitting during a work session did not ask first");
+            } else if (!shown) {
+                fail(38, "Quitting with the window closed asked in the hidden window");
             }
         }
 
@@ -623,8 +642,19 @@ QQC2.ApplicationWindow {
                 PresetModel.currentUuid = userUuid;
                 root.openTimer(userUuid);
                 TimerEngine.start();
+                // The top bar at the narrowest window, with the section and the pill shown.
+                wideWidth = root.width;
+                root.width = Theme.windowMinWidth;
                 return false;
             case 1: {
+                const insideWindow = item => !item || !item.visible || item.mapToItem(root.contentItem, item.width, 0).x <= root.width + 1;
+                const pill = findItem(root.contentItem, item => item.objectName === "statusPill");
+                const buttons = findItem(root.contentItem, item => item.objectName === "topBarWindowButtons");
+                if (root.width > Theme.windowMinWidth || !pill || !pill.visible || !insideWindow(pill) || !insideWindow(buttons)) {
+                    fail(37, "The top bar does not fit a narrow window: width " + root.width + ", pill " + (pill ? pill.visible : "missing"));
+                    return true;
+                }
+                root.width = wideWidth;
                 const button = findItem(root.pageStack.currentItem, item => item.objectName === "deleteButton-" + userUuid);
                 if (!button || button.enabled) {
                     fail(25, "Delete button of the running timer: " + (button ? "enabled" : "missing"));
@@ -683,9 +713,18 @@ QQC2.ApplicationWindow {
                 editor.leaving = true;
                 root.openTimer(builtinUuid);
                 editor = root.pageStack.currentItem;
+                // A search that finds nothing says so (checked on the next tick).
+                commandPalette.commands = [];
+                commandPalette.open();
                 return false;
             }
             case 4: {
+                const nothingFound = findItem(commandPalette.contentItem, item => item.objectName === "nothingFound");
+                if (!nothingFound || !nothingFound.visible || nothingFound.height <= 0 || nothingFound.parent.height <= 0) {
+                    fail(36, "The search does not say when nothing was found");
+                    return true;
+                }
+                commandPalette.close();
                 // A value out of range is reported to the user, not changed silently.
                 root.lastAdjustmentMessage = "";
                 const adjustedUuid = PresetModel.create({ name: "Smoke", workSeconds: 100 * 3600 });
@@ -1214,6 +1253,9 @@ QQC2.ApplicationWindow {
         width: Theme.sidebarWidth
         height: root.height
         interactive: !root.wideScreen && !root.isWelcomeActive
+        // Turning `interactive` off leaves an open drawer open: close it when the window is
+        // widened (the sidebar shows) or the welcome tour takes the window.
+        onInteractiveChanged: if (!interactive) close()
         background: Item {}
         Sidebar {
             anchors.fill: parent
@@ -1398,19 +1440,30 @@ QQC2.ApplicationWindow {
         if (!screenLockPromptPending || !root.visible || !root.active) {
             return;
         }
+        // Not over a task note: this prompt waits until that dialog closes.
+        if (taskNoteDialog.visible) {
+            return;
+        }
         screenLockPromptPending = false;
         if (TimerEngine.paused && (ScreenLockWatcher.pausedByScreenLock || ScreenLockWatcher.pausedBySleep)) {
             screenLockResumeDialog.open();
         }
     }
 
+    // The task note first: the resume prompt waits for it to close.
     onActiveChanged: {
-        showPendingScreenLockPrompt();
         showPendingTaskNote();
+        showPendingScreenLockPrompt();
     }
     onVisibleChanged: {
-        showPendingScreenLockPrompt();
         showPendingTaskNote();
+        showPendingScreenLockPrompt();
+    }
+    Connections {
+        target: taskNoteDialog
+        function onClosed() {
+            Qt.callLater(root.showPendingScreenLockPrompt);
+        }
     }
 
     Connections {
@@ -1443,6 +1496,15 @@ QQC2.ApplicationWindow {
               : i18n("The timer was paused while your screen was locked. Would you like to resume?")
         confirmText: i18n("Resume")
         cancelText: i18n("Keep Paused")
+        // Resumed or stopped some other way (tray, shortcut, KRunner): the question is moot.
+        Connections {
+            target: TimerEngine
+            function onStateChanged() {
+                if (!TimerEngine.paused) {
+                    screenLockResumeDialog.close();
+                }
+            }
+        }
         onConfirmed: {
             TimerEngine.resume();
             screenLockResumeDialog.close();
