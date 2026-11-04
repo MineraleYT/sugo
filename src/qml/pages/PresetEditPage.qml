@@ -659,7 +659,7 @@ QQC2.Page {
                         from: 0
                         to: PresetModel.maxCycles
                         value: page.preset.cyclesBeforeLong
-                        unit: i18nc("work sessions, short", "sessions")
+                        unit: i18ncp("work sessions, short", "session", "sessions", cyclesBox.value)
                         fromText: i18n("Never")
                         Accessible.name: i18n("Long break after")
                     }
