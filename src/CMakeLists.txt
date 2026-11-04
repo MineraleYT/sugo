@@ -131,8 +131,11 @@ target_sources(sugo_core PRIVATE
     stats/StatsAggregator.cpp
     stats/StatsModel.h
     stats/StatsModel.cpp
+    # Sugo Sync: the same code on every system (docs/sync-plan.md).
+    sync/PresetSyncFormat.h
+    sync/PresetSyncFormat.cpp
 )
-target_include_directories(sugo_core PUBLIC core db platform stats)
+target_include_directories(sugo_core PUBLIC core db platform stats sync)
 # Qt's resource and QML cache objects share these include paths but may compile before moc has
 # created them; -Wmissing-include-dirs would warn in a clean parallel build.
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/sugo_core_autogen/include ${CMAKE_CURRENT_BINARY_DIR}/sugo_qml_autogen/include)
