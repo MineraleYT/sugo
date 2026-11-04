@@ -160,11 +160,17 @@ QQC2.Page {
                     text: i18n("Previous")
                     onClicked: StatsModel.previousPeriod()
                 }
+                // Its own width at most (the spacer takes the rest), cut short when the row is
+                // too narrow for it and the period buttons.
                 Text {
                     text: StatsModel.title
                     color: Theme.foreground
                     font.pixelSize: Theme.fontTitle + 1
                     font.weight: Font.Medium
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.maximumWidth: implicitWidth
                     Layout.leftMargin: Theme.spaceXs
                     Layout.rightMargin: Theme.spaceXs
                 }
