@@ -240,6 +240,21 @@ private Q_SLOTS:
 #endif
         tray->setWindow(nullptr);
     }
+
+    void quitAsksTheWindow()
+    {
+        // Quit leaves the decision to the window (main.cpp), which asks first while a phase runs:
+        // the tray itself neither quits nor ends the phase.
+        QSignalSpy quit(tray.get(), &TrayController::quitRequested);
+        engine->start();
+        openMenu();
+        QAction *action = actionNamed(menu(), QStringLiteral("Quit"));
+        QVERIFY(action);
+        action->trigger();
+        QCOMPARE(quit.count(), 1);
+        QVERIFY(engine->isActive());
+        QVERIFY(tray->isVisible());
+    }
 };
 
 QTEST_MAIN(TrayControllerTest)

@@ -12,7 +12,6 @@
 #include "Localization.h"
 
 #include <QAction>
-#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QMenu>
@@ -242,7 +241,8 @@ void TrayController::createItem()
     });
     menu->addSeparator();
     m_windowAction = menu->addAction(QString(), this, &TrayController::toggleWindow);
-    m_quitAction = menu->addAction(QIcon::fromTheme(QStringLiteral("application-exit")), QString(), qApp, &QCoreApplication::quit);
+    m_quitAction = menu->addAction(QIcon::fromTheme(QStringLiteral("application-exit")), QString(), this,
+                                   &TrayController::quitRequested);
     // The clock in the status line is refreshed only when the menu opens, never on a tick.
     connect(menu, &QMenu::aboutToShow, this, [this]() {
         updateStatusLine();

@@ -81,7 +81,8 @@ namespace
  *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
  *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
  *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
- *   so this also covers the menu bar icon's Quit. The running phase is then saved as
+ *   so this also covers the window's own Quit (requestQuit(), which the menu bar icon's Quit
+ *   calls too), once it has asked. The running phase is then saved as
  *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
  * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
  *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
@@ -496,6 +497,15 @@ int main(int argc, char *argv[])
             QMetaObject::invokeMethod(window, "openPage", Q_ARG(QString, page));
         });
 
+        // The tray menu's Quit: the window's own, which asks first while a phase runs; the window
+        // comes to the front then, so the question is seen.
+        QObject::connect(tray, &TrayController::quitRequested, window, [window, timer, activateWindow]() {
+            if (timer->isActive()) {
+                activateWindow();
+            }
+            QMetaObject::invokeMethod(window, "requestQuit");
+        });
+
         // A click on a notification with nothing more specific to do.
         QObject::connect(notifier, &PhaseNotifier::showWindowRequested, window, activateWindow);
 
@@ -506,6 +516,9 @@ int main(int argc, char *argv[])
                              QMetaObject::invokeMethod(window, "openTaskNotePrompt", Q_ARG(QVariant, presetName),
                                                        Q_ARG(QVariant, sessionId));
                          });
+    } else {
+        // No window to ask from.
+        QObject::connect(tray, &TrayController::quitRequested, &app, &QCoreApplication::quit);
     }
 
     const int status = app.exec();
