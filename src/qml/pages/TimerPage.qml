@@ -306,7 +306,11 @@ QQC2.Page {
                             id: segment
                             required property var modelData
                             required property int index
-                            readonly property bool done: index < page.currentSegment && !page.isIdle
+                            objectName: "cycleSegment-" + index
+                            // Also while the next phase waits for Start (Manual mode): the work
+                            // done in this set stays done. Stop and the end of the set reset the
+                            // count, so nothing shows done then, nor before any work is counted.
+                            readonly property bool done: index < page.currentSegment && TimerEngine.completedCycles > 0
                             readonly property bool current: index === page.currentSegment
                             width: Math.max(Theme.spaceSm, (track.width - track.gaps) * modelData.seconds / Math.max(1, track.total))
                             height: track.height

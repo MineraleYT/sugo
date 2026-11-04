@@ -293,6 +293,8 @@ QQC2.ApplicationWindow {
         property string builtinUuid: ""
         property bool paletteRan: false
         property real welcomePanelY: 0
+        // The stage at which the timer page's track check began (0: not yet).
+        property int trackCheckStage: 0
 
         function findItem(item: var, predicate: var): var {
             if (!item) {
@@ -500,15 +502,55 @@ QQC2.ApplicationWindow {
                 return false;
             }
             default:
-                if (!root.active && stage < 31) {
-                    return false; // wait for the window to be active again
+                if (trackCheckStage === 0) {
+                    if (!root.active && stage < 31) {
+                        return false; // wait for the window to be active again
+                    }
+                    root.showPendingTaskNote();
+                    if (root.active && (root.pendingTaskNote || !root.taskNoteOpen)) {
+                        fail(43, "The kept task note did not open with the window");
+                        return true;
+                    }
+                    taskNoteDialog.close();
+                    // A work phase of one second, then (Manual mode) the break waits for Start.
+                    PresetModel.setOption(PresetModel.currentUuid, "autoStartMode", 0);
+                    PresetModel.setOption(PresetModel.currentUuid, "soundOnEnd", false);
+                    TimerEngine.startCustomWork(1);
+                    trackCheckStage = stage;
+                    return false;
                 }
-                root.showPendingTaskNote();
-                if (root.active && (root.pendingTaskNote || !root.taskNoteOpen)) {
-                    fail(43, "The kept task note did not open with the window");
+                return checkTimerTrack(page);
+            }
+        }
+
+        // The cycle track of the timer page: what is done stays done while the next phase waits
+        // for Start, and nothing is done once stopped.
+        function checkTimerTrack(page: var): bool {
+            if (TimerEngine.active) {
+                if (stage - trackCheckStage < 30) {
+                    return false;
                 }
+                fail(49, "A work phase of one second did not end");
                 return true;
             }
+            const first = findItem(page, item => item.objectName === "cycleSegment-0");
+            const second = findItem(page, item => item.objectName === "cycleSegment-1");
+            if (!first || !second) {
+                fail(49, "The segments of the cycle track are missing");
+                return true;
+            }
+            if (TimerEngine.phase !== TimerEngine.Phase.ShortBreak || !first.done || !second.current) {
+                fail(49, "The work just done emptied the track while the break waits: phase " + TimerEngine.phase
+                     + ", first done " + first.done + ", second current " + second.current);
+                return true;
+            }
+            TimerEngine.start();
+            TimerEngine.stop();
+            if (first.done || !first.current) {
+                fail(49, "The track still shows work done after Stop");
+                return true;
+            }
+            return true;
         }
 
         // A timer's page: one stage per tick, so bindings and Qt.callLater() run in between.
