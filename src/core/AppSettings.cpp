@@ -305,16 +305,27 @@ void AppSettings::setStartAtLogin(bool enabled)
     if (!m_autostart) {
         return;
     }
-    if (enabled != startAtLogin() && !m_autostart->setEnabled(enabled)) {
-        Q_EMIT autostartFailed(enabled ? i18n("Could not set up starting Sugo at login.")
-                                       : i18n("Could not remove the entry that starts Sugo at login."));
-    } else if (!enabled) {
+    QString failure;
+    if (enabled != startAtLogin()) {
+        if (enabled && m_autostart->runsFromTemporaryLocation()) {
+            // Opened from the disk image (or a copy macOS moved aside): it is gone at the next login.
+            failure = i18n("To start Sugo at login, move it to the Applications folder and open it from there.");
+        } else if (!m_autostart->setEnabled(enabled)) {
+            failure = enabled ? i18n("Could not set up starting Sugo at login.")
+                              : i18n("Could not remove the entry that starts Sugo at login.");
+        }
+    }
+    if (failure.isEmpty() && !enabled) {
         // "Start minimized" only means something for the start at login: switched off with it,
         // it never stays on unseen behind the disabled row.
         setStartMinimized(false);
     }
-    // Always announced: after a failure this makes views show the real state again.
+    // Always announced: after a failure this makes views show the real state again. Before the
+    // failure, so a view that clears its message on a change (the welcome tour) keeps this one.
     Q_EMIT startAtLoginChanged();
+    if (!failure.isEmpty()) {
+        Q_EMIT autostartFailed(failure);
+    }
 }
 
 void AppSettings::setStartMinimized(bool minimized)

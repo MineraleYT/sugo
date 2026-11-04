@@ -25,6 +25,7 @@ struct FakeState {
     bool supported = true;
     bool enabled = false;
     bool failNext = false;
+    bool temporaryLocation = false;
     int setCalls = 0;
     int repairCalls = 0;
 };
@@ -50,6 +51,7 @@ public:
         return true;
     }
     void repair() override { ++m_state->repairCalls; }
+    bool runsFromTemporaryLocation() const override { return m_state->temporaryLocation; }
 
 private:
     std::shared_ptr<FakeState> m_state;
@@ -375,6 +377,40 @@ private Q_SLOTS:
         QVERIFY(!failed.first().first().toString().isEmpty());
         QVERIFY(!settings->startAtLogin());  // the real state, not what was asked for
         QCOMPARE(changed.count(), 1);        // announced, so a checkbox shows the real state again
+    }
+
+    // Opened from the disk image: a message that says what to do, not a generic failure.
+    void enablingFromATemporaryLocationSaysToMoveTheApp()
+    {
+        const auto settings = make();
+        QSignalSpy failed(settings.get(), &AppSettings::autostartFailed);
+        state->temporaryLocation = true;
+
+        settings->setStartAtLogin(true);
+
+        QCOMPARE(state->setCalls, 0);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(failed.first().first().toString().contains(QStringLiteral("Applications folder")));
+
+        // Turning off an entry made by the installed copy still works from there.
+        state->enabled = true;
+        settings->setStartAtLogin(false);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+    }
+
+    // The welcome tour clears its message on startAtLoginChanged: the failure must come after it.
+    void theFailureIsAnnouncedAfterTheStateChange()
+    {
+        QStringList order;
+        const auto settings = make();
+        connect(settings.get(), &AppSettings::startAtLoginChanged, this, [&order] { order << QStringLiteral("changed"); });
+        connect(settings.get(), &AppSettings::autostartFailed, this, [&order] { order << QStringLiteral("failed"); });
+
+        state->failNext = true;
+        settings->setStartAtLogin(true);
+        QCOMPARE(order, QStringList({QStringLiteral("changed"), QStringLiteral("failed")}));
     }
 
     void aStaleEntryIsRepairedAtStartup()
