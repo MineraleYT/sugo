@@ -2,21 +2,34 @@
 #pragma once
 
 #include <QDateTime>
+#include <QList>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 #include <QUrl>
+#include <QVariantMap>
 
 #include "Settings.h"
 #include "SyncApi.h"
 
+class SecretBytes;
 class SyncSecrets;
 
 /**
- * The Sugo Sync account of this computer: sign-in with a code shown on sugo.stream.
+ * The Sugo Sync account of this computer: sign-in with a code shown on sugo.stream, and the
+ * data key K.
+ *
+ * - The first device of an account creates K and the recovery code, and uploads K sealed with
+ *   the code (recoveryCodeCreated()).
+ * - Any later device waits for a linked device to approve it: both show verificationCode() of
+ *   the two public keys, and the linked one sends K in an authenticated crypto_box. The new
+ *   device takes K only from the device the code was computed with (a server that hands it a
+ *   key of its own is caught: keyRejected(), and the key is not confirmed).
+ * - K is stored before the server is told (DELETE /v1/key), so it can never be lost between.
  *
  * Every "store X in the keyring" is a SyncSecrets write of the one `sync-secrets` item. The
- * Settings group `Sync` holds what is not secret: DeviceId, UserId, DeviceName.
+ * Settings group `Sync` holds what is not secret: DeviceId, UserId, DeviceName, KeyConfirmed.
  *
  * Rule S4: before sign-in sends anything, a test write proves the keyring can keep secrets;
  * without a keyring there is no sync (no file fallback), the same on every system.
@@ -33,6 +46,21 @@ public:
         Ready,         ///< Linked, with the data key.
     };
     Q_ENUM(Phase)
+
+    /// A device of the account (GET /v1/devices).
+    struct Device {
+        QString id;
+        QString name;
+        QString platform;
+        QDateTime createdAt;
+        QDateTime lastSeen;    ///< Invalid while approved on the site but never collected.
+        bool pending = true;   ///< No data key yet.
+        bool current = false;  ///< This computer.
+        QByteArray publicKey;  ///< Raw, 32 bytes.
+
+        /// id, name, platform, createdAt, lastSeen, pending, current (for QML).
+        QVariantMap toVariantMap() const;
+    };
 
     /// `api` and `secrets` are not owned and must outlive this object.
     SyncAccount(SyncApi *api, SyncSecrets *secrets, Settings::Ptr settings, QObject *parent = nullptr);
@@ -51,6 +79,11 @@ public:
     QString userId() const;
     QString deviceName() const;
 
+    /// This device's public key (empty when signed out).
+    QByteArray publicKey() const { return m_publicKey; }
+    /// K (empty until phase() is Ready).
+    const SecretBytes &dataKey() const;
+
     // --- While signing in -------------------------------------------------------------------------
     QString userCode() const { return m_userCode; }
     QUrl verificationUri() const { return m_verificationUri; }
@@ -58,6 +91,12 @@ public:
     QDateTime codeExpiresAt() const { return m_codeExpiresAt; }
     /// The site could not link this device: the account has its most devices.
     bool deviceLimitReached() const { return m_deviceLimitReached; }
+
+    // --- Key ------------------------------------------------------------------------------------------
+    /// While waiting for the key: the six digits both devices show (empty if no device can approve).
+    QString verificationCode() const { return m_verificationCode; }
+    /// The devices of the last list.
+    QList<Device> devices() const { return m_devices; }
 
     /// One second in ms for every wait (polling, retries); tests make it short.
     void setTimeUnitMs(int ms) { m_unitMs = ms; }
@@ -77,6 +116,18 @@ public Q_SLOTS:
     void startSignIn(const QString &deviceName);
     /// Stops polling and removes the secrets of the sign-in.
     void cancelSignIn();
+
+    /// Polls for the key every 5 s while the window is active, every 30 s otherwise.
+    void setWindowActive(bool active);
+    /// Starts waiting for the key again (after keyRejected(), or when another device was linked).
+    void waitForKey();
+
+    /// Sugo-Pending-Devices: lists the devices and asks about each new one (approvalRequested()).
+    void checkPendingDevices(int count);
+    /// Sends K to a pending device, boxed for its public key by this device's key.
+    void approveDevice(const QString &id);
+    /// Asks no more about this device until the program restarts.
+    void ignoreDevice(const QString &id);
 
     /// Forgets everything here: secrets item, Settings group `Sync`, pending requests.
     void signOutLocally();
@@ -100,6 +151,21 @@ Q_SIGNALS:
     /// The server refused the refresh token (disconnected on the site, or token reused): this
     /// computer was signed out locally.
     void signedOutRemotely();
+    void devicesChanged();
+    void verificationCodeChanged(const QString &code);
+    /// The key that arrived does not come from the device the code was shown for, or does not
+    /// open: refused, not confirmed. Polling stops until waitForKey().
+    void keyRejected();
+    /// K is stored and confirmed: phase() is Ready.
+    void keyReady();
+    /// This device created K: the code to show once and have the user confirm.
+    void recoveryCodeCreated(const QString &code);
+
+    /// A pending device asks for the key; `verificationCode` must match what it shows.
+    void approvalRequested(const QString &id, const QString &name, const QString &platform, const QString &verificationCode);
+    void deviceApproved(const QString &id);
+    void approvalFailed(const QString &id, const SyncError &error);
+
     /// A request failed in a way worth showing (network, rate limit, server); it is retried.
     void requestFailed(const SyncError &error);
 
@@ -112,7 +178,24 @@ private:
     void finishSignIn(const QJsonObject &json);
     void abandonSignIn();
     void clearSignInCode();
+    enum class KeyStep { List, PollKey, CreateKey, UploadRecovery, ConfirmKey };
+
     void startKeyPhase();
+    void runKeyStep(KeyStep step);
+    void scheduleKeyStep(KeyStep step, int seconds);
+    void retryKeyStep(KeyStep step, const SyncError &error);
+    void chooseApprover();
+    void createDataKey();
+    void uploadRecovery();
+    void pollKey();
+    void receiveKey(const QJsonObject &json);
+    void rejectKey();
+    void confirmKey();
+    void becomeReady();
+    int keyPollSeconds() const { return m_windowActive ? 5 : 30; }
+    /// Reads a device list; false if the answer is not one.
+    bool takeDevices(const SyncReply &reply);
+    void askAboutPendingDevices();
     void onSignedOutRemotely();
     void writeSetting(const char *key, const QVariant &value);
 
@@ -135,4 +218,17 @@ private:
     QDateTime m_codeExpiresAt;
     int m_interval = 5;
     bool m_deviceLimitReached = false;
+
+    // Key
+    QTimer m_keyTimer;
+    KeyStep m_keyStep = KeyStep::List;
+    bool m_windowActive = true;
+    QList<Device> m_devices;
+    Device m_approver;
+    QString m_verificationCode;
+
+    // Approval of other devices
+    bool m_checkingPending = false;
+    QSet<QString> m_asked;
+    QSet<QString> m_ignored;
 };

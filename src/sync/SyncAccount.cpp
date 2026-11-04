@@ -4,6 +4,7 @@
 #include "SyncCrypto.h"
 #include "SyncSecrets.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QSysInfo>
 
@@ -15,6 +16,8 @@ const QLatin1String kGroup("Sync");
 const char kDeviceId[] = "DeviceId";
 const char kUserId[] = "UserId";
 const char kDeviceName[] = "DeviceName";
+/// The server knows this device holds K (recovery copy uploaded, or DELETE /v1/key done).
+const char kKeyConfirmed[] = "KeyConfirmed";
 
 QString key(const char *name)
 {
@@ -22,6 +25,13 @@ QString key(const char *name)
 }
 
 constexpr int kMaxNameLength = 64;
+/// Seconds before a failed step of the key phase is tried again.
+constexpr int kRetrySeconds = 30;
+
+QDateTime parseTime(const QJsonValue &value)
+{
+    return value.isString() ? QDateTime::fromString(value.toString(), Qt::ISODateWithMs) : QDateTime();
+}
 } // namespace
 
 SyncAccount::SyncAccount(SyncApi *api, SyncSecrets *secrets, Settings::Ptr settings, QObject *parent)
@@ -32,6 +42,8 @@ SyncAccount::SyncAccount(SyncApi *api, SyncSecrets *secrets, Settings::Ptr setti
 {
     m_pollTimer.setSingleShot(true);
     connect(&m_pollTimer, &QTimer::timeout, this, &SyncAccount::pollToken);
+    m_keyTimer.setSingleShot(true);
+    connect(&m_keyTimer, &QTimer::timeout, this, [this]() { runKeyStep(m_keyStep); });
     connect(m_api, &SyncApi::signedOutRemotely, this, &SyncAccount::onSignedOutRemotely);
 }
 
@@ -60,6 +72,24 @@ QString SyncAccount::userId() const
 QString SyncAccount::deviceName() const
 {
     return m_settings->value(key(kDeviceName)).toString();
+}
+
+QVariantMap SyncAccount::Device::toVariantMap() const
+{
+    return {
+        {QStringLiteral("id"), id},
+        {QStringLiteral("name"), name},
+        {QStringLiteral("platform"), platform},
+        {QStringLiteral("createdAt"), createdAt},
+        {QStringLiteral("lastSeen"), lastSeen},
+        {QStringLiteral("pending"), pending},
+        {QStringLiteral("current"), current},
+    };
+}
+
+const SecretBytes &SyncAccount::dataKey() const
+{
+    return m_secrets->values().dataKey;
 }
 
 void SyncAccount::writeSetting(const char *name, const QVariant &value)
@@ -279,7 +309,333 @@ void SyncAccount::cancelSignIn()
 
 void SyncAccount::startKeyPhase()
 {
-    // The data key arrives in the next change.
+    const SyncSecrets::Values &values = m_secrets->values();
+    if (values.dataKey.isEmpty()) {
+        runKeyStep(KeyStep::List);
+    } else if (m_settings->value(key(kKeyConfirmed)).toBool()) {
+        becomeReady();
+    } else if (!values.recoveryCode.isEmpty()) {
+        runKeyStep(KeyStep::UploadRecovery); // created here, upload interrupted
+    } else {
+        runKeyStep(KeyStep::ConfirmKey); // received, confirmation interrupted
+    }
+}
+
+void SyncAccount::waitForKey()
+{
+    if (m_phase == Phase::WaitingForKey) {
+        m_keyTimer.stop();
+        runKeyStep(KeyStep::List);
+    }
+}
+
+void SyncAccount::setWindowActive(bool active)
+{
+    m_windowActive = active;
+    if (active && m_phase == Phase::WaitingForKey && m_keyStep == KeyStep::PollKey && m_keyTimer.isActive()
+        && m_keyTimer.remainingTime() > keyPollSeconds() * m_unitMs) {
+        m_keyTimer.start(keyPollSeconds() * m_unitMs);
+    }
+}
+
+void SyncAccount::scheduleKeyStep(KeyStep step, int seconds)
+{
+    m_keyStep = step;
+    m_keyTimer.start(std::max(1, seconds) * m_unitMs);
+}
+
+void SyncAccount::retryKeyStep(KeyStep step, const SyncError &error)
+{
+    if (error.transient()) {
+        Q_EMIT requestFailed(error);
+    }
+    scheduleKeyStep(step, std::max(kRetrySeconds, error.retryAfter));
+}
+
+void SyncAccount::runKeyStep(KeyStep step)
+{
+    if (m_phase != Phase::WaitingForKey) {
+        return;
+    }
+    m_keyStep = step;
+    switch (step) {
+    case KeyStep::List:
+        m_api->listDevices([this](const SyncReply &reply) {
+            if (m_phase != Phase::WaitingForKey) {
+                return;
+            }
+            if (!takeDevices(reply)) {
+                retryKeyStep(KeyStep::List, reply.error);
+                return;
+            }
+            chooseApprover();
+        });
+        break;
+    case KeyStep::PollKey:
+        pollKey();
+        break;
+    case KeyStep::CreateKey:
+        createDataKey();
+        break;
+    case KeyStep::UploadRecovery:
+        uploadRecovery();
+        break;
+    case KeyStep::ConfirmKey:
+        confirmKey();
+        break;
+    }
+}
+
+bool SyncAccount::takeDevices(const SyncReply &reply)
+{
+    if (!reply.ok() || !reply.json.value(QLatin1String("devices")).isArray()) {
+        return false;
+    }
+    QList<Device> devices;
+    const QJsonArray list = reply.json.value(QLatin1String("devices")).toArray();
+    for (const QJsonValue &value : list) {
+        const QJsonObject o = value.toObject();
+        Device d;
+        d.id = o.value(QLatin1String("id")).toString();
+        if (d.id.isEmpty()) {
+            continue;
+        }
+        d.name = o.value(QLatin1String("name")).toString();
+        d.platform = o.value(QLatin1String("platform")).toString();
+        d.createdAt = parseTime(o.value(QLatin1String("created_at")));
+        d.lastSeen = parseTime(o.value(QLatin1String("last_seen")));
+        d.pending = o.value(QLatin1String("pending")).toBool(true);
+        d.current = o.value(QLatin1String("current")).toBool(false);
+        d.publicKey = QByteArray::fromBase64(o.value(QLatin1String("public_key")).toString().toLatin1());
+        devices.append(d);
+    }
+    m_devices = devices;
+    Q_EMIT devicesChanged();
+    return true;
+}
+
+void SyncAccount::chooseApprover()
+{
+    // The device that can send K: another one that holds it; the most recently seen if several.
+    const Device *approver = nullptr;
+    for (const Device &d : std::as_const(m_devices)) {
+        if (!d.current && !d.pending && d.publicKey.size() == SyncCrypto::KeyBytes
+            && (!approver || d.lastSeen > approver->lastSeen)) {
+            approver = &d;
+        }
+    }
+    bool anyReady = false;
+    for (const Device &d : std::as_const(m_devices)) {
+        anyReady = anyReady || (!d.current && !d.pending);
+    }
+    if (!anyReady) {
+        createDataKey();
+        return;
+    }
+    m_approver = approver ? *approver : Device();
+    const QString code = approver ? SyncCrypto::verificationCode(m_publicKey, approver->publicKey) : QString();
+    if (code != m_verificationCode) {
+        m_verificationCode = code;
+        Q_EMIT verificationCodeChanged(code);
+    }
+    pollKey();
+}
+
+void SyncAccount::createDataKey()
+{
+    // The first device of the account: K and the recovery code, stored together in one write.
+    SecretBytes dataKey = SyncCrypto::newDataKey();
+    SecretBytes code = SyncCrypto::newRecoveryCode();
+    const bool saved = m_secrets->update([&](SyncSecrets::Values &v) {
+        v.dataKey = std::move(dataKey);
+        v.recoveryCode = std::move(code);
+    });
+    if (!saved) {
+        Q_EMIT keyringWriteFailed();
+        scheduleKeyStep(KeyStep::List, kRetrySeconds);
+        return;
+    }
+    uploadRecovery();
+}
+
+void SyncAccount::uploadRecovery()
+{
+    const SyncSecrets::Values &values = m_secrets->values();
+    const QByteArray sealed = SyncCrypto::sealWithRecovery(values.dataKey, values.recoveryCode);
+    m_api->putRecovery(sealed, [this](const SyncReply &reply) {
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (reply.error.kind == SyncError::Kind::KeyExists) {
+            // Another device created K first: drop ours and wait for theirs.
+            m_secrets->update([](SyncSecrets::Values &v) {
+                v.dataKey = SecretBytes();
+                v.recoveryCode = SecretBytes();
+            });
+            runKeyStep(KeyStep::List);
+            return;
+        }
+        if (!reply.ok()) {
+            retryKeyStep(KeyStep::UploadRecovery, reply.error); // K stays stored
+            return;
+        }
+        writeSetting(kKeyConfirmed, true);
+        Settings::sync(*m_settings);
+        const QString code = SyncCrypto::formatRecoveryCode(m_secrets->values().recoveryCode);
+        becomeReady();
+        Q_EMIT recoveryCodeCreated(code);
+    });
+}
+
+void SyncAccount::pollKey()
+{
+    m_keyStep = KeyStep::PollKey;
+    m_api->getKey([this](const SyncReply &reply) {
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (reply.ok()) {
+            receiveKey(reply.json);
+            return;
+        }
+        if (reply.error.kind == SyncError::Kind::NotFound) {
+            scheduleKeyStep(KeyStep::PollKey, keyPollSeconds()); // not sent yet
+            return;
+        }
+        retryKeyStep(KeyStep::PollKey, reply.error);
+    });
+}
+
+void SyncAccount::receiveKey(const QJsonObject &json)
+{
+    // Only from the device whose public key the shown code covers.
+    const QString fromId = json.value(QLatin1String("from_device_id")).toString();
+    const QByteArray fromKey = QByteArray::fromBase64(json.value(QLatin1String("from_public_key")).toString().toLatin1());
+    if (m_approver.id.isEmpty() || fromId != m_approver.id || fromKey != m_approver.publicKey) {
+        rejectKey();
+        return;
+    }
+    const QByteArray sealed = QByteArray::fromBase64(json.value(QLatin1String("sealed_key")).toString().toLatin1());
+    std::optional<SecretBytes> dataKey = SyncCrypto::openBox(sealed, fromKey, m_secrets->values().deviceKey);
+    if (!dataKey || dataKey->size() != SyncCrypto::KeyBytes) {
+        rejectKey();
+        return;
+    }
+    // Stored before the server hears of it: K can never be lost in between.
+    if (!m_secrets->update([&](SyncSecrets::Values &v) { v.dataKey = std::move(*dataKey); })) {
+        Q_EMIT keyringWriteFailed();
+        scheduleKeyStep(KeyStep::PollKey, kRetrySeconds); // the box can be read again
+        return;
+    }
+    confirmKey();
+}
+
+void SyncAccount::rejectKey()
+{
+    m_keyTimer.stop();
+    Q_EMIT keyRejected();
+}
+
+void SyncAccount::confirmKey()
+{
+    m_keyStep = KeyStep::ConfirmKey;
+    m_api->confirmKey([this](const SyncReply &reply) {
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (!reply.ok()) {
+            retryKeyStep(KeyStep::ConfirmKey, reply.error);
+            return;
+        }
+        writeSetting(kKeyConfirmed, true);
+        Settings::sync(*m_settings);
+        becomeReady();
+    });
+}
+
+void SyncAccount::becomeReady()
+{
+    m_keyTimer.stop();
+    m_approver = Device();
+    if (!m_verificationCode.isEmpty()) {
+        m_verificationCode.clear();
+        Q_EMIT verificationCodeChanged(QString());
+    }
+    setPhase(Phase::Ready);
+    Q_EMIT keyReady();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Approving other devices
+// ---------------------------------------------------------------------------------------------
+
+void SyncAccount::checkPendingDevices(int count)
+{
+    if (m_phase != Phase::Ready || count <= 0 || m_checkingPending) {
+        return;
+    }
+    m_checkingPending = true;
+    m_api->listDevices([this](const SyncReply &reply) {
+        m_checkingPending = false;
+        if (m_phase != Phase::Ready) {
+            return;
+        }
+        if (takeDevices(reply)) {
+            askAboutPendingDevices();
+        } else if (reply.error.transient()) {
+            Q_EMIT requestFailed(reply.error);
+        }
+    });
+}
+
+void SyncAccount::askAboutPendingDevices()
+{
+    for (const Device &d : std::as_const(m_devices)) {
+        // A device approved on the site but never collected cannot show a code yet.
+        if (!d.pending || d.current || !d.lastSeen.isValid() || m_ignored.contains(d.id) || m_asked.contains(d.id)) {
+            continue;
+        }
+        const QString code = SyncCrypto::verificationCode(m_publicKey, d.publicKey);
+        if (code.isEmpty()) {
+            continue;
+        }
+        m_asked.insert(d.id);
+        Q_EMIT approvalRequested(d.id, d.name, d.platform, code);
+    }
+}
+
+void SyncAccount::approveDevice(const QString &id)
+{
+    const auto it = std::find_if(m_devices.cbegin(), m_devices.cend(), [&id](const Device &d) { return d.id == id; });
+    if (m_phase != Phase::Ready || it == m_devices.cend() || it->current || dataKey().isEmpty()) {
+        SyncError e;
+        e.kind = SyncError::Kind::NotFound;
+        Q_EMIT approvalFailed(id, e);
+        return;
+    }
+    const QByteArray sealed = SyncCrypto::box(dataKey(), it->publicKey, m_secrets->values().deviceKey);
+    if (sealed.isEmpty()) {
+        SyncError e;
+        e.kind = SyncError::Kind::Format;
+        Q_EMIT approvalFailed(id, e);
+        return;
+    }
+    m_api->putDeviceKey(id, sealed, [this, id](const SyncReply &reply) {
+        if (m_phase != Phase::Ready) {
+            return;
+        }
+        if (reply.ok() || reply.error.kind == SyncError::Kind::AlreadyReady) {
+            Q_EMIT deviceApproved(id);
+            return;
+        }
+        m_asked.remove(id); // ask again when it next shows up
+        Q_EMIT approvalFailed(id, reply.error);
+    });
+}
+
+void SyncAccount::ignoreDevice(const QString &id)
+{
+    m_ignored.insert(id);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -289,6 +645,12 @@ void SyncAccount::startKeyPhase()
 void SyncAccount::signOutLocally()
 {
     clearSignInCode();
+    m_keyTimer.stop();
+    m_devices.clear();
+    m_approver = Device();
+    m_verificationCode.clear();
+    m_asked.clear();
+    m_ignored.clear();
     m_api->reset();
     m_secrets->clear();
     m_settings->remove(kGroup);
