@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds Sugo for macOS 13 or later as a universal (arm64 + x86_64) app in a disk image, with Qt
-# from qt.io (the same version as the AppImage). Runs on a Mac with the Xcode command line tools,
-# CMake, Python 3 and git (a GitHub macos runner has them all):
+# from qt.io (the same version as the AppImage) and libsodium built from source
+# (build-libsodium.sh). Runs on a Mac with the Xcode command line tools, CMake, Python 3 and git
+# (a GitHub macos runner has them all; Ninja and pkg-config come from Homebrew if missing):
 #
 #   bash packaging/macos/build.sh 1.0.0 out
 #
@@ -66,6 +67,18 @@ if [ ! -d "$WORK/ecm" ]; then
         -DBUILD_MAN_DOCS=OFF -DBUILD_QTHELP_DOCS=OFF -DCMAKE_INSTALL_PREFIX="$WORK/ecm" >/dev/null
     cmake --install ecm-build >/dev/null
 fi
+
+# --- libsodium (the sync's encryption) -----------------------------------------------------------
+# A universal static library, found by CMake through pkg-config before any other libsodium
+# (Homebrew's is a dylib for one architecture). Pinned in build-libsodium.sh.
+if ! command -v pkg-config >/dev/null 2>&1; then
+    command -v brew >/dev/null 2>&1 || fail "pkg-config is missing (brew install pkgconf)"
+    brew install pkgconf >/dev/null
+fi
+MACOSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET bash "$SRC/packaging/macos/build-libsodium.sh" "$WORK/sodium"
+export PKG_CONFIG_PATH="$WORK/sodium/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+[ "$(pkg-config --variable=libdir libsodium)" = "$WORK/sodium/lib" ] \
+    || fail "pkg-config finds a libsodium other than the one in $WORK/sodium"
 
 # --- Sugo ----------------------------------------------------------------------------------------
 cmake -S "$SRC" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
@@ -158,6 +171,19 @@ if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
           done)
     [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
     echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
+fi
+
+# libsodium is linked statically: no libsodium dylib in the program (macdeployqt would copy one
+# for a single architecture from wherever CMake found it), and, once the sources use it, its code
+# in the program.
+if deps "$CONTENTS/MacOS/Sugo" | grep -qi 'libsodium'; then
+    fail "Sugo links a libsodium dylib: CMake did not find the static library of $WORK/sodium"
+fi
+if grep -rqs --include='*.cpp' --include='*.mm' '#include <sodium' "$SRC/src"; then
+    for arch in arm64 x86_64; do
+        nm -arch "$arch" -g "$CONTENTS/MacOS/Sugo" | grep -q ' _sodium_init$' \
+            || fail "libsodium is not linked into Sugo ($arch)"
+    done
 fi
 
 # HTTPS (update checks, CalDAV): a TLS backend that needs nothing outside the bundle.
