@@ -838,6 +838,27 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
     }
 
+    void put403IsTheCalendarRefusingNotTheLogin()
+    {
+        // A calendar shared read-only: the login is fine, the calendar does not take events.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        QCOMPARE(m_sync->pendingCount(), 1); // kept, not skipped
+        checkNoSecrets();
+
+        // Tried again later: once the calendar takes it, it is sent.
+        m_server->defaultPut = 201;
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
     void put404And500RetryWithBackoff()
     {
         configureCustom();

@@ -1253,14 +1253,14 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         trySend();
         return;
     }
-    const QString message = describeFailure(r);
-    if (r.http == 401 || r.http == 403) {
+    if (r.http == 401) {
+        const QString message = describeFailure(r);
         m_paused = true;
         setLastError(message);
         setStatus(Failed, message);
         return;
     }
-    if (r.http >= 400 && r.http < 500 && r.http != 404 && r.http != 408 && r.http != 429) {
+    if (r.http >= 400 && r.http < 500 && r.http != 403 && r.http != 404 && r.http != 408 && r.http != 429) {
         // This event will never be accepted; do not let it hold back the others.
         m_queue.removeAt(index);
         setLastError(i18n("The server refused an event (HTTP %1); it was skipped.", r.http));
@@ -1269,7 +1269,12 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
     m_sendFailing = true;
-    setLastError(message);
+    // 403: the server knows who we are, but the calendar does not take new events (shared
+    // read-only, a full quota). The password is not the problem, so sending is not paused on it:
+    // the events wait, and go once the calendar accepts them or another one is chosen.
+    setLastError(r.http == 403 ? i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
+                                      "or choose another calendar.")
+                               : describeFailure(r));
     refreshIdleStatus();
     scheduleRetry();
 }
