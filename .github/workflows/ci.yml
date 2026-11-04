@@ -36,18 +36,46 @@ permissions:
   contents: read
 
 jobs:
+  # Skips the jobs a change cannot affect: documentation runs nothing, a macOS-only change only the
+  # macOS job, a Linux-only one (D-Bus services, metadata) only the Linux jobs. The file lists are
+  # in .github/scripts/ci-changes.sh; when the changed files cannot be known, everything runs.
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      linux: ${{ steps.detect.outputs.linux }}
+      clang: ${{ steps.detect.outputs.clang }}
+      macos: ${{ steps.detect.outputs.macos }}
+    steps:
+      - name: Check out the script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Detect the jobs to run
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash .github/scripts/ci-changes.sh "$BASE" "$HEAD"
+
   build-and-test:
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
     runs-on: ubuntu-26.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            appstream desktop-file-utils cmake ninja-build g++ ccache dbus-daemon \
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            appstream desktop-file-utils cmake ninja-build g++ ccache dbus-daemon
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools
             qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 
       - name: Validate metadata
@@ -55,7 +83,8 @@ jobs:
           appstreamcli validate --no-net data/io.github.mineraleyt.sugo.metainfo.xml
           desktop-file-validate data/io.github.mineraleyt.sugo.desktop
 
-      # The compiler cache of the newest run on this branch (or on main): only what changed recompiles.
+      # The compiler cache of the newest run on this branch, else on the branch a pull request
+      # targets, else on main (the branches a run may read caches from): only what changed recompiles.
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -63,6 +92,7 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
             ccache-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-${{ github.base_ref || 'main' }}-
             ccache-${{ runner.os }}-main-
 
       - name: Configure
@@ -76,27 +106,32 @@ jobs:
           ccache --zero-stats
           cmake --build build --parallel
           ccache --show-stats
+          # Keep only what this build used: the cache stays the size of one build.
+          ccache --evict-older-than 7200s
 
       - name: Install to a temporary prefix
         run: cmake --install build --prefix "$RUNNER_TEMP/sugo-install"
 
+      # One test per core (the tests sharing a folder hold a RESOURCE_LOCK, see tests/CMakeLists.txt).
       - name: Run test suite
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel "$(getconf _NPROCESSORS_ONLN)"
 
   # Clang's warnings are close to those of Apple's compiler: they show up here before the macOS job.
   build-clang:
     name: Build with Clang
+    needs: changes
+    if: needs.changes.outputs.clang == 'true'
     runs-on: ubuntu-26.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            cmake ninja-build clang ccache \
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+        uses: ./.github/actions/apt-install
+        with:
+          packages: >-
+            cmake ninja-build clang ccache
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools
             qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 
       - name: Restore the compiler cache
@@ -106,6 +141,7 @@ jobs:
           key: ccache-clang-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
             ccache-clang-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-clang-${{ runner.os }}-${{ github.base_ref || 'main' }}-
             ccache-clang-${{ runner.os }}-main-
 
       - name: Configure
@@ -119,12 +155,16 @@ jobs:
           ccache --zero-stats
           cmake --build build --parallel
           ccache --show-stats
+          # Keep only what this build used: the cache stays the size of one build.
+          ccache --evict-older-than 7200s
 
   # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
   # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
   # (nor stop the nightly build) while the port settles.
   build-and-test-macos:
     name: Build and test on macOS
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
     runs-on: macos-26
     continue-on-error: true
     steps:
@@ -153,6 +193,9 @@ jobs:
           ECM_TAG: ${{ steps.pins.outputs.ECM_TAG }}
         run: |
           command -v ninja >/dev/null || brew install ninja
+          command -v ccache >/dev/null || brew install ccache
+          # Where the cache step looks (ccache's own default here is ~/Library/Caches/ccache).
+          echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
           # GNU timeout, which the smoke tests use.
           command -v timeout >/dev/null || brew install coreutils
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
@@ -174,14 +217,30 @@ jobs:
           done
           echo "SUGO_ECM=$deps/ecm" >> "$GITHUB_ENV"
 
+      - name: Restore the compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.base_ref || 'main' }}-
+            ccache-${{ runner.os }}-${{ runner.arch }}-main-
+
       - name: Configure
         run: |
           test -n "${SUGO_QT:-}"
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
-            -DCMAKE_PREFIX_PATH="$SUGO_QT;$SUGO_ECM" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+            -DCMAKE_PREFIX_PATH="$SUGO_QT;$SUGO_ECM" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build --parallel
+        run: |
+          ccache --zero-stats
+          cmake --build build --parallel
+          ccache --show-stats
+          ccache --evict-older-than 7200s
 
+      # One test per core (the tests sharing a folder hold a RESOURCE_LOCK, see tests/CMakeLists.txt).
       - name: Run test suite
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --parallel "$(getconf _NPROCESSORS_ONLN)"

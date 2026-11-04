@@ -59,6 +59,7 @@ The build must stay free of compiler warnings. There is no separate linter.
 - The layout never moves when a message comes, goes or changes: put a message that may appear inside a page in a `MessageSlot` (a `Banner` in a place of fixed height that fades in and out, its text cut after `lines` lines), lay it over the content, or use the toast (`applicationWindow().showPassiveNotification()`); fade text with `opacity` rather than `visible`, give a description that changes with a state its `descriptionVariants` (`FormRow`, the settings' `SettingRow`) and a button whose label changes its `labels` (`SButton`).
 - In QML, never name a property `onXxx` ("on" + capital letter: QML takes it for a signal handler), and never give anything `id: palette` (it collides with the `palette` property of Qt's controls).
 - Every file carries an SPDX header (GPL-3.0-or-later for code, CC-BY-SA-4.0 for docs).
+- One commit per change: each activity gets its own commit (a change to the title bar, a translation, a tweak to the timer are three commits), never unrelated work bundled in one.
 - Commit messages and pull requests carry no `Co-Authored-By` line or other attribution to Claude.
 - Releases: version must agree across `CMakeLists.txt` `project(... VERSION)`, the newest `<release>` in the metainfo XML, and the `vX.Y.Z` tag, or the release workflow refuses to publish. Follow the checklist in `docs/DEVELOPMENT.md`.
 
