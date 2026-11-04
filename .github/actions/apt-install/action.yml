@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# apt-get install, with the downloaded .deb files kept in the Actions cache. The mirrors are the
+# slow part (111 MB of Qt and friends, 30 s to 11 min); with the cache only the packages updated
+# since the last run are downloaded. apt still checks every file against the signed package lists.
+name: Install Ubuntu packages
+description: apt-get install --no-install-recommends, the downloaded packages kept between runs
+
+inputs:
+  packages:
+    description: The packages, separated by spaces or new lines
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # One cache per package list and runner image: a new image (weekly) saves a fresh copy,
+    # starting from the previous one.
+    - name: Name the package cache
+      id: key
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        list=$(printf '%s\n' $PACKAGES | sort -u | sha256sum | cut -c1-16)
+        image="${ImageOS:-$(. /etc/os-release && echo "$ID$VERSION_ID")}"
+        echo "prefix=apt-$image-$(uname -m)-$list-" >> "$GITHUB_OUTPUT"
+        echo "image-version=${ImageVersion:-none}" >> "$GITHUB_OUTPUT"
+        echo "dir=$HOME/.cache/sugo-apt" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the downloaded packages
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.prefix }}${{ steps.key.outputs.image-version }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    - name: Install the packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        DIR: ${{ steps.key.outputs.dir }}
+      run: |
+        mkdir -p "$DIR/partial"
+        apt=(sudo apt-get -o Dir::Cache::Archives="$DIR" -o APT::Keep-Downloaded-Packages=true
+             -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        "${apt[@]}" update
+        # shellcheck disable=SC2086 # one word per package
+        "${apt[@]}" install --no-install-recommends -y $PACKAGES
+        # Drop the versions the mirrors no longer have, then make the folder the cache's own.
+        "${apt[@]}" autoclean
+        sudo rm -rf "$DIR/partial" "$DIR/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$DIR"
+        du -sh "$DIR"
+
+    - name: Keep the downloaded packages
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.key.outputs.dir }}
+        key: ${{ steps.key.outputs.prefix }}${{ steps.key.outputs.image-version }}
