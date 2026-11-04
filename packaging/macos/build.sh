@@ -33,6 +33,8 @@ DMG_NAME=Sugo-macOS-universal.dmg
 fail() { echo "error: $*" >&2; exit 1; }
 
 mkdir -p "$WORK" "$OUT"
+# Absolute: the script works in WORK, and APP and the exit trap name paths under it.
+WORK=$(cd "$WORK" && pwd)
 OUT=$(cd "$OUT" && pwd)
 cd "$WORK"
 
