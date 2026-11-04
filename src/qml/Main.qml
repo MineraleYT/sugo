@@ -285,6 +285,7 @@ QQC2.ApplicationWindow {
         property string userUuid: ""
         property string builtinUuid: ""
         property bool paletteRan: false
+        property real welcomePanelY: 0
 
         function findItem(item: var, predicate: var): var {
             if (!item) {
@@ -376,38 +377,67 @@ QQC2.ApplicationWindow {
             }
         }
 
-        function checkWelcome(page: var): void {
+        // Welcome: the tray icon's colours, the Focus row, the step dots; then a message on the
+        // setup step must not move the step (stage 1 → 2, a tick apart so the layout settles).
+        function checkWelcome(page: var): bool {
+            if (stage === 1) {
+                ++stage;
+                const panel = findItem(page, item => item.objectName === "welcomeSetupPanel");
+                const slot = findItem(page, item => item.objectName === "welcomeSetupMessage");
+                if (!panel || !slot) {
+                    fail(47, "The welcome tour's setup panel or its message place is missing");
+                    return true;
+                }
+                welcomePanelY = panel.mapToItem(page, 0, 0).y;
+                page.autostartError = "Smoke test: a message long enough to need more than one line in the welcome tour, "
+                                      + "so that a place too small for it would show.";
+                return false;
+            }
+            if (stage === 2) {
+                const panel = findItem(page, item => item.objectName === "welcomeSetupPanel");
+                const y = panel.mapToItem(page, 0, 0).y;
+                page.autostartError = "";
+                if (Math.abs(y - welcomePanelY) > 0.5) {
+                    fail(47, "A message on the welcome tour's setup step moved the step: y " + welcomePanelY + " → " + y);
+                }
+                return true;
+            }
             // The tray icon's picture uses the colours the real icon is painted with.
             const dial = findItem(page, item => item.objectName === "trayDialPreview");
             if (!dial || !Qt.colorEqual(dial.primary, dial.isBreak ? TrayIconStyle.breakColor : TrayIconStyle.workColor)) {
                 fail(34, "The tray icon preview does not use the tray icon's colours");
-                return;
+                return true;
             }
             // The Focus shortcuts' row: hidden outside macOS, its button off without an installer.
             // (On macOS its step may not be on screen, so its visibility says nothing there.)
             const focusInstall = findItem(page, item => item.objectName === "welcomeInstallFocusShortcuts");
             if (!focusInstall || focusInstall.enabled || (!DesktopStyle.macos && focusInstall.visible)) {
                 fail(46, "The welcome tour's Focus shortcuts row is missing, or shown outside macOS");
-                return;
+                return true;
             }
-                        // The step dots are named, move the slides, and keep following them.
+            // The step dots are named, move the slides, and keep following them.
             const indicator = findItem(page, item => item.objectName === "welcomeIndicator");
             const last = indicator ? indicator.count - 1 : -1;
             const lastDot = findItem(page, item => item.objectName === "welcomeStepDot-" + last);
             const firstDot = findItem(page, item => item.objectName === "welcomeStepDot-0");
             if (!indicator || last < 1 || !lastDot || !firstDot || lastDot.accessibleName.length === 0) {
                 fail(31, "Welcome step dots missing or unnamed");
-                return;
+                return true;
             }
             lastDot.activate();
             if (indicator.currentIndex !== last) {
                 fail(31, "Choosing a step dot did not move the tour: " + indicator.currentIndex);
-                return;
+                return true;
             }
             firstDot.activate();
             if (indicator.currentIndex !== 0) {
                 fail(31, "The dots stopped following the tour: " + indicator.currentIndex);
+                return true;
             }
+            // On to the setup step for the layout check.
+            page.current = 2;
+            stage = 1;
+            return false;
         }
 
         // Timer page: the picker's text, Stop/Skip confirmation, the note of a hidden window.
@@ -582,7 +612,7 @@ QQC2.ApplicationWindow {
                 if (appSmokePage === "settings") {
                     checkSettings(currentPage);
                 } else if (appSmokePage === "welcome") {
-                    checkWelcome(currentPage);
+                    done = checkWelcome(currentPage);
                 } else if (appSmokePage === "presets") {
                     done = checkPresets(currentPage);
                 } else if (appSmokePage === "timer") {
@@ -900,31 +930,54 @@ QQC2.ApplicationWindow {
                 onStatusClicked: root.navigate("timer")
             }
 
-            // Shown on every page: nothing recorded now will survive a restart, or the last
-            // changes are still waiting to be stored.
-            Banner {
-                Layout.fillWidth: true
-                Layout.margins: Theme.spaceMd
-                visible: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
-                tone: "warning"
-                text: DataManager !== null && DataManager.usingTemporaryDatabase === true
-                      ? i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.")
-                      : i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.")
-            }
-
-            QQC2.StackView {
-                id: stack
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+
+                QQC2.StackView {
+                    id: stack
+                    anchors.fill: parent
+                    clip: true
+                    pushEnter: Transition {
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                    }
+                    pushExit: Transition {}
+                    popEnter: Transition {}
+                    popExit: Transition {}
+                    replaceEnter: Transition {}
+                    replaceExit: Transition {}
                 }
-                pushExit: Transition {}
-                popEnter: Transition {}
-                popExit: Transition {}
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
+
+                // Shown on every page: nothing recorded now will survive a restart, or the last
+                // changes are still waiting to be stored. Laid over the top of the page, so the
+                // page does not move when it comes or goes.
+                Rectangle {
+                    objectName: "dataWarning"
+                    readonly property bool shown: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spaceMd
+                    height: dataBanner.implicitHeight
+                    z: 1
+                    // The banner's fill is see-through: the page must not show under it.
+                    color: Theme.background
+                    radius: Theme.radius
+                    opacity: shown ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
+                    }
+
+                    Banner {
+                        id: dataBanner
+                        anchors.fill: parent
+                        tone: "warning"
+                        text: DataManager !== null && DataManager.usingTemporaryDatabase === true
+                              ? i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.")
+                              : i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.")
+                    }
+                }
             }
         }
     }

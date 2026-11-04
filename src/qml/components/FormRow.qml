@@ -15,6 +15,9 @@ Item {
     property bool stacked: false
     /// No line above it (the first row of a section).
     property bool first: false
+    /// Every text `description` can show, when it changes with a state: the row keeps the
+    /// height of the tallest, so nothing moves when the description changes.
+    property var descriptionVariants: []
     default property alias control: controlHolder.data
 
     Layout.fillWidth: true
@@ -50,12 +53,38 @@ Item {
                 Layout.fillWidth: true
             }
             Text {
+                id: descriptionText
                 visible: row.description.length > 0
                 text: row.description
                 color: Theme.muted
                 font.pixelSize: Theme.fontCaption + 1
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
+                Layout.minimumHeight: {
+                    let height = 0;
+                    for (let i = 0; i < descriptionMeasures.count; ++i) {
+                        const measure = descriptionMeasures.itemAt(i);
+                        if (measure) {
+                            height = Math.max(height, measure.implicitHeight);
+                        }
+                    }
+                    return height;
+                }
+                verticalAlignment: Text.AlignTop
+
+                // The variants, never shown: their heights at this width.
+                Repeater {
+                    id: descriptionMeasures
+                    model: row.descriptionVariants
+                    delegate: Text {
+                        required property string modelData
+                        visible: false
+                        width: descriptionText.width
+                        text: modelData
+                        font: descriptionText.font
+                        wrapMode: Text.WordWrap
+                    }
+                }
             }
         }
         RowLayout {

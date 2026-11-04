@@ -131,11 +131,10 @@ QQC2.Page {
     }
     readonly property bool focusOnFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
     readonly property bool focusOffFound: focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
-    /// "Create them yourself" in the Focus card: opened by the user, or because installing needs
-    /// iCloud or failed.
+    /// "Create them yourself" in the Focus card: opened by the user, or because installing failed.
     property bool focusManualExpanded: false
-    readonly property bool focusManualForced: AppSettings.focusShortcutsInstallStatus === "needsICloud"
-                                              || AppSettings.focusShortcutsInstallStatus === "failed"
+    readonly property bool focusManualForced: AppSettings.focusShortcutsInstallStatus === "failed"
+    readonly property bool focusInstalling: ["installing", "waitingOn", "waitingOff"].indexOf(AppSettings.focusShortcutsInstallStatus) >= 0
     readonly property bool focusManualShown: focusManualExpanded || focusManualForced
 
     /// The entries of a Focus shortcut list: the user's shortcuts, and the chosen one if it is
@@ -180,15 +179,12 @@ QQC2.Page {
         onTriggered: page.diagnosticsCopied = false
     }
 
-    // Result of the last diagnostics export: "", "exported" or "exportFailed".
-    property string diagnosticsResult: ""
-    property bool diagnosticsDismissed: false
-    // Translated reason of the last failed export, from Diagnostics.lastExportError().
-    property string diagnosticsExportError: ""
-
-    function showDiagnosticsResult(result: string): void {
-        diagnosticsResult = result;
-        diagnosticsDismissed = false;
+    // The result of an export, in a toast: a message in the card would move what is below it.
+    function showDiagnosticsResult(exported: bool, error: string): void {
+        applicationWindow().showPassiveNotification(
+            exported ? i18n("Diagnostic report successfully exported.")
+                     : (error.length > 0 ? error : i18n("Failed to export diagnostic report.")),
+            exported ? 3500 : "long");
     }
 
     Connections {
@@ -383,6 +379,9 @@ QQC2.Page {
         property string title
         property string description
         property bool first: false
+        /// Every text `description` can show, when it changes with a state: the row keeps the
+        /// height of the tallest, so nothing moves when the description changes.
+        property var descriptionVariants: []
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
@@ -419,8 +418,34 @@ QQC2.Page {
                     wrapMode: Text.WordWrap
                 }
                 SmallText {
+                    id: descriptionText
                     visible: row.description.length > 0
                     text: row.description
+                    verticalAlignment: Text.AlignTop
+                    Layout.minimumHeight: {
+                        let height = 0;
+                        for (let i = 0; i < descriptionMeasures.count; ++i) {
+                            const measure = descriptionMeasures.itemAt(i);
+                            if (measure) {
+                                height = Math.max(height, measure.implicitHeight);
+                            }
+                        }
+                        return height;
+                    }
+
+                    // The variants, never shown: their heights at this width.
+                    Repeater {
+                        id: descriptionMeasures
+                        model: row.descriptionVariants
+                        delegate: Text {
+                            required property string modelData
+                            visible: false
+                            width: descriptionText.width
+                            text: modelData
+                            font: descriptionText.font
+                            wrapMode: Text.WordWrap
+                        }
+                    }
                 }
             }
 
@@ -805,12 +830,13 @@ QQC2.Page {
                 SettingRow {
                     first: true
                     title: i18n("Silence notifications with a Focus")
-                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. Sugo can install two shortcuts that turn Do Not Disturb on and off. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. Then switch on \"Silence notifications while working\" in a timer's options.")
+                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. Sugo comes with two shortcuts, \"%1\" and \"%2\", that turn Do Not Disturb on and off. Shortcuts will ask you to add each of them: click Add Shortcut. Then switch on \"Silence notifications while working\" in a timer's options.",
+                                      "Sugo Focus On", "Sugo Focus Off")
                     SButton {
                         objectName: "installFocusShortcutsButton"
                         kind: page.focusOnFound && page.focusOffFound ? "secondary" : "primary"
                         text: i18n("Install Shortcuts")
-                        enabled: AppSettings.focusShortcutsInstallable && AppSettings.focusShortcutsInstallStatus !== "installing"
+                        enabled: AppSettings.focusShortcutsInstallable && !page.focusInstalling
                         onClicked: AppSettings.installFocusShortcuts()
                     }
                     SButton {
@@ -826,8 +852,7 @@ QQC2.Page {
                     }
                 }
                 FocusShortcutsStatus {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
+                    id: focusInstallStatus
                     found: page.focusOnFound && page.focusOffFound
                 }
                 // The way without "Install Shortcuts": collapsed, open when installing cannot work.
@@ -835,7 +860,7 @@ QQC2.Page {
                     objectName: "focusManualRow"
                     title: i18n("Create them yourself")
                     description: page.focusManualShown
-                                 ? i18n("In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on, one that turns it off. Choose them below.")
+                                 ? i18n("In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on until turned off, one that turns it off. Choose them below.")
                                  : i18n("Build the two shortcuts in the Shortcuts app instead, for example to use another Focus.")
                     SButton {
                         visible: page.focusManualShown
@@ -879,13 +904,18 @@ QQC2.Page {
                         onActivated: AppSettings.focusOffShortcut = currentValue
                     }
                 }
-                Banner {
+                // Where installing got while it runs (or why it failed), else whether the shortcuts are
+                // there: always shown, in a place of fixed height.
+                MessageSlot {
                     objectName: "focusShortcutStatus"
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spaceXs
                     Layout.bottomMargin: Theme.spaceMd
-                    tone: AppSettings.focusShortcutsSupported && page.focusOnFound && page.focusOffFound ? "info" : "warning"
-                    text: !AppSettings.focusShortcutsSupported
+                    shown: true
+                    tone: focusInstallStatus.active && AppSettings.focusShortcutsInstallStatus !== "done" ? focusInstallStatus.tone
+                          : AppSettings.focusShortcutsSupported && page.focusOnFound && page.focusOffFound ? "info" : "warning"
+                    text: focusInstallStatus.active && AppSettings.focusShortcutsInstallStatus !== "done" ? focusInstallStatus.text
+                          : !AppSettings.focusShortcutsSupported
                           ? i18n("The Shortcuts app is not available: silencing notifications needs macOS 12 or later.")
                           : page.focusOnFound && page.focusOffFound
                             ? i18n("Both shortcuts were found: timers can silence notifications while you work.")
@@ -1208,11 +1238,12 @@ QQC2.Page {
 
                 // Status area, kept readable even while the sync is switched off. Nothing is shown while
                 // the server is being asked (the buttons are disabled meanwhile): only a result is.
-                Banner {
+                MessageSlot {
+                    objectName: "calendarStatusMessage"
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spaceSm
-                    Layout.bottomMargin: Theme.spaceMd
-                    visible: page.calFailed || (page.calNotConfigured && !page.calWaiting)
+                    Layout.bottomMargin: Theme.spaceSm
+                    shown: page.calFailed || (page.calNotConfigured && !page.calWaiting)
                     tone: page.calFailed ? "danger" : "info"
                     text: {
                         if (!CalendarSync) {
@@ -1235,15 +1266,25 @@ QQC2.Page {
                         return CalendarSync.statusText;
                     }
                 }
+                // The last event sent and those waiting, on one line that keeps its place.
                 SmallText {
-                    Layout.bottomMargin: Theme.spaceSm
-                    visible: page.calLastSuccess.length > 0
-                    text: i18n("Last event sent: %1", page.calLastSuccess)
-                }
-                SmallText {
+                    readonly property string lastSent: page.calLastSuccess.length > 0 ? i18n("Last event sent: %1", page.calLastSuccess) : ""
+                    readonly property string waiting: page.calPending > 0
+                        ? i18np("%1 event waiting to be sent", "%1 events waiting to be sent", page.calPending) : ""
                     Layout.bottomMargin: Theme.spaceMd
-                    visible: page.calPending > 0
-                    text: i18np("%1 event waiting to be sent", "%1 events waiting to be sent", page.calPending)
+                    Layout.preferredHeight: calendarFooterMetrics.height
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
+                    opacity: text.length > 0 ? 1 : 0
+                    text: lastSent.length > 0 && waiting.length > 0 ? i18nc("last event sent · events waiting", "%1 · %2", lastSent, waiting)
+                                                                    : lastSent + waiting
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
+                    }
+                    FontMetrics {
+                        id: calendarFooterMetrics
+                        font.pixelSize: Theme.fontCaption + 1
+                    }
                 }
             }
 
@@ -1267,6 +1308,8 @@ QQC2.Page {
                     description: TimerEngine.active
                         ? i18n("Stop the active timer before restoring a backup.")
                         : i18n("Save your timers and session history to a file, or bring them back from one.")
+                    descriptionVariants: [i18n("Stop the active timer before restoring a backup."),
+                                          i18n("Save your timers and session history to a file, or bring them back from one.")]
                     SButton {
                         text: i18n("Back up…")
                         iconName: "download"
@@ -1440,6 +1483,7 @@ QQC2.Page {
                     Layout.bottomMargin: Theme.spaceMd
                     spacing: Theme.spaceSm
                     SButton {
+                        labels: [i18n("Copied"), i18n("Copy to Clipboard")]
                         text: page.diagnosticsCopied ? i18n("Copied") : i18n("Copy to Clipboard")
                         iconName: page.diagnosticsCopied ? "check" : "copy"
                         onClicked: {
@@ -1461,32 +1505,6 @@ QQC2.Page {
                         }
                     }
                 }
-                Banner {
-                    id: diagnosticsInlineMessage
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
-                    visible: page.diagnosticsResult.length > 0 && !page.diagnosticsDismissed
-                    tone: page.diagnosticsResult === "exportFailed" ? "danger" : "info"
-                    text: {
-                        switch (page.diagnosticsResult) {
-                        case "exported":
-                            return i18n("Diagnostic report successfully exported.");
-                        case "exportFailed":
-                            return page.diagnosticsExportError.length > 0
-                                ? page.diagnosticsExportError
-                                : i18n("Failed to export diagnostic report.");
-                        }
-                        return "";
-                    }
-                    SButton {
-                        kind: "ghost"
-                        iconOnly: true
-                        iconName: "close"
-                        text: i18n("Dismiss")
-                        onClicked: page.diagnosticsDismissed = true
-                    }
-                }
-
                 SettingRow {
                     title: i18n("Verbose logging")
                     description: i18n("Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce the problem, then copy the report.")
@@ -1549,10 +1567,9 @@ QQC2.Page {
             nameFilters: [i18n("Text files (*.txt)"), i18n("All files (*)")]
             onAccepted: {
                 if (Diagnostics.exportReport(selectedFile)) {
-                    page.showDiagnosticsResult("exported");
+                    page.showDiagnosticsResult(true, "");
                 } else {
-                    page.diagnosticsExportError = Diagnostics.lastExportError();
-                    page.showDiagnosticsResult("exportFailed");
+                    page.showDiagnosticsResult(false, Diagnostics.lastExportError());
                 }
             }
         }

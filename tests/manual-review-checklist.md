@@ -40,6 +40,12 @@ Run these checks in a fresh user profile where practical. Record the application
 
 ## macOS: Focus shortcuts
 
-- [ ] On a Mac signed into iCloud, click "Install Shortcuts" (Settings → Focus while working, or the welcome tour's setup step). Shortcuts shows an "Add Shortcut" sheet for "Sugo Focus On" and then one for "Sugo Focus Off" (check the second sheet appears after the first is confirmed, not lost). After adding both and returning to Sugo, the card says both were found.
+- [ ] On a Mac (signed into iCloud or not), click "Install Focus Shortcuts" in the welcome tour's setup step (Settings → Advanced → Show the Welcome Tour). Shortcuts shows the "Add Shortcut" sheet of "Sugo Focus On"; the step says to add it. Only after clicking Add Shortcut does the sheet of "Sugo Focus Off" appear (not lost behind the first); after adding it the row says the shortcuts are installed. Nothing on the step moves while the messages change.
+- [ ] Settings → Focus while working: with the shortcuts deleted in Shortcuts, "Install Shortcuts" does the same, with the status in the banner at the bottom of the card (its height stays the same); with one already there, only the other one's sheet appears; with both, none appears.
+- [ ] Choose other shortcuts in the two boxes, then click "Install Shortcuts": the boxes go back to "Sugo Focus On" / "Sugo Focus Off".
+- [ ] Close a sheet without adding the shortcut: after three minutes the card says installing failed and opens "Create them yourself".
 - [ ] Run each installed shortcut once in Shortcuts: "On" turns on Do Not Disturb until turned off, "Off" turns it off.
-- [ ] On a Mac not signed into iCloud, "Install Shortcuts" says to sign into iCloud, and "Create them yourself" opens with the "Open Shortcuts" button.
+
+## No layout shift
+
+- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).

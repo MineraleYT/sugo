@@ -21,6 +21,16 @@ QQC2.AbstractButton {
     property string toolTipText: iconOnly ? text : ""
     /// Turns red when hovered (delete).
     property bool destructive: false
+    /// Every label the button takes in turn ("Copy", "Copied"): it is as wide as with the widest,
+    /// so nothing beside it moves when the label changes.
+    property var labels: []
+    readonly property real labelsExtraWidth: {
+        let widest = 0;
+        for (const label of labels) {
+            widest = Math.max(widest, labelMetrics.advanceWidth(label));
+        }
+        return Math.max(0, Math.ceil(widest - labelMetrics.advanceWidth(text)));
+    }
 
     readonly property bool isPrimary: kind === "primary"
     readonly property color contentColor: !enabled ? Theme.subtle
@@ -32,12 +42,17 @@ QQC2.AbstractButton {
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
     implicitHeight: large ? Theme.controlHeightLg : Theme.controlHeight
-    implicitWidth: Math.max(implicitHeight, row.implicitWidth + leftPadding + rightPadding)
+    implicitWidth: Math.max(implicitHeight, row.implicitWidth + leftPadding + rightPadding + (iconOnly ? 0 : labelsExtraWidth))
     leftPadding: iconOnly ? 0 : (large ? Theme.spaceXl : Theme.spaceLg)
     rightPadding: leftPadding
     font.pixelSize: large ? Theme.fontTitle : Theme.fontBody
     font.weight: isPrimary ? Font.DemiBold : Font.Medium
     Accessible.name: text
+
+    FontMetrics {
+        id: labelMetrics
+        font: button.font
+    }
 
     QQC2.ToolTip.visible: toolTipText.length > 0 && hovered
     QQC2.ToolTip.text: toolTipText

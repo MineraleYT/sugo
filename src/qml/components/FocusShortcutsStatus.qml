@@ -3,27 +3,31 @@ import QtQuick
 import io.github.mineraleyt.sugo
 
 /**
- * macOS: where "Install Shortcuts" got (AppSettings.installFocusShortcuts()), for the Focus card
- * of the settings and the welcome tour. Hidden until the button was clicked, and once both
- * shortcuts are found (`found`): the page says so itself.
+ * macOS: where "Install Shortcuts" got (AppSettings.installFocusShortcuts()), as a message for a
+ * MessageSlot of the settings' Focus card or of the welcome tour. `active` while there is
+ * something to say: from the click until both shortcuts are there, or after a failure.
  */
-Banner {
-    id: status
-
+QtObject {
     /// Both Focus shortcuts are among the user's shortcuts.
     property bool found: false
     readonly property string installStatus: AppSettings.focusShortcutsInstallStatus
 
-    objectName: "focusShortcutsInstallStatus"
-    visible: installStatus.length > 0 && !(found && installStatus === "opened")
-    tone: installStatus === "failed" ? "danger" : installStatus === "needsICloud" ? "warning" : "info"
-    text: installStatus === "installing"
-          ? i18n("Preparing the shortcuts…")
-          : installStatus === "opened"
-            ? i18n("The Shortcuts app asks you to add each of the two shortcuts: click Add Shortcut. Sugo finds them when you come back.")
-            : installStatus === "needsICloud"
-              ? i18n("Shortcuts can only add shortcuts from another app when this Mac is signed into iCloud. Sign in in System Settings, then try again, or create the two shortcuts yourself.")
-              : installStatus === "failed"
-                ? i18n("The shortcuts could not be installed (%1). Create them yourself in the Shortcuts app.", AppSettings.focusShortcutsInstallDetail)
-                : ""
+    readonly property bool active: installStatus.length > 0 && !(installStatus === "done" && found)
+    readonly property string tone: installStatus === "failed" ? "danger" : "info"
+    readonly property string text: {
+        switch (installStatus) {
+        case "installing":
+            return i18n("Preparing the shortcuts…");
+        case "waitingOn":
+            return i18n("Shortcuts asks you to add \"%1\": click Add Shortcut.", AppSettings.focusOnShortcut);
+        case "waitingOff":
+            return i18n("Now add \"%1\" too: click Add Shortcut.", AppSettings.focusOffShortcut);
+        case "done":
+            return i18n("Both shortcuts are installed.");
+        case "failed":
+            return i18n("The shortcuts could not be installed (%1). Create them yourself in the Shortcuts app.",
+                        AppSettings.focusShortcutsInstallDetail);
+        }
+        return "";
+    }
 }

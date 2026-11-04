@@ -607,6 +607,7 @@ QQC2.Page {
             }
 
             Panel {
+                objectName: "welcomeSetupPanel"
                 Layout.topMargin: Theme.spaceXl
                 implicitHeight: settingsColumn.implicitHeight
 
@@ -665,6 +666,11 @@ QQC2.Page {
                         description: page.focusShortcutsFound
                                      ? i18n("The shortcuts are installed: a timer can turn on Do Not Disturb while you work.")
                                      : i18n("Install two shortcuts that turn Do Not Disturb on and off while you work. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. You can also skip this.")
+                        // As tall as the longer text, so the step does not move when it changes.
+                        descriptionVariants: [
+                            i18n("The shortcuts are installed: a timer can turn on Do Not Disturb while you work."),
+                            i18n("Install two shortcuts that turn Do Not Disturb on and off while you work. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. You can also skip this.")
+                        ]
                         opacity: setupStep.reveal(7)
                         transform: Translate { y: setupStep.rise(7) }
                         SButton {
@@ -672,6 +678,8 @@ QQC2.Page {
                             text: i18n("Install Focus Shortcuts")
                             enabled: AppSettings.focusShortcutsInstallable && !page.focusShortcutsFound
                                      && AppSettings.focusShortcutsInstallStatus !== "installing"
+                                     && AppSettings.focusShortcutsInstallStatus !== "waitingOn"
+                                     && AppSettings.focusShortcutsInstallStatus !== "waitingOff"
                             Accessible.description: focusRow.description
                             onClicked: AppSettings.installFocusShortcuts()
                         }
@@ -680,17 +688,19 @@ QQC2.Page {
             }
 
             FocusShortcutsStatus {
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.spaceMd
+                id: focusStatus
                 found: page.focusShortcutsFound
             }
 
-            Banner {
+            // The login entry's error, or on macOS where installing the Focus shortcuts got: in a
+            // place of its own, so the step does not move when a message comes or goes.
+            MessageSlot {
+                objectName: "welcomeSetupMessage"
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spaceMd
-                visible: page.autostartError.length > 0
-                tone: "danger"
-                text: page.autostartError
+                shown: page.autostartError.length > 0 || (DesktopStyle.macos && focusStatus.active)
+                tone: page.autostartError.length > 0 ? "danger" : focusStatus.tone
+                text: page.autostartError.length > 0 ? page.autostartError : focusStatus.text
             }
         }
 
