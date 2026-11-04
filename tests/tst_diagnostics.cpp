@@ -186,6 +186,16 @@ private Q_SLOTS:
         QVERIFY(report.contains(QStringLiteral("## Storage")));
         QVERIFY(report.contains(QStringLiteral("## Recent Logs (Redacted)")));
         QVERIFY(report.contains(QStringLiteral("Version:")));
+#ifdef Q_OS_MACOS
+        // A test binary is not inside an .app bundle; there are no XDG variables to report.
+        QVERIFY(report.contains(QStringLiteral("- App Bundle: No")));
+        QVERIFY(report.contains(QStringLiteral("- Login Item (LaunchAgent): Unknown")));
+        QVERIFY(!report.contains(QStringLiteral("XDG_")));
+#else
+        QVERIFY(report.contains(QStringLiteral("- Build Type: ")));
+        QVERIFY(report.contains(QStringLiteral("XDG_CURRENT_DESKTOP")));
+        QVERIFY(report.contains(QStringLiteral("- Autostart Supported: No")));
+#endif
     }
 
     void testExportReport()

@@ -6,10 +6,15 @@
 #include <QPointer>
 #include <QTimer>
 
+#include <memory>
+
 class QDBusPendingCallWatcher;
 class QDBusServiceWatcher;
 class TimerEngine;
 class AppSettings;
+#ifdef Q_OS_MACOS
+class MacPowerAssertion;
+#endif
 
 /// Prevents the screen from dimming/sleeping and system idle standby during work phases.
 ///
@@ -17,6 +22,9 @@ class AppSettings;
 /// flight: at most one request is outstanding, and a cookie that arrives when inhibition is
 /// no longer wanted is handed straight back. If the screensaver service restarts, the old
 /// cookie is dropped and inhibition is requested again from the new owner.
+///
+/// On macOS an IOKit power assertion (MacPowerAssertion) is used instead of D-Bus; it is taken
+/// and released synchronously, so none of the above applies there.
 class PowerInhibitor : public QObject
 {
     Q_OBJECT
@@ -53,4 +61,7 @@ private:
     int m_retries = 0;          // failed Inhibit calls retried since inhibition was last not wanted
     QTimer m_retryTimer;        // stopped when inhibition stops being wanted
     quint64 m_generation = 0;   // bumped when the service owner changes
+#ifdef Q_OS_MACOS
+    std::unique_ptr<MacPowerAssertion> m_macAssertion;
+#endif
 };

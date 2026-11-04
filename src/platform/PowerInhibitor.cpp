@@ -4,6 +4,10 @@
 #include "AppSettings.h"
 #include "TimerEngine.h"
 
+#ifdef Q_OS_MACOS
+#include "MacPowerAssertion.h"
+#endif
+
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingReply>
@@ -28,11 +32,15 @@ PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
     m_retryTimer.setSingleShot(true);
     m_retryTimer.setInterval(kRetryDelayMs);
     connect(&m_retryTimer, &QTimer::timeout, this, &PowerInhibitor::sync);
+#ifdef Q_OS_MACOS
+    m_macAssertion = std::make_unique<MacPowerAssertion>();
+#else
     if (m_bus.isConnected()) {
         m_watcher = new QDBusServiceWatcher(kService, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
         connect(m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
                 [this](const QString &, const QString &, const QString &newOwner) { onOwnerChanged(newOwner); });
     }
+#endif
 }
 
 PowerInhibitor::~PowerInhibitor()
@@ -91,6 +99,13 @@ void PowerInhibitor::shutdown()
 
 void PowerInhibitor::sync()
 {
+#ifdef Q_OS_MACOS
+    if (m_wanted) {
+        m_macAssertion->acquire(); // logs a failure; the next state change tries again
+    } else {
+        m_macAssertion->release();
+    }
+#else
     if (!m_wanted) {
         m_retries = 0;
         m_retryTimer.stop();
@@ -103,6 +118,7 @@ void PowerInhibitor::sync()
         sendUnInhibit(cookie);
     }
     // !m_wanted while a request is pending: the reply handler returns the cookie.
+#endif
 }
 
 void PowerInhibitor::sendInhibit()

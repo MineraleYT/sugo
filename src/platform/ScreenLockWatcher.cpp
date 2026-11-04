@@ -4,6 +4,10 @@
 #include "AppSettings.h"
 #include "TimerEngine.h"
 
+#ifdef Q_OS_MACOS
+#include "MacSessionEvents.h"
+#endif
+
 #include <QLoggingCategory>
 
 namespace
@@ -13,10 +17,22 @@ const QString kInterface = QStringLiteral("org.freedesktop.ScreenSaver");
 const QString kSignal = QStringLiteral("ActiveChanged");
 } // namespace
 
+#ifdef Q_OS_MACOS
+ScreenLockWatcher::ScreenLockWatcher(QObject *parent)
+    : ScreenLockWatcher(QDBusConnection(QStringLiteral("sugo-no-session-bus")),
+                        QDBusConnection(QStringLiteral("sugo-no-system-bus")),
+                        parent)
+{
+    // Both callbacks run on the main thread, from the run loop Qt's event loop spins.
+    m_macEvents = std::make_unique<MacSessionEvents>([this](bool locked) { onActiveChanged(locked); },
+                                                     [this](bool sleeping) { onPrepareForSleep(sleeping); });
+}
+#else
 ScreenLockWatcher::ScreenLockWatcher(QObject *parent)
     : ScreenLockWatcher(QDBusConnection::sessionBus(), QDBusConnection::systemBus(), parent)
 {
 }
+#endif
 
 ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, QObject *parent)
     : ScreenLockWatcher(bus, QDBusConnection(QStringLiteral("sugo-no-system-bus")), parent)
@@ -56,6 +72,16 @@ ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, const QDBusConn
 }
 
 ScreenLockWatcher::~ScreenLockWatcher() = default;
+
+bool ScreenLockWatcher::available() const
+{
+#ifdef Q_OS_MACOS
+    if (m_macEvents) {
+        return true;
+    }
+#endif
+    return m_bus.isConnected();
+}
 
 void ScreenLockWatcher::attach(TimerEngine *engine, AppSettings *settings)
 {

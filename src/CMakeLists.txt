@@ -257,3 +257,20 @@ if(APPLE)
     set_source_files_properties(platform/MacNotifier.mm platform/MacApp.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_link_libraries(sugo_core PRIVATE "-framework Foundation" "-framework AppKit" "-framework UserNotifications")
 endif()
+
+# --- macOS port: B2 (keep-awake, screen lock and sleep, Keychain, login item) ---
+target_sources(sugo_core PRIVATE
+    platform/LaunchAgentAutostart.cpp platform/LaunchAgentAutostart.h
+)
+if(APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/MacPowerAssertion.cpp platform/MacPowerAssertion.h
+        platform/MacSessionEvents.cpp platform/MacSessionEvents.h
+        platform/MacKeychainStore.cpp platform/MacKeychainStore.h
+    )
+    target_link_libraries(sugo_core PRIVATE
+        "-framework CoreFoundation"
+        "-framework IOKit"
+        "-framework Security"
+    )
+endif()
