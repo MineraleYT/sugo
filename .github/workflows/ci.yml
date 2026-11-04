@@ -55,7 +55,8 @@ jobs:
           appstreamcli validate --no-net data/io.github.mineraleyt.sugo.metainfo.xml
           desktop-file-validate data/io.github.mineraleyt.sugo.desktop
 
-      # The compiler cache of the newest run on this branch (or on main): only what changed recompiles.
+      # The compiler cache of the newest run on this branch, else on the branch a pull request
+      # targets, else on main (the branches a run may read caches from): only what changed recompiles.
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -63,6 +64,7 @@ jobs:
           key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
             ccache-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-${{ runner.os }}-${{ github.base_ref || 'main' }}-
             ccache-${{ runner.os }}-main-
 
       - name: Configure
@@ -76,6 +78,8 @@ jobs:
           ccache --zero-stats
           cmake --build build --parallel
           ccache --show-stats
+          # Keep only what this build used: the cache stays the size of one build.
+          ccache --evict-older-than 7200s
 
       - name: Install to a temporary prefix
         run: cmake --install build --prefix "$RUNNER_TEMP/sugo-install"
@@ -107,6 +111,7 @@ jobs:
           key: ccache-clang-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
             ccache-clang-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-clang-${{ runner.os }}-${{ github.base_ref || 'main' }}-
             ccache-clang-${{ runner.os }}-main-
 
       - name: Configure
@@ -120,6 +125,8 @@ jobs:
           ccache --zero-stats
           cmake --build build --parallel
           ccache --show-stats
+          # Keep only what this build used: the cache stays the size of one build.
+          ccache --evict-older-than 7200s
 
   # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
   # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
