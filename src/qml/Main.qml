@@ -646,6 +646,23 @@ QQC2.ApplicationWindow {
                     fail(27, "Reset to defaults did not ask first");
                     return true;
                 }
+                // A timer stored without breaks (0 minutes: no break).
+                editor.leaving = true;
+                userUuid = PresetModel.create({ name: "Smoke", shortBreakSeconds: 0, longBreakSeconds: 0 });
+                root.openTimer(userUuid);
+                editor = root.pageStack.currentItem;
+                return false;
+            }
+            case 5: {
+                // Its page shows no break, and does not count that as a change.
+                const shortField = findItem(editor, item => item.objectName === "shortBreakField");
+                const longField = findItem(editor, item => item.objectName === "longBreakField");
+                if (!shortField || !longField || shortField.value !== 0 || longField.value !== 0 || editor.modified) {
+                    fail(50, "A timer without breaks opened with breaks, or as changed: "
+                         + (shortField ? shortField.value : "missing") + ", " + (longField ? longField.value : "missing")
+                         + ", modified " + editor.modified);
+                    return true;
+                }
                 return true;
             }
             }

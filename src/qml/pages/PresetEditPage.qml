@@ -540,7 +540,8 @@ QQC2.Page {
                             }
                             onPositionChanged: mouse => {
                                 if (box) {
-                                    box.setValue(startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute));
+                                    // At least a minute: a phase dragged to nothing would leave no block to drag back.
+                                    box.setValue(Math.max(1, startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute)));
                                 }
                             }
                             onReleased: box = null
@@ -601,10 +602,13 @@ QQC2.Page {
                     title: i18n("Short break")
                     NumberField {
                         id: shortBox
-                        from: 1
+                        objectName: "shortBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.shortBreakSeconds / 60))
+                        value: Math.round(page.preset.shortBreakSeconds / 60)
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Short break")
                     }
                 }
@@ -612,10 +616,13 @@ QQC2.Page {
                     title: i18n("Long break")
                     NumberField {
                         id: longBox
-                        from: 1
+                        objectName: "longBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.longBreakSeconds / 60))
+                        value: Math.round(page.preset.longBreakSeconds / 60)
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Long break")
                     }
                 }
