@@ -1191,8 +1191,8 @@ void CalendarSync::trySend()
     m_inFlightRecord = it->record;
     const QByteArray ics = buildIcs(it->record, m_includeNote, it->uid);
     request("PUT", eventUrl(it->uid), ics, {{"Content-Type", "text/calendar; charset=utf-8"}}, true,
-            [this, account, password = m_password](const Result &r) {
-                onSendFinished(r, account != currentAccount() || password != m_password);
+            [this, account, password = m_password, calendar = m_calendarUrl](const Result &r) {
+                onSendFinished(r, account != currentAccount() || password != m_password || calendar != m_calendarUrl);
             });
 }
 
@@ -1248,8 +1248,9 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
 
-    if ((r.http == 401 || r.http == 403) && credentialsChangedMeanwhile) {
-        // Refused with the old credentials: says nothing about the new ones, which get their turn now.
+    if (credentialsChangedMeanwhile) {
+        // Refused with the old credentials or by the calendar chosen before: says nothing about
+        // the new ones, which get their turn now (not paused, skipped or delayed for it).
         trySend();
         return;
     }

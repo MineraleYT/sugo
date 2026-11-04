@@ -859,6 +859,34 @@ private Q_SLOTS:
         QVERIFY(m_sync->lastError().isEmpty());
     }
 
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::newRow("400 (would skip the event)") << 400;
+        QTest::newRow("403 (would delay it)") << 403;
+        QTest::newRow("404 (would delay it)") << 404;
+    }
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne()
+    {
+        QFETCH(int, http);
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->putStatuses = {http};
+        m_sync->enqueueWorkSession(record());
+        QCOMPARE(m_server->count("PUT"), 0); // on its way to the first calendar
+        m_sync->selectCalendar(m_server->base() + QStringLiteral("/cal/work/"), QStringLiteral("Work"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        const auto puts = m_server->of("PUT");
+        QCOMPARE(puts.size(), 2);
+        QVERIFY(puts.at(0).path.startsWith("/cal/personal/"));
+        QVERIFY(puts.at(1).path.startsWith("/cal/work/"));
+        QCOMPARE(m_server->stored.size(), 1);
+        QVERIFY(m_server->stored.cbegin().key().startsWith("/cal/work/"));
+        QVERIFY(!m_sync->isSendingPaused());
+        QCOMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
     void put404And500RetryWithBackoff()
     {
         configureCustom();
