@@ -103,6 +103,14 @@ QQC2.ApplicationWindow {
         }
     }
 
+    /// Shows the window in front: from hidden, or from the Dock or the taskbar as it was (a
+    /// maximised window stays maximised), as main.cpp does for the tray and second launches.
+    function bringToFront(): void {
+        DesktopStyle.showRestored(root);
+        root.raise();
+        root.requestActivate();
+    }
+
     /// Quits, after asking when that would cut a running or paused phase short.
     function requestQuit(): void {
         if (quitDialog.visible) {
