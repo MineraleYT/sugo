@@ -308,6 +308,13 @@ private Q_SLOTS:
         QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.0.2")));
         QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.1.0-rc.1+build5")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("latest")));
+        // Empty pre-release or build identifiers would compare as the release itself.
+        QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.1-nightly.20261031.42")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-.")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-rc..1")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-rc.")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0+.")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.0 <b>click here</b>")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.") + QString(200, QLatin1Char('1'))));
     }

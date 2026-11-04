@@ -313,7 +313,7 @@ int UpdateChecker::compareVersions(const QString &v1, const QString &v2)
 
 bool UpdateChecker::isPlausibleVersionTag(const QString &tag)
 {
-    static const QRegularExpression pattern(QStringLiteral("^v?[0-9]+(\\.[0-9]+)*(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"));
+    static const QRegularExpression pattern(QStringLiteral("^v?[0-9]+(\\.[0-9]+)*(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"));
     return tag.size() <= 64 && pattern.match(tag).hasMatch();
 }
 
