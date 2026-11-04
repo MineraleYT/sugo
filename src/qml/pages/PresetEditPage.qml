@@ -24,9 +24,26 @@ QQC2.Page {
     /// Deleting the running timer would switch timers, which stops the session.
     readonly property bool lockedByTimer: isCurrent && TimerEngine.active
 
+    // `preset` is read once, for the controls' starting values; what shows the stored name follows
+    // every change of the timer (a save, a rename elsewhere) through this count.
+    property int storedRevision: 0
+    Connections {
+        target: PresetModel
+        function onPresetChanged(changedUuid) {
+            if (changedUuid === page.uuid) {
+                ++page.storedRevision;
+            }
+        }
+    }
+    /// The name as stored, not as being typed.
+    readonly property string storedName: {
+        void storedRevision;
+        return isNew ? "" : (PresetModel.get(uuid).name || "");
+    }
+
     /// The top bar shows "Timers / <name>".
     readonly property string section: i18n("Timers")
-    title: isNew ? i18n("New Timer") : (preset.name || "")
+    title: isNew ? i18n("New Timer") : storedName
     background: null
 
     /// What Save would store, as the controls show it now.
@@ -57,7 +74,16 @@ QQC2.Page {
     /// Save does something: a new timer, or changes to store.
     readonly property bool canSave: valid && (isNew || modified)
 
+    /// Takes the numbers still being typed: clicking a button or a shortcut leaves the focus in the field.
+    function commitFields(): void {
+        workBox.commit();
+        shortBox.commit();
+        longBox.commit();
+        cyclesBox.commit();
+    }
+
     function save(): void {
+        commitFields();
         if (!canSave) {
             return;
         }
@@ -94,6 +120,7 @@ QQC2.Page {
 
     /// Escape and the sidebar: unsaved changes are only thrown away once confirmed.
     function requestClose(then: var): void {
+        commitFields();
         discardDialog.then = then ?? null;
         if (modified) {
             discardDialog.open();
@@ -107,7 +134,9 @@ QQC2.Page {
     }
 
     function start(): void {
-        if (TimerEngine.active) {
+        commitFields();
+        // Changes are saved first (Start is disabled meanwhile).
+        if (TimerEngine.active || modified) {
             return;
         }
         PresetModel.currentUuid = uuid;
@@ -132,7 +161,7 @@ QQC2.Page {
     ConfirmDialog {
         id: resetDialog
         title: i18n("Reset to Defaults?")
-        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.preset.name || "")
+        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.storedName)
         confirmText: i18n("Reset")
         onConfirmed: {
             resetDialog.close();
@@ -145,7 +174,7 @@ QQC2.Page {
     ConfirmDialog {
         id: deleteDialog
         title: i18n("Delete Timer")
-        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.preset.name || "")
+        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.storedName)
         confirmText: i18n("Delete")
         confirmKind: "danger"
         onConfirmed: {
@@ -153,7 +182,7 @@ QQC2.Page {
             // The timer may have been started meanwhile (tray, shortcut, D-Bus).
             if (page.lockedByTimer) {
                 applicationWindow().showPassiveNotification(
-                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.preset.name));
+                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.storedName));
                 return;
             }
             page.leaving = true;
@@ -251,6 +280,9 @@ QQC2.Page {
         width: Theme.space4xl * 6.5
         padding: Theme.spaceMd
         focus: true
+        // A press on the tile is left to the tile, which toggles the popup: closing on the press
+        // would have the click open it again.
+        closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
         background: Rectangle {
             radius: Theme.radiusLg
             color: Theme.raised
@@ -627,7 +659,7 @@ QQC2.Page {
                         from: 0
                         to: PresetModel.maxCycles
                         value: page.preset.cyclesBeforeLong
-                        unit: i18nc("work sessions, short", "sessions")
+                        unit: i18ncp("work sessions, short", "session", "sessions", cyclesBox.value)
                         fromText: i18n("Never")
                         Accessible.name: i18n("Long break after")
                     }
