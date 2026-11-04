@@ -7,11 +7,13 @@
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 #include <QTimer>
 
 #include <memory>
 
 #include "FreedesktopInhibitor.h"
+#include "InhibitorFactory.h"
 #include "PrivateDBus.h"
 
 namespace
@@ -70,6 +72,60 @@ public Q_SLOTS:
         }
         active.removeAll(cookie);
     }
+};
+
+/// A notification server without Inhibit, as on desktops whose server does not offer it.
+class ServerWithoutInhibit : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.Notifications")
+
+public Q_SLOTS:
+    QStringList GetCapabilities() { return {QStringLiteral("body")}; }
+};
+
+/// Publishes a notification server from a thread of its own: the factory asks it a blocking
+/// question, which a server on the test's thread could not answer.
+class ThreadedServer
+{
+public:
+    ThreadedServer(const QString &address, std::unique_ptr<QObject> object)
+        : m_object(std::move(object))
+    {
+        m_thread.start();
+        m_object->moveToThread(&m_thread);
+        QMetaObject::invokeMethod(
+            m_object.get(),
+            [this, address] {
+                QDBusConnection bus = QDBusConnection::connectToBus(address, QStringLiteral("threaded-server"));
+                m_registered = bus.registerObject(kPath, m_object.get(), QDBusConnection::ExportAllSlots)
+                    && bus.registerService(kService);
+            },
+            Qt::BlockingQueuedConnection);
+    }
+
+    ~ThreadedServer()
+    {
+        QMetaObject::invokeMethod(
+            m_object.get(),
+            [this] {
+                QDBusConnection bus(QStringLiteral("threaded-server"));
+                bus.unregisterService(kService);
+                bus.unregisterObject(kPath);
+                QDBusConnection::disconnectFromBus(QStringLiteral("threaded-server"));
+                m_object.reset();
+            },
+            Qt::BlockingQueuedConnection);
+        m_thread.quit();
+        m_thread.wait();
+    }
+
+    bool registered() const { return m_registered; }
+
+private:
+    QThread m_thread;
+    std::unique_ptr<QObject> m_object;
+    bool m_registered = false;
 };
 } // namespace
 
@@ -349,6 +405,34 @@ private Q_SLOTS:
         serverConnection.unregisterObject(kPath);
         QDBusConnection::disconnectFromBus(QStringLiteral("activation-client"));
         QDBusConnection::disconnectFromBus(QStringLiteral("activation-server"));
+    }
+
+    void theFactoryChoosesByWhatTheServerOffers()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The factory looks for a notification server on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("factory-client"));
+        QVERIFY(client.isConnected());
+
+        // No server yet: it may still be starting, so silencing is tried.
+        QVERIFY(createNotificationInhibitor(client)->isAvailable());
+        {
+            const ThreadedServer plasma(bus.address(), std::make_unique<FakeNotificationServer>());
+            QVERIFY(plasma.registered());
+            QVERIFY(createNotificationInhibitor(client)->isAvailable());
+        }
+        {
+            const ThreadedServer other(bus.address(), std::make_unique<ServerWithoutInhibit>());
+            QVERIFY(other.registered());
+            QVERIFY(!createNotificationInhibitor(client)->isAvailable());
+        }
+        QDBusConnection::disconnectFromBus(QStringLiteral("factory-client"));
+#endif
     }
 
     void aServiceRestartAfterReleaseDoesNotInhibitAgain()

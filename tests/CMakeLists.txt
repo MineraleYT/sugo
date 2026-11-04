@@ -66,7 +66,8 @@ add_test(NAME tst_runner_min_letters
 if(NOT APPLE)
     # macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion).
     sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
+    # Gui: the factory it also checks names the inhibitor after the application's desktop file.
+    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::Gui Qt6::DBus)
     sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
     sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
     sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)
