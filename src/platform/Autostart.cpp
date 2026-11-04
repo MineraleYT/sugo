@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Autostart.h"
 #include "AppImage.h"
+#include "LaunchAgentAutostart.h"
 
 #include <QCoreApplication>
 #include <QDBusMessage>
@@ -316,6 +317,12 @@ std::unique_ptr<Autostart> createAutostart()
                                           QStringLiteral("Sugo"),
                                           QStringLiteral("Pomodoro timer"),
                                           QStringList{autostartProgram(), QStringLiteral("--background")});
+#elif defined(Q_OS_MACOS)
+    // The bundle's executable (Sugo.app/Contents/MacOS/Sugo); repair() follows the bundle if it moves.
+    return std::make_unique<LaunchAgentAutostart>(
+        QDir::homePath() + QStringLiteral("/Library/LaunchAgents"),
+        QStringLiteral("io.github.mineraleyt.sugo"),
+        QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--background")});
 #else
     return std::make_unique<UnsupportedAutostart>();
 #endif

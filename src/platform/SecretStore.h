@@ -45,6 +45,10 @@ public:
     virtual bool write(const QString &key, const QString &secret) = 0;
 };
 
+/// The platform's keyring for this application: the Keychain on macOS (MacKeychainStore), the
+/// freedesktop Secret Service on the session bus elsewhere (SecretServiceStore).
+std::unique_ptr<SecretStore> createSecretStore();
+
 /**
  * The freedesktop Secret Service (org.freedesktop.secrets: KWallet on Plasma, GNOME Keyring...),
  * spoken over D-Bus with the "plain" session algorithm: the secret only crosses the local

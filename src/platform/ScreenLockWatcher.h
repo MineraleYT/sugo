@@ -5,7 +5,12 @@
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
+#include <memory>
+
 class AppSettings;
+#ifdef Q_OS_MACOS
+class MacSessionEvents;
+#endif
 class TimerEngine;
 
 /**
@@ -17,6 +22,9 @@ class TimerEngine;
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
  * the time away must not count as work; after waking up the timer waits, visibly paused, for
  * the user to resume it instead of carrying on by itself.
+ *
+ * On macOS the default constructor listens through MacSessionEvents instead (the login window's
+ * lock notifications and IOKit's system power messages), which call the same slots.
  */
 class ScreenLockWatcher : public QObject
 {
@@ -26,6 +34,8 @@ class ScreenLockWatcher : public QObject
 
     Q_PROPERTY(bool pausedByScreenLock READ isPausedByScreenLock NOTIFY pausedByScreenLockChanged FINAL)
     Q_PROPERTY(bool pausedBySleep READ isPausedBySleep NOTIFY pausedBySleepChanged FINAL)
+    /// Screen locks can be noticed at all: the session bus is connected on Linux; always on macOS.
+    Q_PROPERTY(bool available READ available CONSTANT FINAL)
 
 public:
     explicit ScreenLockWatcher(QObject *parent = nullptr);
@@ -38,6 +48,7 @@ public:
 
     bool isPausedByScreenLock() const { return m_pausedByScreenLock; }
     bool isPausedBySleep() const { return m_pausedBySleep; }
+    bool available() const;
 
     Q_INVOKABLE void clearLockPauseNotice();
 
@@ -62,4 +73,7 @@ private:
     bool m_pausedByScreenLock = false;
     bool m_pausedBySleep = false;
     bool m_screenLocked = false; // last state seen, to ignore duplicate signals
+#ifdef Q_OS_MACOS
+    std::unique_ptr<MacSessionEvents> m_macEvents;
+#endif
 };

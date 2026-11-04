@@ -88,6 +88,9 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
+#ifdef Q_OS_MACOS
+        QSKIP("macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion)");
+#endif
         daemon.start(QStringLiteral("dbus-daemon"),
                      {QStringLiteral("--session"), QStringLiteral("--nofork"), QStringLiteral("--print-address=1")});
         if (!daemon.waitForStarted(3000) || !daemon.waitForReadyRead(5000)) QSKIP("dbus-daemon is not available");

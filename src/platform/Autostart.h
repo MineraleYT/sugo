@@ -96,8 +96,8 @@ private:
     int m_responseTimeoutMs;
 };
 
-/// XDG autostart on Linux, the Background portal inside a Flatpak sandbox, unsupported on
-/// other platforms.
+/// XDG autostart on Linux, the Background portal inside a Flatpak sandbox, a launchd agent
+/// (LaunchAgentAutostart) on macOS, unsupported on other platforms.
 std::unique_ptr<Autostart> createAutostart();
 
 /// The program a login entry starts: the AppImage file when running from one (AppImage::path()),

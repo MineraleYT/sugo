@@ -344,9 +344,7 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
 // ---------------------------------------------------------------------------------------------
 
 CalendarSync::CalendarSync(QObject *parent)
-    : CalendarSync(Settings::openDefault(),
-                   std::make_unique<SecretServiceStore>(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo")),
-                   parent)
+    : CalendarSync(Settings::openDefault(), createSecretStore(), parent)
 {
 }
 

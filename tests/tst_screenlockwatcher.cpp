@@ -228,6 +228,29 @@ private Q_SLOTS:
         }
     }
 
+    void availableFollowsTheBackend()
+    {
+        const ScreenLockWatcher offline(QDBusConnection(QStringLiteral("tst_disconnected_bus")));
+        QVERIFY(!offline.available());
+
+#ifdef Q_OS_MACOS
+        // The default constructor listens through MacSessionEvents, with or without a bus.
+        const ScreenLockWatcher mac;
+        QVERIFY(mac.available());
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("available-session"));
+        {
+            const ScreenLockWatcher online(session);
+            QVERIFY(online.available());
+        }
+        QDBusConnection::disconnectFromBus(QStringLiteral("available-session"));
+#endif
+    }
+
     void logindSignalOnTheSystemBusPausesTheTimer()
     {
         PrivateDBus bus;

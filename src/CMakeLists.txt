@@ -201,3 +201,20 @@ target_link_libraries(sugo PRIVATE
 )
 
 install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+
+# --- macOS port: B2 (keep-awake, screen lock and sleep, Keychain, login item) ---
+target_sources(sugo_core PRIVATE
+    platform/LaunchAgentAutostart.cpp platform/LaunchAgentAutostart.h
+)
+if(APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/MacPowerAssertion.cpp platform/MacPowerAssertion.h
+        platform/MacSessionEvents.cpp platform/MacSessionEvents.h
+        platform/MacKeychainStore.cpp platform/MacKeychainStore.h
+    )
+    target_link_libraries(sugo_core PRIVATE
+        "-framework CoreFoundation"
+        "-framework IOKit"
+        "-framework Security"
+    )
+endif()

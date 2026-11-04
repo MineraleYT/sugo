@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SecretStore.h"
 
+#ifdef Q_OS_MACOS
+#include "MacKeychainStore.h"
+#endif
+
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusVariant>
@@ -9,6 +13,16 @@
 #include <QTimer>
 
 Q_LOGGING_CATEGORY(lcSecretStore, "sugo.platform.secretstore")
+
+std::unique_ptr<SecretStore> createSecretStore()
+{
+    const QString applicationId = QStringLiteral("io.github.mineraleyt.sugo");
+#ifdef Q_OS_MACOS
+    return std::make_unique<MacKeychainStore>(applicationId);
+#else
+    return std::make_unique<SecretServiceStore>(QDBusConnection::sessionBus(), applicationId);
+#endif
+}
 
 namespace
 {
