@@ -1003,6 +1003,11 @@ QQC2.Page {
                             onClicked: {
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
@@ -1093,6 +1098,11 @@ QQC2.Page {
                             onClicked: {
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
@@ -1169,6 +1179,11 @@ QQC2.Page {
                             onClicked: {
                                 page.calAction = "refresh";
                                 CalendarSync.refreshCalendars();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                     }
