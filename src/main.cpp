@@ -243,6 +243,9 @@ int main(int argc, char *argv[])
     SessionRepository sessionRepository(database->connectionName());
     const auto inhibitor = createNotificationInhibitor();
 
+    // QML warnings of a smoke run, counted by a handler of the engine: declared before it, so
+    // the handler's reference stays valid while the engine and its window are destroyed.
+    int smokeWarnings = 0;
     QQmlApplicationEngine engine;
     QObject services; // parent of the C++ helpers below; destroyed before the engine
     // i18n() and friends for the QML files.
@@ -263,7 +266,6 @@ int main(int argc, char *argv[])
     // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
-    int smokeWarnings = 0;
     if (smokeTest) {
         // Any QML warning (a failed binding, an undefined property...) fails the smoke test.
         QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app, [&smokeWarnings](const QList<QQmlError> &warnings) {
