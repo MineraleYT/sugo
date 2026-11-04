@@ -28,6 +28,7 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 - **CMake** 3.20+ and **Ninja**
 - **Qt 6.8+** (Core, Gui, Widgets, Qml, Quick, QuickControls2, Sql, Network, Multimedia; DBus on Linux only: Sugo does not link it on macOS, though the app bundle still carries QtDBus.framework because qt.io's QtGui links it)
 - **extra-cmake-modules 6.8+** (build tool only: no KDE Frameworks library is used)
+- **libsodium 1.0.18+** and **pkg-config** (Sugo Sync's encryption, the same on Linux and macOS; the Flatpak builds it as a module, the AppImage bundles it)
 - **Gettext** (`xgettext`), only to extract the strings
 
 ### Build dependencies
@@ -35,24 +36,28 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 #### Fedora
 ```sh
 sudo dnf install cmake ninja-build gcc-c++ \
-    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg qt6-qtmultimedia-devel kf6-extra-cmake-modules
+    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg qt6-qtmultimedia-devel kf6-extra-cmake-modules \
+    libsodium-devel pkgconf-pkg-config
 ```
 
 #### Ubuntu 26.04 or newer
 ```sh
 sudo apt install cmake ninja-build g++ \
-    qt6-base-dev qt6-declarative-dev qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
+    qt6-base-dev qt6-declarative-dev qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules \
+    libsodium-dev pkgconf
 ```
 
 #### Arch Linux
 ```sh
-sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg extra-cmake-modules
+sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg extra-cmake-modules \
+    libsodium pkgconf
 ```
 
 #### openSUSE Tumbleweed
 ```sh
 sudo zypper install cmake ninja gcc-c++ \
-    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel extra-cmake-modules
+    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel extra-cmake-modules \
+    libsodium-devel pkgconf
 ```
 
 #### macOS 13 or newer
