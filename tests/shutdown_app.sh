@@ -74,6 +74,16 @@ while kill -0 "$app_pid" 2>/dev/null; do
 done &
 caller_pid=$!
 timeout 10 tail --pid="$app_pid" -f /dev/null
+if [[ $? -eq 124 ]]; then
+    kill -9 "$app_pid" 2>/dev/null
+    wait "$app_pid" 2>/dev/null
+    app_pid=
+    kill "$caller_pid" 2>/dev/null
+    wait "$caller_pid" 2>/dev/null
+    echo "Sugo did not quit within 10 s of SIGTERM" >&2
+    cat "$runtime_dir/out.log" >&2
+    exit 1
+fi
 wait "$caller_pid" 2>/dev/null
 wait "$app_pid"
 status=$?
