@@ -162,6 +162,9 @@ Q_SIGNALS:
     void lastSuccessChanged();
     void pendingCountChanged();
     void calendarsChanged();
+    /// An address typed in (setServerUrl, setCalendarUrl) was refused and nothing was stored:
+    /// `message` says why, so the view can keep what was typed and explain it.
+    void inputRejected(const QString &message);
 
 private:
     struct Result {
@@ -209,6 +212,7 @@ private:
     void refreshIdleStatus();
     void setStatus(Status status, const QString &text);
     void setLastError(const QString &error);
+    void rejectInput(const QString &error);
     QString scrub(const QString &text) const;
     QString describeFailure(const Result &result) const;
 

@@ -549,13 +549,23 @@ private Q_SLOTS:
 
     void settersRejectInsecureUrls()
     {
+        QSignalSpy rejected(m_sync.get(), &CalendarSync::inputRejected);
         m_sync->setServerUrl(QStringLiteral("http://cloud.example.org"));
         QVERIFY(m_sync->serverUrl().isEmpty());
         QVERIFY(!m_sync->lastError().isEmpty());
+        QCOMPARE(rejected.count(), 1);
+        QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
         m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
         QVERIFY(m_sync->calendarUrl().isEmpty());
+        QCOMPARE(rejected.count(), 1);
+        QVERIFY(!rejected.takeFirst().at(0).toString().isEmpty());
+        // The same refusal twice is announced twice: lastErrorChanged alone would not tell.
+        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        QCOMPARE(rejected.count(), 1);
+        rejected.clear();
         m_sync->setServerUrl(QStringLiteral("https://cloud.example.org/"));
         QCOMPARE(m_sync->serverUrl(), QStringLiteral("https://cloud.example.org"));
+        QCOMPARE(rejected.count(), 0);
     }
 
     void plainHttpToRemoteHostSendsNothing()
@@ -1054,8 +1064,12 @@ private Q_SLOTS:
         m_sync->selectCalendar(QStringLiteral("https://elsewhere.example.com/cal/x"), QStringLiteral("X"));
         QCOMPARE(m_sync->calendarUrl(), before);
         QVERIFY(!m_sync->lastError().isEmpty());
+        QSignalSpy rejected(m_sync.get(), &CalendarSync::inputRejected);
         m_sync->setCalendarUrl(QStringLiteral("https://elsewhere.example.com/cal/x"));
         QCOMPARE(m_sync->calendarUrl(), before);
+        // Typed in, the refusal is announced so the view can keep the address and say why.
+        QCOMPARE(rejected.count(), 1);
+        QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
         // The same server with its port written out is still the same server.
         m_sync->selectCalendar(QStringLiteral("https://cloud.example.org:443/cal/work"), QStringLiteral("Work"));
         QVERIFY(m_sync->calendarUrl().contains(QStringLiteral("/cal/work")));
