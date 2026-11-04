@@ -94,6 +94,39 @@ int effectivePort(const QUrl &url)
     return url.port(scheme == QLatin1String("https") ? 443 : scheme == QLatin1String("http") ? 80 : -1);
 }
 
+/// Same scheme, host and port: credentials for one may go to the other.
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && effectivePort(a) == effectivePort(b);
+}
+
+/// The first href inside the WebDAV property `property` (local name) of a multistatus, resolved
+/// against `requestUrl`; empty if there is none or it is on another server.
+QUrl hrefInProperty(const QByteArray &data, const QString &property, const QUrl &requestUrl)
+{
+    QXmlStreamReader xml(data);
+    bool inProperty = false;
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const QString name = xml.name().toString();
+            if (name == property) {
+                inProperty = true;
+            } else if (inProperty && name == QLatin1String("href")) {
+                const QString href = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                if (href.isEmpty()) {
+                    return {};
+                }
+                const QUrl resolved = requestUrl.resolved(QUrl(href));
+                return sameOrigin(resolved, requestUrl) ? resolved : QUrl();
+            }
+        } else if (xml.isEndElement() && xml.name().toString() == property) {
+            inProperty = false;
+        }
+    }
+    return {};
+}
+
 QString lastSegment(const QString &url)
 {
     const QString path = QUrl(url).path();
@@ -353,8 +386,7 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                     continue;
                 }
                 const QUrl resolved = requestUrl.resolved(QUrl(cur.href));
-                if (resolved.scheme() != requestUrl.scheme() || resolved.host() != requestUrl.host()
-                    || effectivePort(resolved) != effectivePort(requestUrl)) {
+                if (!sameOrigin(resolved, requestUrl)) {
                     continue; // never hand our credentials to another server
                 }
                 const QString url = withoutTrailingSlash(resolved);
@@ -1440,17 +1472,88 @@ void CalendarSync::discover(std::function<void(bool)> done)
     ++m_busy;
     setLastError(QString());
     setStatus(Working, i18n("Looking for calendars…"));
+    // Asked for another server or account than the one set up now: neither its calendars nor a
+    // refusal apply to this one.
+    const std::function<bool()> stale = [this, url, username = m_username, password = m_password]() {
+        return url != discoveryUrl() || username != m_username || password != m_password;
+    };
+    if (m_provider != kNextcloud) {
+        listCalendars(url, stale, done);
+        return;
+    }
+
+    // Nextcloud names its DAV folders after the user id, which is not always the login name (an
+    // e-mail address, an LDAP login): the server says where the calendars are. A server that
+    // does not say gets the usual place of the login name's calendars (discoveryUrl()); one that
+    // refuses the login or cannot be reached is not asked again.
+    const auto abandon = [this, done]() {
+        --m_busy;
+        refreshIdleStatus();
+        done(false);
+    };
+    const std::function<void(const Result &)> failed = [this, stale, done, abandon](const Result &r) {
+        if (stale()) {
+            abandon();
+            return;
+        }
+        --m_busy;
+        discoveryFailed(r);
+        done(false);
+    };
+    findHref(
+        QUrl(m_serverUrl + QLatin1String("/remote.php/dav/")), "<d:current-user-principal/>", QStringLiteral("current-user-principal"),
+        [this, url, stale, done, abandon, failed](const QUrl &principal) {
+            if (stale()) {
+                abandon();
+                return;
+            }
+            if (principal.isEmpty()) {
+                listCalendars(url, stale, done);
+                return;
+            }
+            findHref(
+                principal, "<c:calendar-home-set/>", QStringLiteral("calendar-home-set"),
+                [this, url, stale, done, abandon](const QUrl &home) {
+                    if (stale()) {
+                        abandon();
+                        return;
+                    }
+                    listCalendars(home.isEmpty() ? url : home, stale, done);
+                },
+                failed);
+        },
+        failed);
+}
+
+void CalendarSync::findHref(const QUrl &url, const QByteArray &property, const QString &name, std::function<void(const QUrl &)> found,
+                            std::function<void(const Result &)> failed)
+{
+    const QByteArray body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                            "<d:propfind xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:prop>"
+        + property + "</d:prop></d:propfind>";
+    request("PROPFIND", url, body, {{"Depth", "0"}, {"Content-Type", "application/xml; charset=utf-8"}}, true,
+            [url, name, found, failed](const Result &r) {
+                if (r.http == 207) {
+                    found(hrefInProperty(r.body, name, url));
+                } else if (r.http == 404 || r.http == 405 || r.http == 501) {
+                    found(QUrl()); // not a place or a request this server knows
+                } else {
+                    failed(r); // refused, unreachable, broken: the fallback would fare no better
+                }
+            });
+}
+
+void CalendarSync::listCalendars(const QUrl &url, std::function<bool()> stale, std::function<void(bool)> done)
+{
     const QByteArray body =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
         "<d:propfind xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:a=\"http://apple.com/ns/ical/\">"
         "<d:prop><d:resourcetype/><d:displayname/><c:supported-calendar-component-set/><a:calendar-color/></d:prop>"
         "</d:propfind>";
     request("PROPFIND", url, body, {{"Depth", "1"}, {"Content-Type", "application/xml; charset=utf-8"}}, true,
-            [this, url, done, username = m_username, password = m_password](const Result &r) {
+            [this, url, stale, done](const Result &r) {
                 --m_busy;
-                if (url != discoveryUrl() || username != m_username || password != m_password) {
-                    // Asked for another server or account than the one set up now: neither its
-                    // calendars nor a refusal apply to this one.
+                if (stale()) {
                     refreshIdleStatus();
                     done(false);
                     return;
@@ -1465,14 +1568,19 @@ void CalendarSync::discover(std::function<void(bool)> done)
                     done(true);
                     return;
                 }
-                if (r.http == 401 || r.http == 403) {
-                    m_paused = true;
-                }
-                const QString message = describeFailure(r);
-                setLastError(message);
-                setStatus(Failed, message);
+                discoveryFailed(r);
                 done(false);
             });
+}
+
+void CalendarSync::discoveryFailed(const Result &r)
+{
+    if (r.http == 401 || r.http == 403) {
+        m_paused = true;
+    }
+    const QString message = describeFailure(r);
+    setLastError(message);
+    setStatus(Failed, message);
 }
 
 void CalendarSync::refreshCalendars()

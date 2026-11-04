@@ -216,6 +216,7 @@ private:
     void request(const QByteArray &verb, const QUrl &url, const QByteArray &body, const QList<QPair<QByteArray, QByteArray>> &headers,
                  bool withAuth, std::function<void(const Result &)> done);
     QUrl eventUrl(const QString &uid) const;
+    /// Where discovery looks for calendars (for Nextcloud, if the server does not say).
     QUrl discoveryUrl() const;
 
     void trySend();
@@ -228,6 +229,15 @@ private:
     void abortAll();
 
     void discover(std::function<void(bool)> done);
+    /// PROPFIND (depth 0) of one property whose value is an href, e.g. the user's principal.
+    /// `found` gets the address, or an empty one if the server does not give it (no such
+    /// property, 404, 405, 501); `failed` gets any other answer (a refused login, no connection).
+    void findHref(const QUrl &url, const QByteArray &property, const QString &name, std::function<void(const QUrl &)> found,
+                  std::function<void(const Result &)> failed);
+    /// The calendars in the collection `url`; `stale` says the account changed meanwhile.
+    void listCalendars(const QUrl &url, std::function<bool()> stale, std::function<void(bool)> done);
+    /// Reports a failed discovery request; a refused login pauses sending.
+    void discoveryFailed(const Result &r);
     void autoSelectCalendar();
 
     void pollLogin();
