@@ -44,7 +44,9 @@ set_tests_properties(tst_traynotifier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=of
 sugo_add_test(tst_traycontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus)
 set_tests_properties(tst_traycontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_desktopstyle Qt6::Core Qt6::Qml)
+sugo_add_test(tst_desktopstyle Qt6::Core Qt6::Gui Qt6::Qml)
+# A QGuiApplication (the system's fixed-width font); no display on CI.
+set_tests_properties(tst_desktopstyle PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 sugo_add_test(tst_themeicons Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 

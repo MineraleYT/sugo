@@ -8,8 +8,11 @@ QQC2.ApplicationWindow {
     id: root
 
     color: Theme.background
-    // No system title bar: the top bar moves the window and has its buttons; the edges resize it.
-    flags: Qt.Window | Qt.FramelessWindowHint
+    // Linux: no system title bar; the top bar moves the window and has its buttons, the edges
+    // resize it. macOS (DesktopStyle.nativeChrome): the system's title bar, transparent over the
+    // content, with its own buttons (the traffic lights), resizing, full screen and tiling.
+    flags: DesktopStyle.nativeChrome ? (Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint)
+                                     : (Qt.Window | Qt.FramelessWindowHint)
     readonly property bool maximized: visibility === Window.Maximized || visibility === Window.FullScreen
     readonly property bool wideScreen: width >= Theme.wideBreakpoint
 
@@ -74,10 +77,17 @@ QQC2.ApplicationWindow {
     // is set once in Component.onCompleted: a binding would hide the window again whenever the
     // tray or start-minimized settings change later.
 
-    // The close button hides the window when the program is meant to live in the tray;
-    // otherwise it quits (the application does not quit on its own when a window closes).
+    /// Set from C++ (main.cpp) when macOS asks the application to quit (Cmd+Q from the Dock,
+    /// logging out): the window then lets itself close.
+    property bool platformQuitting: false
+
+    // The close button hides the window when the program is meant to live in the tray, and
+    // always on macOS (Sugo stays in the Dock and the menu bar; Quit ends it); otherwise it quits
+    // (the application does not quit on its own when a window closes).
     onClosing: close => {
-        if (AppSettings.keepRunningInTray) {
+        if (root.platformQuitting) {
+            close.accepted = true;
+        } else if (DesktopStyle.nativeChrome || AppSettings.keepRunningInTray) {
             close.accepted = false;
             root.hide();
         } else {
@@ -88,6 +98,9 @@ QQC2.ApplicationWindow {
 
     /// Quits, after asking when that would cut a running or paused phase short.
     function requestQuit(): void {
+        if (quitDialog.visible) {
+            return;
+        }
         if (TimerEngine.active) {
             quitDialog.open();
         } else {
@@ -688,14 +701,14 @@ QQC2.ApplicationWindow {
     /// What the search (Ctrl+K) offers.
     function paletteCommands(): var {
         const list = [
-            { text: i18n("Focus"), icon: "timer", hint: i18nc("keyboard shortcut", "Ctrl 1"), run: () => root.navigate("timer") },
-            { text: i18n("Statistics"), icon: "stats", hint: i18nc("keyboard shortcut", "Ctrl 2"), run: () => root.navigate("stats") },
-            { text: i18n("Settings"), icon: "settings", hint: i18nc("keyboard shortcut", "Ctrl ,"), run: () => root.navigate("settings") },
+            { text: i18n("Focus"), icon: "timer", hint: DesktopStyle.shortcutText("Ctrl+1"), run: () => root.navigate("timer") },
+            { text: i18n("Statistics"), icon: "stats", hint: DesktopStyle.shortcutText("Ctrl+2"), run: () => root.navigate("stats") },
+            { text: i18n("Settings"), icon: "settings", hint: DesktopStyle.shortcutText("Ctrl+,"), run: () => root.navigate("settings") },
             { text: i18n("About"), icon: "info", run: () => root.navigate("about") },
             { text: TimerEngine.paused ? i18n("Resume the timer") : TimerEngine.active ? i18n("Pause the timer") : i18n("Start the timer"),
               icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", hint: i18nc("keyboard key", "Space"),
               run: () => TimerEngine.toggle() },
-            { text: i18n("New timer"), icon: "plus", hint: i18nc("keyboard shortcut", "Ctrl N"), run: () => root.newTimer() }
+            { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
             list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => TimerEngine.stop() });
@@ -711,27 +724,39 @@ QQC2.ApplicationWindow {
         return list;
     }
 
+    function openSearch(): void {
+        commandPalette.commands = root.paletteCommands();
+        commandPalette.open();
+    }
+
     CommandPalette {
         id: commandPalette
     }
 
+    // On macOS the menu bar has these shortcuts: the Shortcut items below that would claim the
+    // same keys are off there.
+    Loader {
+        active: DesktopStyle.nativeChrome
+        source: active ? Qt.resolvedUrl("components/MacMenuBar.qml") : ""
+        onLoaded: item.app = root
+    }
+    readonly property bool menuBarShortcuts: DesktopStyle.nativeChrome
+
     Shortcut {
         sequence: "Ctrl+K"
-        enabled: !root.isWelcomeActive && !root.dialogOpen
-        onActivated: {
-            commandPalette.commands = root.paletteCommands();
-            commandPalette.open();
-        }
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
+        onActivated: root.openSearch()
     }
 
     Shortcut {
         sequences: [StandardKey.New]
-        enabled: !root.isWelcomeActive && !root.dialogOpen
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.newTimer()
     }
 
     Shortcut {
         sequence: StandardKey.Quit
+        enabled: !root.menuBarShortcuts
         onActivated: root.requestQuit()
     }
 
@@ -772,15 +797,17 @@ QQC2.ApplicationWindow {
             required property int index
             Shortcut {
                 sequence: "Ctrl+" + (pageShortcut.index + 1)
-                enabled: !root.isWelcomeActive && !root.dialogOpen
+                enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
                 onActivated: root.navigate(pageShortcut.modelData)
             }
         }
     }
 
+    // KDE's Ctrl+Shift+, and the common Ctrl+,. Off on macOS, where StandardKey.Preferences is
+    // Cmd+, as well (the same key twice would be ambiguous): the menu bar has it once there.
     Shortcut {
         sequences: [StandardKey.Preferences, "Ctrl+,"]
-        enabled: !root.isWelcomeActive && !root.dialogOpen
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.navigate("settings")
     }
 
@@ -802,10 +829,7 @@ QQC2.ApplicationWindow {
             onTimerRequested: uuid => root.chooseTimer(uuid)
             onNewTimerRequested: root.newTimer()
             onRestartRequested: root.requestRestart()
-            onSearchRequested: {
-                commandPalette.commands = root.paletteCommands();
-                commandPalette.open();
-            }
+            onSearchRequested: root.openSearch()
             onMoveRequested: root.startSystemMove()
         }
 
@@ -901,10 +925,11 @@ QQC2.ApplicationWindow {
         id: toast
     }
 
-    // A frameless window still needs an outline and edges to resize it by.
+    // A frameless window still needs an outline and edges to resize it by (macOS's own window
+    // has both).
     Rectangle {
         anchors.fill: parent
-        visible: !root.maximized
+        visible: !root.maximized && !DesktopStyle.nativeChrome
         color: "transparent"
         border.width: Theme.hairline
         border.color: Theme.borderStrong
@@ -915,7 +940,8 @@ QQC2.ApplicationWindow {
         id: resizeEdge
         required property int edges
         property int cursor: Qt.ArrowCursor
-        enabled: !root.maximized
+        enabled: !root.maximized && !DesktopStyle.nativeChrome
+        visible: enabled
         z: 1000
         HoverHandler {
             cursorShape: resizeEdge.cursor

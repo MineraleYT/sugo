@@ -65,7 +65,8 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: Theme.spaceLg
+        // On macOS the system's window buttons sit in the corner when the sidebar is hidden.
+        anchors.leftMargin: Theme.spaceLg + (DesktopStyle.nativeChrome && bar.showLeftButtons ? Theme.trafficLightsWidth : 0)
         anchors.rightMargin: Theme.spaceLg
         spacing: Theme.spaceMd
 

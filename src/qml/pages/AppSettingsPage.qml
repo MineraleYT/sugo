@@ -449,13 +449,16 @@ QQC2.Page {
                 SettingRow {
                     first: true
                     title: i18n("Start Sugo automatically when I log in")
-                    description: AppSettings.autostartSupported ? "" : i18n("Starting at login cannot be set up from inside this environment (for example a sandboxed package). Use your desktop's autostart settings instead.")
+                    description: AppSettings.autostartSupported ? ""
+                                 : DesktopStyle.macos ? i18n("Starting at login cannot be set up from inside Sugo here. Add Sugo in System Settings → General → Login Items instead.")
+                                 : i18n("Starting at login cannot be set up from inside this environment (for example a sandboxed package). Use your desktop's autostart settings instead.")
                     enabled: AppSettings.autostartSupported
                     SettingSwitch { setting: "startAtLogin" }
                 }
                 SettingRow {
-                    title: i18n("Start minimized to the system tray")
-                    description: i18n("When started at login, Sugo opens in the tray without showing its window.")
+                    title: DesktopStyle.macos ? i18n("Start hidden in the menu bar") : i18n("Start minimized to the system tray")
+                    description: DesktopStyle.macos ? i18n("When started at login, Sugo opens in the menu bar without showing its window.")
+                                                    : i18n("When started at login, Sugo opens in the tray without showing its window.")
                     enabled: AppSettings.startAtLogin && AppSettings.showTrayIcon && AppSettings.trayAvailable
                     SettingSwitch { setting: "startMinimized" }
                 }
@@ -477,7 +480,7 @@ QQC2.Page {
 
             SettingsCard {
                 category: "general"
-                title: i18n("System tray")
+                title: DesktopStyle.macos ? i18n("Menu bar") : i18n("System tray")
                 iconName: "notifications"
                 Banner {
                     Layout.fillWidth: true
@@ -485,16 +488,21 @@ QQC2.Page {
                     Layout.bottomMargin: Theme.spaceXs
                     visible: !AppSettings.trayAvailable
                     tone: "info"
-                    text: i18n("No system tray was found on this desktop, so the tray options are not available and closing the window quits Sugo.")
+                    text: DesktopStyle.macos ? i18n("The menu bar icon is not available, so its options are turned off.")
+                                             : i18n("No system tray was found on this desktop, so the tray options are not available and closing the window quits Sugo.")
                 }
                 SettingRow {
                     first: AppSettings.trayAvailable
-                    title: i18n("Show an icon in the system tray")
-                    description: AppSettings.trayAvailable ? i18n("While a timer runs, the tray icon shows its progress. Click it to show or hide the window; use its menu to start, pause, stop or quit.") : ""
+                    title: DesktopStyle.macos ? i18n("Show an icon in the menu bar") : i18n("Show an icon in the system tray")
+                    description: !AppSettings.trayAvailable ? ""
+                                 : DesktopStyle.macos ? i18n("While a timer runs, the menu bar icon shows its progress. Click it to show the window, or to start, pause, stop or quit.")
+                                 : i18n("While a timer runs, the tray icon shows its progress. Click it to show or hide the window; use its menu to start, pause, stop or quit.")
                     enabled: AppSettings.trayAvailable
                     SettingSwitch { setting: "showTrayIcon" }
                 }
+                // On macOS closing the window always hides it (Sugo stays in the Dock and menu bar).
                 SettingRow {
+                    visible: !DesktopStyle.nativeChrome
                     title: i18n("Keep running in the tray when the window is closed")
                     enabled: AppSettings.showTrayIcon && AppSettings.trayAvailable
                     SettingSwitch { setting: "closeToTray" }
@@ -1086,7 +1094,7 @@ QQC2.Page {
                     title: i18n("Database")
                     description: DataManager ? DataManager.databasePath : ""
                     SButton {
-                        text: i18n("Open folder")
+                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
                         iconName: "external"
                         visible: DataManager !== null && !DataManager.usingTemporaryDatabase
                         onClicked: DataManager.openDatabaseFolder()
@@ -1150,6 +1158,8 @@ QQC2.Page {
 
             SettingsCard {
                 category: "advanced"
+                // D-Bus and KRunner: not on macOS.
+                available: AppSettings.externalControlSupported
                 title: i18n("Global Shortcuts and Automation")
                 iconName: "configure-shortcuts"
                 SettingRow {

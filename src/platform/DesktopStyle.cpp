@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "DesktopStyle.h"
 
+#include <QFontDatabase>
+#include <QKeySequence>
 #include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
@@ -104,6 +106,16 @@ DesktopStyle::Layout DesktopStyle::defaultLayout(const QString &style)
     return {{}, all};
 }
 
+QString DesktopStyle::monoFamily() const
+{
+    return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+}
+
+QString DesktopStyle::shortcutText(const QString &sequence)
+{
+    return QKeySequence(sequence, QKeySequence::PortableText).toString(QKeySequence::NativeText);
+}
+
 DesktopStyle::DesktopStyle(QObject *parent)
     : QObject(parent)
     , m_style(detectStyle())
@@ -126,6 +138,9 @@ DesktopStyle::DesktopStyle(QObject *parent)
                 layout = read;
             }
         }
+    }
+    if (nativeChrome()) {
+        return; // the system's title bar has the buttons
     }
     // Close must be reachable even with an odd setting.
     if (!layout.left.contains(QStringLiteral("close")) && !layout.right.contains(QStringLiteral("close"))) {

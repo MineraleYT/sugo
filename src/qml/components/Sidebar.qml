@@ -59,7 +59,8 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.topBarHeight - Theme.spaceMd * 2
-            Layout.leftMargin: Theme.spaceSm
+            // On macOS the system's window buttons sit in the corner, left of the logo.
+            Layout.leftMargin: Theme.spaceSm + (DesktopStyle.nativeChrome ? Theme.trafficLightsWidth : 0)
             Layout.bottomMargin: Theme.spaceSm
             spacing: Theme.spaceMd + Theme.hairline * 2
             DragHandler {
@@ -119,7 +120,7 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Kbd {
-                    text: i18nc("keyboard shortcut", "Ctrl K")
+                    text: DesktopStyle.shortcutText("Ctrl+K")
                 }
             }
         }

@@ -206,7 +206,7 @@ QQC2.Page {
             SButton {
                 kind: "primary"
                 text: page.isNew ? i18n("Create Timer") : i18n("Save")
-                shortcutText: i18nc("keyboard shortcut", "Ctrl S")
+                shortcutText: DesktopStyle.shortcutText("Ctrl+S")
                 enabled: page.canSave
                 onClicked: page.save()
             }
@@ -654,10 +654,14 @@ QQC2.Page {
                     title: i18n("Silence notifications while working")
                     description: SilenceController.available
                         ? i18n("Turns off all system notifications for the work phase and back on for the break.")
-                        : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
+                        : DesktopStyle.macos
+                          ? i18n("macOS does not let apps silence notifications. Use a Focus mode instead.")
+                          : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
                     enabled: SilenceController.available
                     SSwitch {
                         id: silenceBox
+                        // macOS: only the explanation, no switch that can never be turned on.
+                        visible: !DesktopStyle.nativeChrome
                         Accessible.name: i18n("Silence notifications while working")
                         checked: (page.preset.options && page.preset.options.silenceWhileWorking !== undefined)
                             ? Boolean(page.preset.options.silenceWhileWorking)

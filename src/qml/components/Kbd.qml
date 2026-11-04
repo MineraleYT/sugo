@@ -2,7 +2,8 @@
 import QtQuick
 import io.github.mineraleyt.sugo
 
-/// A keyboard shortcut shown next to the action it triggers, e.g. "Space" or "Ctrl 1".
+/// A keyboard shortcut shown next to the action it triggers, e.g. "Space" or "Ctrl+1" ("⌘1" on
+/// macOS): a key name, or DesktopStyle.shortcutText() of a sequence.
 Rectangle {
     id: kbd
 

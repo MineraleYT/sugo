@@ -298,3 +298,11 @@ if(APPLE)
         target_sources(sugo PRIVATE "${sound_file}")
     endforeach()
 endif()
+
+# --- macOS port: C (window chrome, menus, shortcuts, texts) ---
+# The macOS menu bar (Qt.labs.platform). A plain resource next to the module's QML, not one of its
+# QML_FILES: Main.qml loads it by URL only on macOS, so Linux neither compiles nor imports it.
+qt_add_resources(sugo_core "sugo_macos_menu"
+    PREFIX "/qt/qml/io/github/mineraleyt/sugo"
+    FILES qml/components/MacMenuBar.qml
+)
