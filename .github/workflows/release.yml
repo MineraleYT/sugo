@@ -171,8 +171,11 @@ jobs:
           fi
           cat stable.json
 
-      # The feed last: it must never announce a file that is not there yet. The release is the
-      # "latest" one, so releases/latest/download/stable.json points to it.
+      # The feed must never announce a file that is not there, nor be missing. A new release gets
+      # it with the other assets: gh creates the release as a draft, uploads everything, then
+      # publishes it, so the files and the feed appear together. The release is the "latest" one,
+      # so releases/latest/download/stable.json points to it. A re-run removes the feed first (the
+      # rebuilt files have other checksums) and puts it back last.
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -189,9 +192,11 @@ jobs:
           fi
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists, updating its assets..."
+            # Missing on a release whose earlier run failed before the feed: nothing to remove then.
+            gh release delete-asset "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --clobber
           else
             echo "Creating release $GITHUB_REF_NAME..."
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "Sugo $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --latest
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" stable.json --repo "$GITHUB_REPOSITORY" --title "Sugo $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --latest
           fi
-          gh release upload "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --clobber
