@@ -57,13 +57,18 @@ sugo_add_test(tst_unixsignals Qt6::Core)
 add_test(NAME tst_runner_version
     COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
 )
+# KRunner skips a query shorter than the runner's minimum: it must let the bare keyword "sugo" through.
+add_test(NAME tst_runner_min_letters
+    COMMAND grep -qx "X-Plasma-Runner-Min-Letter-Count=[1-4]" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
+)
 
 # Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,
 # the single-instance bus name and the /Timer service), and the shutdown test (D-Bus, GNU tools).
 if(NOT APPLE)
     # macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion).
     sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
+    # Gui: the factory it also checks names the inhibitor after the application's desktop file.
+    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::Gui Qt6::DBus)
     sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
     sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
     sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)

@@ -18,6 +18,7 @@ X-Plasma-DBusRunner-Path=/krunner
 X-Plasma-Request-Actions-Once=false
 # Only queries starting with one of our keywords (as a whole word) reach the app.
 X-Plasma-Runner-Match-Regex=(?i)^(pomodoro|sugo|tomato|timer)\\b
-X-Plasma-Runner-Min-Letter-Count=5
+# No more than the shortest keyword ("sugo"), or KRunner never passes the bare keyword on.
+X-Plasma-Runner-Min-Letter-Count=4
 X-Plasma-Runner-Syntaxes=pomodoro,sugo,pomodoro :q:,sugo :q:
 X-Plasma-Runner-Syntax-Descriptions=Start, pause, stop or control the Sugo Pomodoro timer

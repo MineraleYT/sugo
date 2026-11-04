@@ -14,6 +14,7 @@
 #include "Autostart.h"
 #include "FakeClock.h"
 #include "PowerInhibitor.h"
+#include "PrivateDBus.h"
 #include "TimerEngine.h"
 
 namespace
@@ -28,9 +29,9 @@ class FakeScreenSaver : public QObject, protected QDBusContext
 
 public:
     QStringList calls;
-    uint lastCookie = 0;
-    int failures = 0; ///< Inhibit calls to refuse.
-    int held = 0;     ///< Cookies handed out and not given back yet.
+    uint nextCookie = 0; ///< kscreenlocker numbers its cookies from 0, and 0 is a valid one.
+    int failures = 0;    ///< Inhibit calls to refuse.
+    QList<uint> held;    ///< Cookies handed out and not given back yet.
 
 public Q_SLOTS:
     uint Inhibit(const QString &application, const QString &reason)
@@ -42,16 +43,14 @@ public Q_SLOTS:
             sendErrorReply(QDBusError::Failed, QStringLiteral("busy"));
             return 0;
         }
-        lastCookie = 42;
-        ++held;
-        return lastCookie;
+        const uint cookie = nextCookie++;
+        held.append(cookie);
+        return cookie;
     }
     void UnInhibit(uint cookie)
     {
         calls << QStringLiteral("UnInhibit:%1").arg(cookie);
-        if (cookie == lastCookie && held > 0) {
-            --held;
-        }
+        held.removeAll(cookie);
     }
 };
 
@@ -83,7 +82,7 @@ private:
     QDBusConnection serverBus() const { return QDBusConnection(QStringLiteral("power-test-server")); }
     QDBusConnection clientBus() const { return QDBusConnection(QStringLiteral("power-test-client")); }
     /// The screen saver holds an inhibition of ours.
-    bool screenInhibited() const { return server.held > 0; }
+    bool screenInhibited() const { return !server.held.isEmpty(); }
 
 private Q_SLOTS:
     void initTestCase()
@@ -128,7 +127,8 @@ private Q_SLOTS:
         inhibitor = std::make_unique<PowerInhibitor>(clientBus());
         inhibitor->attach(engine.get(), settings.get());
         server.calls.clear();
-        server.held = 0;
+        server.held.clear();
+        server.nextCookie = 0;
     }
 
     void cleanup()
@@ -149,18 +149,24 @@ private Q_SLOTS:
         engine->start();
         QTRY_VERIFY(screenInhibited());
         QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo")}));
+        QCOMPARE(server.held, (QList<uint>{0}));
+
+        // Cookie 0 counts as held: another update while working does not ask again.
+        inhibitor->update();
+        QTest::qWait(100);
+        QCOMPARE(server.calls.size(), 1);
 
         engine->pause();
         QTRY_VERIFY(!screenInhibited());
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
-        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
+        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:0"));
 
         engine->resume();
         QTRY_VERIFY(screenInhibited());
         settings->setKeepScreenAwake(false);
         QTRY_VERIFY(!screenInhibited());
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 4, 3000);
-        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
+        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:1"));
     }
 
     void aCookieThatArrivesAfterPauseIsHandedBack()
@@ -168,7 +174,7 @@ private Q_SLOTS:
         engine->start();
         engine->pause(); // before Inhibit() has answered
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
-        QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("UnInhibit:42")}));
+        QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("UnInhibit:0")}));
         QVERIFY(!screenInhibited());
     }
 
@@ -178,7 +184,7 @@ private Q_SLOTS:
         inhibitor->shutdown(); // quitting before Inhibit() has answered
         inhibitor.reset();
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
-        QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("UnInhibit:42")}));
+        QCOMPARE(server.calls, (QStringList{QStringLiteral("Inhibit:Sugo"), QStringLiteral("UnInhibit:0")}));
     }
 
     void quickPauseAndResumeSendsOnlyOneInhibit()
@@ -194,7 +200,7 @@ private Q_SLOTS:
 
         engine->stop();
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 2, 3000);
-        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
+        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:0"));
     }
 
     void aRestartedScreenSaverIsAskedAgain()
@@ -203,7 +209,7 @@ private Q_SLOTS:
         QTRY_VERIFY(screenInhibited());
 
         QVERIFY(serverBus().unregisterService(kService));
-        server.held = 0;    // a new screen saver knows no cookies of the old one
+        server.held.clear(); // a new screen saver knows no cookies of the old one
         QTest::qWait(200); // the owner change reaches the client
         QVERIFY(serverBus().registerService(kService));
         QTRY_VERIFY(screenInhibited());
@@ -212,10 +218,46 @@ private Q_SLOTS:
         // The old cookie was dropped, not kept: stopping hands back the new one, once.
         engine->stop();
         QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 3, 3000);
-        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:42"));
+        QCOMPARE(server.calls.last(), QStringLiteral("UnInhibit:1"));
         QTest::qWait(100);
         QCOMPARE(server.calls.size(), 3);
         QVERIFY(!screenInhibited());
+    }
+
+    void theCookieOfAScreenSaverStartedByTheInhibitCallIsKept()
+    {
+        // The first Inhibit starts the screen saver (D-Bus activation). The bus announces the new
+        // owner before its reply.
+        PrivateDBus bus;
+        if (!bus.start({kService})) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-client"));
+        QDBusConnection serverConnection = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-server"));
+        QVERIFY(client.isConnected());
+        QVERIFY(serverConnection.isConnected());
+        FakeScreenSaver started;
+        {
+            PowerInhibitor lateInhibitor(client);
+            lateInhibitor.inhibit();
+            QTest::qWait(200); // the call waits on the bus for the screen saver it asked to start
+            QVERIFY(started.calls.isEmpty());
+
+            QVERIFY(serverConnection.registerObject(kPath, &started, QDBusConnection::ExportAllSlots));
+            QVERIFY(serverConnection.registerService(kService));
+            QTRY_COMPARE_WITH_TIMEOUT(started.held.size(), 1, 3000);
+            QTest::qWait(300);
+            // Its reply was kept: no second Inhibit, so no cookie left behind.
+            QCOMPARE(started.calls, (QStringList{QStringLiteral("Inhibit:Sugo")}));
+
+            lateInhibitor.release();
+            QTRY_VERIFY(started.held.isEmpty());
+            QCOMPARE(started.calls.last(), QStringLiteral("UnInhibit:0"));
+        }
+        serverConnection.unregisterService(kService);
+        serverConnection.unregisterObject(kPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-client"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-server"));
     }
 
     void aFailedInhibitIsRetriedWhileStillWanted()
