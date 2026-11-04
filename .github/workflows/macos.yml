@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Builds the macOS app (universal, signed ad hoc) in a disk image, starts it without a display,
+# and keeps the image as the artifact "sugo-macos". Used by release.yml (stable releases) and
+# nightly.yml, which still publish the Linux packages when this fails.
+name: macOS
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The version the program shows and compares when it looks for updates
+        required: true
+        type: string
+      ref:
+        description: The commit to build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build macOS app (universal)
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Read the pinned versions
+        id: pins
+        run: |
+          for pin in QT_VERSION AQT_VERSION ECM_TAG; do
+            value=$(sed -n "s/^$pin=//p" packaging/macos/build.sh)
+            test -n "$value"
+            echo "$pin=$value" >> "$GITHUB_OUTPUT"
+          done
+
+      # Qt (universal) and extra-cmake-modules, where build.sh looks for them before downloading.
+      - name: Restore Qt and extra-cmake-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/sugo-macos/qt
+            ~/sugo-macos/ecm
+          key: macos-package-deps-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}
+
+      - name: Build
+        env:
+          VERSION: ${{ inputs.version }}
+        run: WORK="$HOME/sugo-macos" bash packaging/macos/build.sh "$VERSION" "$GITHUB_WORKSPACE/out"
+
+      - name: Start it without a display
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # GNU timeout, which the smoke tests use.
+          command -v timeout >/dev/null || brew install coreutils
+          gnubin="$(brew --prefix coreutils)/libexec/gnubin"
+          export PATH="$gnubin:$PATH"
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" out/Sugo-macOS-universal.dmg >/dev/null
+          trap 'hdiutil detach "$mnt" >/dev/null || hdiutil detach -force "$mnt" >/dev/null' EXIT
+          test -L "$mnt/Applications"
+          app="$mnt/Sugo.app/Contents/MacOS/Sugo"
+          codesign --verify --deep --strict "$mnt/Sugo.app"
+          test "$(QT_QPA_PLATFORM=offscreen "$app" --version 2>/dev/null)" = "sugo $VERSION"
+          for page in "" timer settings about; do
+            SUGO_DATA_DIR=$(mktemp -d) bash tests/smoke_app.sh "$app" $page
+          done
+
+      - name: Keep the disk image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sugo-macos
+          path: out/Sugo-macOS-universal.dmg
+          if-no-files-found: error

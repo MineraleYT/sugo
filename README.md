@@ -70,6 +70,20 @@ Releases also provide an x86_64 Flatpak bundle (it does not update itself):
 
 *Flatpak downloads the KDE 6.11 runtime from Flathub the first time, if it is not installed yet.*
 
+### macOS
+
+Releases also provide a disk image for **macOS 13 Ventura or later**, one app for both Apple Silicon and Intel Macs:
+
+1. Download [Sugo-macOS-universal.dmg](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg), open it and drag **Sugo** to **Applications**.
+2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
+   - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
+   - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
+   - or, in Terminal, remove the quarantine mark: `xattr -dr com.apple.quarantine /Applications/Sugo.app`.
+
+   macOS remembers the choice: later launches open normally.
+
+Sugo for macOS tells you when a new release is out but does not install it: download the new disk image and replace the app. Some features are Linux-only for now: control from scripts and launchers (the D-Bus interface and KRunner commands) and silencing other notifications while you work.
+
 ### From source
 
 Sugo needs Qt 6.8+ (and extra-cmake-modules 6.8+ to build). Dependencies for Fedora, Ubuntu, Arch and openSUSE, build and install steps, and a local Flatpak build are in the [development guide](docs/DEVELOPMENT.md#building-from-source).

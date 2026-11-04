@@ -82,3 +82,106 @@ jobs:
 
       - name: Run test suite
         run: ctest --test-dir build --output-on-failure
+
+  # Clang's warnings are close to those of Apple's compiler: they show up here before the macOS job.
+  build-clang:
+    name: Build with Clang
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            cmake ninja-build clang ccache \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
+
+      - name: Restore the compiler cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-clang-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-clang-${{ runner.os }}-${{ github.ref_name }}-
+            ccache-clang-${{ runner.os }}-main-
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          ccache --zero-stats
+          cmake --build build --parallel
+          ccache --show-stats
+
+  # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
+  # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
+  # (nor stop the nightly build) while the port settles.
+  build-and-test-macos:
+    name: Build and test on macOS
+    runs-on: macos-15
+    continue-on-error: true
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        id: pins
+        run: |
+          for pin in QT_VERSION AQT_VERSION ECM_TAG; do
+            value=$(sed -n "s/^$pin=//p" packaging/macos/build.sh)
+            test -n "$value"
+            echo "$pin=$value" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Restore Qt and extra-cmake-modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/sugo-deps
+          key: macos-deps-${{ runner.arch }}-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}
+
+      - name: Install build dependencies
+        env:
+          QT_VERSION: ${{ steps.pins.outputs.QT_VERSION }}
+          AQT_VERSION: ${{ steps.pins.outputs.AQT_VERSION }}
+          ECM_TAG: ${{ steps.pins.outputs.ECM_TAG }}
+        run: |
+          command -v ninja >/dev/null || brew install ninja
+          # GNU timeout, which the smoke tests use.
+          command -v timeout >/dev/null || brew install coreutils
+          echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
+          deps=~/sugo-deps
+          if [ ! -d "$deps/qt/$QT_VERSION" ]; then
+            python3 -m venv "$RUNNER_TEMP/aqt"
+            "$RUNNER_TEMP/aqt/bin/pip" install -q "aqtinstall==$AQT_VERSION"
+            "$RUNNER_TEMP/aqt/bin/python" -m aqt install-qt mac desktop "$QT_VERSION" clang_64 -m qtmultimedia -O "$deps/qt" >/dev/null
+          fi
+          if [ ! -d "$deps/ecm" ]; then
+            git clone -q --depth 1 --branch "$ECM_TAG" https://invent.kde.org/frameworks/extra-cmake-modules.git "$RUNNER_TEMP/ecm-src"
+            cmake -S "$RUNNER_TEMP/ecm-src" -B "$RUNNER_TEMP/ecm-build" -G Ninja -DBUILD_TESTING=OFF -DBUILD_HTML_DOCS=OFF \
+              -DBUILD_MAN_DOCS=OFF -DBUILD_QTHELP_DOCS=OFF -DCMAKE_INSTALL_PREFIX="$deps/ecm" >/dev/null
+            cmake --install "$RUNNER_TEMP/ecm-build" >/dev/null
+          fi
+          # aqt names the folder "macos" from Qt 6.7 on, "clang_64" before.
+          for qt in "$deps/qt/$QT_VERSION/macos" "$deps/qt/$QT_VERSION/clang_64"; do
+            if [ -d "$qt" ]; then echo "SUGO_QT=$qt" >> "$GITHUB_ENV"; break; fi
+          done
+          echo "SUGO_ECM=$deps/ecm" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: |
+          test -n "${SUGO_QT:-}"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+            -DCMAKE_PREFIX_PATH="$SUGO_QT;$SUGO_ECM" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run test suite
+        run: ctest --test-dir build --output-on-failure
