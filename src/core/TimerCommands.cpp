@@ -77,8 +77,10 @@ QString TimerCommands::resolvePreset(const QString &nameOrUuid) const
             return preset.uuid;
         }
     }
+    // Names are stored trimmed; a name typed or pasted with spaces around it still matches.
+    const QString name = nameOrUuid.trimmed();
     for (const TimerPreset &preset : list) {
-        if (preset.name.compare(nameOrUuid, Qt::CaseInsensitive) == 0) {
+        if (preset.name.compare(name, Qt::CaseInsensitive) == 0) {
             return preset.uuid;
         }
     }
