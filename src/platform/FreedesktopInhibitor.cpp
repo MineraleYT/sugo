@@ -120,14 +120,18 @@ void FreedesktopInhibitor::onUnInhibitFinished(QDBusPendingCallWatcher *watcher)
 }
 
 // The notification service restarted (for example plasmashell): inhibitions died with it.
-void FreedesktopInhibitor::onOwnerChanged(const QString &, const QString &, const QString &newOwner)
+// A service that has only just appeared took nothing with it, and a call in flight may be the very
+// one that started it (D-Bus activation): its reply, a cookie of the new server, is still to come.
+void FreedesktopInhibitor::onOwnerChanged(const QString &, const QString &oldOwner, const QString &newOwner)
 {
-    ++m_generation; // abandon any call still in flight to the old owner
-    m_busy = false;
-    m_hasCookie = false;
-    report();
+    if (!oldOwner.isEmpty()) {
+        ++m_generation; // abandon any call still in flight to the old owner
+        m_busy = false;
+        m_hasCookie = false;
+        report();
+    }
     if (!newOwner.isEmpty()) {
-        sync(); // still wanted: take the inhibition again on the new server
+        sync(); // still wanted: take the inhibition (again) on the new server, after a call in flight
     }
 }
 

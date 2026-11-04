@@ -70,6 +70,31 @@ QQC2.Page {
         interval: 3000
         onTriggered: page.calTestOk = false
     }
+    // Why the address just typed was refused (the field keeps it to be corrected); cleared by the
+    // next edit.
+    property string calInputError: ""
+    // A refused address leaves its field unbound. Once the stored addresses change, or the service
+    // (each keeps its own), both fields show what is stored again and the refusal no longer applies.
+    function resetCalFields() {
+        page.calInputError = "";
+        calServerField.text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+        calUrlField.text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+    }
+    Connections {
+        target: CalendarSync
+        function onInputRejected(message) {
+            page.calInputError = message;
+        }
+        function onProviderChanged() {
+            page.resetCalFields();
+        }
+        function onServerUrlChanged() {
+            page.resetCalFields();
+        }
+        function onCalendarUrlChanged() {
+            page.resetCalFields();
+        }
+    }
     readonly property string calLastSuccess: {
         const d = CalendarSync ? CalendarSync.lastSuccess : null;
         if (!d) {
@@ -101,6 +126,16 @@ QQC2.Page {
             }
         }
         return -1;
+    }
+    // The calendar fields store what was typed when they lose the focus (editingFinished). A
+    // click on a button does not take it from them (SButton takes the focus by Tab only), so each
+    // button that uses what they hold calls this first: the focus moves here, the field being
+    // edited stores its text, and the action runs with what is on screen.
+    Item {
+        id: calFocusSink
+    }
+    function commitCalendarFields(): void {
+        calFocusSink.forceActiveFocus();
     }
 
     // The calendar list is not kept between runs, and calendars made on the server since the last
@@ -333,7 +368,7 @@ QQC2.Page {
         Text {
             text: card.title
             color: Theme.foreground
-            font.pixelSize: Theme.fontHeading - 3
+            font.pixelSize: Theme.fontSection
             font.weight: Font.DemiBold
             Layout.fillWidth: true
             elide: Text.ElideRight
@@ -902,6 +937,7 @@ QQC2.Page {
                             currentIndex: page.valueIndex(model, page.calProvider)
                             Accessible.name: i18n("Calendar service")
                             onActivated: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.provider = currentValue;
                                     // Each service keeps its own settings: if the one just chosen is
@@ -921,17 +957,24 @@ QQC2.Page {
                         title: i18n("Server address")
                         enabled: !page.calConnected && !page.calWaiting
                         STextField {
+                            id: calServerField
                             Layout.fillWidth: !page.wide
                             Layout.preferredWidth: Theme.space4xl * 5
                             placeholderText: "https://cloud.example.org"
+                            objectName: "calendarServerField"
                             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                             text: CalendarSync ? CalendarSync.serverUrl : ""
                             Accessible.name: i18n("Server address")
+                            onTextEdited: page.calInputError = ""
                             onEditingFinished: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.serverUrl = text;
                                 }
-                                text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+                                // Refused: what was typed stays to be corrected, the message says why.
+                                if (page.calInputError.length === 0) {
+                                    text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+                                }
                             }
                         }
                     }
@@ -950,7 +993,10 @@ QQC2.Page {
                             visible: !page.calConnected && !page.calWaiting
                             text: i18n("Log in")
                             iconName: "external"
-                            onClicked: CalendarSync.startNextcloudLogin()
+                            onClicked: {
+                                page.commitCalendarFields();
+                                CalendarSync.startNextcloudLogin();
+                            }
                         }
                         SButton {
                             visible: page.calWaiting
@@ -969,8 +1015,14 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
@@ -987,16 +1039,22 @@ QQC2.Page {
                         title: i18n("Calendar address (CalDAV)")
                         description: i18n("Use the CalDAV address of the calendar. A subscription link ending in .ics is read-only and cannot receive events.")
                         STextField {
+                            id: calUrlField
                             Layout.fillWidth: !page.wide
                             Layout.preferredWidth: Theme.space4xl * 5
                             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                             text: CalendarSync ? CalendarSync.calendarUrl : ""
                             Accessible.name: i18n("Calendar address (CalDAV)")
+                            onTextEdited: page.calInputError = ""
                             onEditingFinished: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.calendarUrl = text;
                                 }
-                                text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+                                // Refused: what was typed stays to be corrected, the message says why.
+                                if (page.calInputError.length === 0) {
+                                    text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+                                }
                             }
                         }
                     }
@@ -1031,7 +1089,9 @@ QQC2.Page {
                             Accessible.name: i18n("Password")
                             onTextEdited: dirty = true
                             onEditingFinished: {
-                                if (dirty && CalendarSync) {
+                                // Left empty, it keeps the stored password: only Disconnect, which
+                                // asks first, forgets it.
+                                if (dirty && text.length > 0 && CalendarSync) {
                                     CalendarSync.setPassword(text);
                                 }
                                 dirty = false;
@@ -1053,8 +1113,14 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
@@ -1129,8 +1195,14 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "refresh";
                                 CalendarSync.refreshCalendars();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                     }
@@ -1158,9 +1230,12 @@ QQC2.Page {
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spaceSm
                     Layout.bottomMargin: Theme.spaceSm
-                    shown: page.calFailed || (page.calNotConfigured && !page.calWaiting)
-                    tone: page.calFailed ? "danger" : "info"
+                    shown: page.calInputError.length > 0 || page.calFailed || (page.calNotConfigured && !page.calWaiting)
+                    tone: page.calInputError.length > 0 || page.calFailed ? "danger" : "info"
                     text: {
+                        if (page.calInputError.length > 0) {
+                            return page.calInputError;
+                        }
                         if (!CalendarSync) {
                             return "";
                         }
@@ -1461,7 +1536,9 @@ QQC2.Page {
             id: exportHistoryDialog
             title: i18n("Export session history")
             fileMode: FileDialog.SaveFile
-            defaultSuffix: "csv"
+            // The ending of the chosen type: "history" with JSON chosen becomes history.json.
+            defaultSuffix: selectedNameFilter && selectedNameFilter.extensions.length > 0
+                           ? selectedNameFilter.extensions[0] : "csv"
             nameFilters: [i18n("CSV spreadsheet (*.csv)"), i18n("JSON (*.json)")]
             onAccepted: DataManager.exportHistory(selectedFile)
         }

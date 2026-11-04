@@ -148,18 +148,21 @@ QQC2.Popup {
                     }
                 }
             }
+        }
+        // Outside the list: a child of the ListView would sit in its content
+        // item, which has no height (and is clipped) when nothing matches.
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: list.count === 0 ? Theme.navHeight : Theme.spaceXs
 
             Text {
+                objectName: "nothingFound"
                 anchors.centerIn: parent
                 visible: list.count === 0
                 text: i18n("Nothing found")
                 color: Theme.muted
                 font.pixelSize: Theme.fontBody
             }
-        }
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: list.count === 0 ? Theme.navHeight : Theme.spaceXs
         }
     }
 }

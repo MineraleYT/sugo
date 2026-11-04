@@ -26,9 +26,11 @@ private Q_SLOTS:
     void cleanup();
 
     void testNavigation();
+    void testNavigationBackToTodayKeepsTheDay();
     void testReactiveUpdateOnRecord();
     void testFormatters();
     void testBreakdownModes();
+    void testBreakdownAndStreaksLeaveTheChartAlone();
     void testDateRolloverMovesTodayAlong();
     void testDateRolloverKeepsAPastPeriod();
     void testRolloverIsNoticedAfterAnEarlierRefresh();
@@ -39,6 +41,9 @@ private Q_SLOTS:
     void testStreakUpdatesOnRecord();
     void testDays();
     void testPreviousPeriodComparesTheSameStretch();
+    void testDateCheckKeepsAPeriodUnderWayCurrent();
+    void testPreviousYearComparesTheSameDate();
+    void testPreviousMonthCountsAClampedDayWhole();
 
 private:
     void insertWork(const QDateTime &start, bool completed = true);
@@ -96,6 +101,32 @@ void TestStatsModel::testNavigation()
     QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 1)});
     m_model->today();
     QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
+}
+
+void TestStatsModel::testNavigationBackToTodayKeepsTheDay()
+{
+    // 31 March: the month before has no 31st, so going back clamps to 28 February. Coming back
+    // must show today again, not 28 March.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2026, 3, 31), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Month);
+    m_model->previousPeriod();
+    QVERIFY(!m_model->isCurrent());
+    m_model->nextPeriod();
+    QVERIFY(m_model->isCurrent());
+    m_model->setPeriod(StatsModel::Period::Day);
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 3, 31)});
+    QVERIFY(m_model->isCurrent());
+
+    // The same with years on 29 February.
+    env.now = []() { return QDateTime(QDate(2028, 2, 29), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Year);
+    m_model->previousPeriod();
+    m_model->nextPeriod();
+    m_model->setPeriod(StatsModel::Period::Day);
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2028, 2, 29)});
 }
 
 void TestStatsModel::testReactiveUpdateOnRecord()
@@ -188,6 +219,28 @@ void TestStatsModel::testBreakdownModes()
     QCOMPARE(list.at(1).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Without note"));
 }
 
+void TestStatsModel::testBreakdownAndStreaksLeaveTheChartAlone()
+{
+    // Every statsChanged rebuilds the page's chart: only what changes is announced.
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(9, 0), QTimeZone::utc()));
+    QSignalSpy statsSpy(m_model.get(), &StatsModel::statsChanged);
+    QSignalSpy breakdownSpy(m_model.get(), &StatsModel::breakdownChanged);
+    QSignalSpy streaksSpy(m_model.get(), &StatsModel::streaksChanged);
+
+    m_model->refresh();
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(breakdownSpy.count(), 1);
+    QCOMPARE(streaksSpy.count(), 1);
+
+    m_model->setBreakdownMode(StatsModel::BreakdownMode::ByCategory);
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(breakdownSpy.count(), 2);
+
+    m_model->setProtectWeekendStreak(!m_model->protectWeekendStreak());
+    QCOMPARE(statsSpy.count(), 1);
+    QCOMPARE(streaksSpy.count(), 2);
+}
+
 void TestStatsModel::testPreviousPeriodComparesTheSameStretch()
 {
     // Now is Saturday 3 October 2026, 12:00: the week under way began on Monday 28 September.
@@ -209,6 +262,63 @@ void TestStatsModel::testPreviousPeriodComparesTheSameStretch()
     m_model->previousPeriod();
     QCOMPARE(m_model->workSeconds(), 6600);
     QCOMPARE(m_model->previousWorkSeconds(), 0);
+}
+
+void TestStatsModel::testDateCheckKeepsAPeriodUnderWayCurrent()
+{
+    // Nothing recomputes the model during the day but the periodic check: it must still move
+    // the comparison and the bar of "now" along with the clock.
+    auto now = std::make_shared<QDateTime>(QDate(2026, 10, 3), QTime(9, 0), QTimeZone::utc());
+    StatsModel::Environment env = m_env;
+    env.now = [now]() { return *now; };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Day);
+    insertWork(QDateTime(QDate(2026, 10, 2), QTime(14, 0), QTimeZone::utc()));
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 0); // yesterday at 14:00 is after 9:00
+    QVERIFY(m_model->buckets().at(9).toMap().value(QStringLiteral("isCurrent")).toBool());
+
+    QSignalSpy periodSpy(m_model.get(), &StatsModel::periodChanged);
+    *now = QDateTime(QDate(2026, 10, 3), QTime(16, 0), QTimeZone::utc());
+    m_model->checkDateChange();
+    QCOMPARE(m_model->previousWorkSeconds(), 1500);
+    const QVariantList buckets = m_model->buckets();
+    QCOMPARE(buckets.size(), 24);
+    QVERIFY(!buckets.at(9).toMap().value(QStringLiteral("isCurrent")).toBool());
+    QVERIFY(buckets.at(16).toMap().value(QStringLiteral("isCurrent")).toBool());
+    QCOMPARE(periodSpy.count(), 0); // still the same day
+
+    // A past period has nothing to catch up with.
+    m_model->previousPeriod();
+    QSignalSpy statsSpy(m_model.get(), &StatsModel::statsChanged);
+    m_model->checkDateChange();
+    QCOMPARE(statsSpy.count(), 0);
+}
+
+void TestStatsModel::testPreviousYearComparesTheSameDate()
+{
+    // 1 March 2028, after a 29 February: the same point of 2027 is 1 March, not 2 March.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2028, 3, 1), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Year);
+    insertWork(QDateTime(QDate(2027, 3, 1), QTime(9, 0), QTimeZone::utc()));  // before the same point
+    insertWork(QDateTime(QDate(2027, 3, 1), QTime(18, 0), QTimeZone::utc())); // after it
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 1500);
+}
+
+void TestStatsModel::testPreviousMonthCountsAClampedDayWhole()
+{
+    // 31 March, early: February has no 31st, so the whole of 28 February counts.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2026, 3, 31), QTime(0, 30), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Month);
+    insertWork(QDateTime(QDate(2026, 2, 28), QTime(9, 0), QTimeZone::utc()));
+    insertWork(QDateTime(QDate(2026, 2, 28), QTime(22, 0), QTimeZone::utc()));
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 3000);
 }
 
 QList<QDate> TestStatsModel::shownDays() const

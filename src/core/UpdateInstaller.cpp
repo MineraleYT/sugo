@@ -40,8 +40,10 @@ bool AppImageInstaller::canInstall() const
     if (m_path.isEmpty()) {
         return false;
     }
+    // QSaveFile writes next to the file and renames over it, and refuses a file it could not
+    // write to itself (read-only, or owned by someone else) even in a folder it can write to.
     const QFileInfo file(m_path);
-    return file.isFile() && QFileInfo(file.absolutePath()).isWritable();
+    return file.isFile() && file.isWritable() && QFileInfo(file.absolutePath()).isWritable();
 }
 
 void AppImageInstaller::install(QSaveFile &download, Done done)

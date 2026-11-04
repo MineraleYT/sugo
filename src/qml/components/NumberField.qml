@@ -6,7 +6,8 @@ import io.github.mineraleyt.sugo
 
 /**
  * A small number field with its unit ("25 min"): type the number, or use the arrow keys or the
- * mouse wheel. `valueModified()` follows a change by the user.
+ * mouse wheel. `valueModified()` follows a change by the user. A number being typed counts as soon
+ * as it is in range; `commit()` takes whatever is typed (brought into range) and shows it back.
  */
 QQC2.Control {
     id: field
@@ -27,6 +28,13 @@ QQC2.Control {
             valueModified();
         }
         input.text = Qt.binding(() => field.displayText);
+    }
+
+    /// Takes what is typed, as leaving the field does: before acting on `value` (e.g. Save), since
+    /// clicking a button does not take the focus from the field.
+    function commit(): void {
+        const match = input.text.match(/\d+/);
+        setValue(match ? parseInt(match[0]) : value);
     }
 
     readonly property string displayText: fromText.length > 0 && value === from ? fromText : String(value)
@@ -66,9 +74,18 @@ QQC2.Control {
             Accessible.name: field.Accessible.name
             Keys.onUpPressed: field.setValue(field.value + 1)
             Keys.onDownPressed: field.setValue(field.value - 1)
-            onEditingFinished: {
-                const match = text.match(/\d+/);
-                field.setValue(match ? parseInt(match[0]) : field.value);
+            onEditingFinished: field.commit()
+            // A number in range counts while it is typed (unsaved changes, Save), out of range only
+            // once committed. The text stays as typed until then: no rewriting under the caret
+            // ("0" into "Never", "05" into "5"), so the assignment below unbinds it first.
+            onTextEdited: {
+                text = text;
+                const match = text.match(/^\s*(\d+)\s*$/);
+                const typed = match ? parseInt(match[1]) : NaN;
+                if (typed >= field.from && typed <= field.to && typed !== field.value) {
+                    field.value = typed;
+                    field.valueModified();
+                }
             }
             onActiveFocusChanged: if (activeFocus) selectAll()
         }
@@ -80,7 +97,9 @@ QQC2.Control {
         }
     }
 
+    // Only for the field being edited: scrolling the page over a field must not change it.
     WheelHandler {
+        enabled: input.activeFocus
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => field.setValue(field.value + (event.angleDelta.y > 0 ? 1 : -1))
     }

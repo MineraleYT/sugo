@@ -13,8 +13,8 @@
 #
 # The app is signed ad hoc (Apple Silicon runs no unsigned code, and macdeployqt's changes break
 # the linker's signature), so Gatekeeper asks the user to confirm the first launch. SIGN_IDENTITY
-# set to a "Developer ID Application" identity signs it for distribution instead (notarization is
-# a separate step, not done here).
+# set to a "Developer ID Application" identity signs it for distribution instead, with the hardened
+# runtime and the entitlements in entitlements.plist (notarization is a separate step, not done here).
 set -euo pipefail
 
 VERSION=${1:?version}
@@ -34,6 +34,8 @@ DMG_NAME=Sugo-macOS-universal.dmg
 fail() { echo "error: $*" >&2; exit 1; }
 
 mkdir -p "$WORK" "$OUT"
+# Absolute: the script works in WORK, and APP and the exit trap name paths under it.
+WORK=$(cd "$WORK" && pwd)
 OUT=$(cd "$OUT" && pwd)
 cd "$WORK"
 
@@ -98,7 +100,7 @@ CONTENTS="$APP/Contents"
 # The libraries a Mach-O file loads, once each (a universal file lists them for each architecture,
 # under a header line per architecture; the dependencies are the indented lines).
 deps() {
-    otool -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
+    otool -arch all -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
 }
 
 # --- Qt in the bundle ----------------------------------------------------------------------------
@@ -130,7 +132,7 @@ done
 # The build's own rpaths to Qt would make the app look for Qt where it was built; the bundled
 # frameworks are found through @executable_path/../Frameworks.
 rpaths() {
-    otool -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
+    otool -arch all -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
 }
 rpaths | while read -r rpath; do
     case "$rpath" in
@@ -167,7 +169,7 @@ fi
 if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
     users=$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -not -path '*/QtDBus.framework/*' -print0 \
         | while IFS= read -r -d '' f; do
-              if otool -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
+              if otool -arch all -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
           done)
     [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
     echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
@@ -218,7 +220,7 @@ while IFS= read -r -d '' f; do
     done
     dir=$(dirname "$f")
     # A library lists its own install name among its dependencies: skip it.
-    own=$(otool -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
+    own=$(otool -arch all -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
     while read -r dep; do
         [ -n "$dep" ] && [ "$dep" != "$own" ] || continue
         case "$dep" in
@@ -239,7 +241,9 @@ xattr -cr "$APP"
 if [ "$SIGN_IDENTITY" = - ]; then
     codesign --force --deep --sign - "$APP"
 else
-    codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+    # The hardened runtime: entitlements.plist lets Qt's QML engine use its JIT.
+    codesign --force --deep --options runtime --timestamp --entitlements "$SRC/packaging/macos/entitlements.plist" \
+        --sign "$SIGN_IDENTITY" "$APP"
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 

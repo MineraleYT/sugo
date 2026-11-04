@@ -4,8 +4,10 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #endif
+#include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <memory>
@@ -22,6 +24,7 @@ class ScreenLockWatcherTest : public QObject
     Q_OBJECT
 
 private:
+    QTemporaryDir dataDir;
     std::unique_ptr<FakeClock> clock;
     std::unique_ptr<TimerEngine> engine;
     std::unique_ptr<AppSettings> settings;
@@ -30,8 +33,12 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        // Keep the settings file away from the user's real configuration.
+        // Keep the settings file away from the user's real configuration: SUGO_DATA_DIR, which
+        // Settings::defaultPath() reads first, in a directory of its own (test mode alone would
+        // leave a file in ~/.qttest, and an exported SUGO_DATA_DIR would be written to).
         QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(dataDir.isValid());
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dataDir.path()));
     }
 
     void init()
@@ -231,6 +238,44 @@ private Q_SLOTS:
         for (const auto &name : {QStringLiteral("watcher-session"), QStringLiteral("impostor"), QStringLiteral("screen-saver")}) {
             QDBusConnection::disconnectFromBus(name);
         }
+#endif
+    }
+
+    void gnomeScreenSaverLockPausesTheTimer()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("gnome-session"));
+        QDBusConnection gnomeShell = QDBusConnection::connectToBus(bus.address(), QStringLiteral("gnome-shell"));
+        // GNOME announces locks on its own name only, never on org.freedesktop.ScreenSaver.
+        QVERIFY(gnomeShell.registerService(QStringLiteral("org.gnome.ScreenSaver")));
+
+        ScreenLockWatcher lockWatcher(session);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+        const auto activeChanged = [](bool active) {
+            QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/org/gnome/ScreenSaver"),
+                                                             QStringLiteral("org.gnome.ScreenSaver"),
+                                                             QStringLiteral("ActiveChanged"));
+            signal << active;
+            return signal;
+        };
+
+        QVERIFY(gnomeShell.send(activeChanged(true)));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+
+        QVERIFY(gnomeShell.send(activeChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+
+        QDBusConnection::disconnectFromBus(QStringLiteral("gnome-shell"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("gnome-session"));
 #endif
     }
 

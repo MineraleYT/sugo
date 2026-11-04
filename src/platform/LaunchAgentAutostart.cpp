@@ -8,15 +8,19 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include <sys/statvfs.h>
+
 namespace
 {
 Q_LOGGING_CATEGORY(lcLaunchAgent, "sugo.platform.autostart.launchagent")
 } // namespace
 
-LaunchAgentAutostart::LaunchAgentAutostart(const QString &directory, const QString &label, const QStringList &command)
+LaunchAgentAutostart::LaunchAgentAutostart(const QString &directory, const QString &label, const QStringList &command,
+                                           ReadOnlyCheck isOnReadOnlyVolume)
     : m_directory(directory)
     , m_label(label)
     , m_command(command)
+    , m_isOnReadOnlyVolume(isOnReadOnlyVolume ? std::move(isOnReadOnlyVolume) : ReadOnlyCheck(&LaunchAgentAutostart::onReadOnlyVolume))
 {
 }
 
@@ -97,6 +101,26 @@ QStringList LaunchAgentAutostart::programArguments(const QString &plistPath)
     return xml.hasError() ? QStringList() : arguments;
 }
 
+bool LaunchAgentAutostart::onReadOnlyVolume(const QString &path)
+{
+    // statvfs() of the path itself, not QStorageInfo: on macOS that one asks about the volume's
+    // root, and /Applications (a firmlink into the writable Data volume) has the sealed, read-only
+    // system volume "/" as its root.
+    struct statvfs info {};
+    return ::statvfs(QFile::encodeName(path).constData(), &info) == 0 && (info.f_flag & ST_RDONLY) != 0;
+}
+
+bool LaunchAgentAutostart::runsFromTemporaryLocation() const
+{
+    if (m_command.isEmpty()) {
+        return false;
+    }
+    // Not the /Volumes prefix: an app installed on an external disk or a second volume lives
+    // there too, writable. A mounted disk image is read-only, and so is a translocated copy.
+    const QString &program = m_command.constFirst();
+    return program.contains(QLatin1String("/AppTranslocation/")) || m_isOnReadOnlyVolume(program);
+}
+
 bool LaunchAgentAutostart::isEnabled() const
 {
     return QFile::exists(filePath());
@@ -120,6 +144,12 @@ bool LaunchAgentAutostart::write() const
 bool LaunchAgentAutostart::setEnabled(bool enabled)
 {
     if (enabled) {
+        // launchd could not find the program at the next login: say it failed rather than
+        // leave an agent that silently does nothing.
+        if (runsFromTemporaryLocation()) {
+            qCWarning(lcLaunchAgent) << "Not starting at login from a temporary location" << m_command.constFirst();
+            return false;
+        }
         return write();
     }
     if (!QFile::exists(filePath())) {
@@ -135,6 +165,10 @@ bool LaunchAgentAutostart::setEnabled(bool enabled)
 void LaunchAgentAutostart::repair()
 {
     if (!isEnabled()) {
+        return;
+    }
+    // Run from the disk image or a translocated copy: the agent keeps the installed app.
+    if (runsFromTemporaryLocation()) {
         return;
     }
     if (programArguments(filePath()) != m_command) {

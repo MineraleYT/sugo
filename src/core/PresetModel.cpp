@@ -45,6 +45,37 @@ QVariant coercedOption(const OptionDescriptor &desc, const QVariant &value)
     return value.toBool();
 }
 
+/// A name or category as stored: trimmed, at most `maxLength` (MaxNameLength) UTF-16 units, and
+/// never cut between the two halves of a character outside the Basic Multilingual Plane (an emoji).
+QString limitedText(const QString &text, int maxLength = PresetLimits::MaxNameLength)
+{
+    QString kept = text.trimmed().left(std::max(0, maxLength));
+    if (!kept.isEmpty() && kept.back().isHighSurrogate()) {
+        kept.chop(1);
+    }
+    return kept.trimmed();
+}
+
+/// A stored timer (an older version's, a restored backup's, a hand-edited file's) brought within
+/// the limits the editor keeps, so the engine and the editor never see values they would refuse.
+void clampToLimits(TimerPreset &preset)
+{
+    preset.workSeconds = std::clamp(preset.workSeconds, 1, kMaxWorkSeconds);
+    preset.shortBreakSeconds = std::clamp(preset.shortBreakSeconds, 0, kMaxBreakSeconds);
+    preset.longBreakSeconds = std::clamp(preset.longBreakSeconds, 0, kMaxBreakSeconds);
+    preset.cyclesBeforeLong = std::clamp(preset.cyclesBeforeLong, 0, kMaxCycles);
+    const QString name = limitedText(preset.name);
+    if (!name.isEmpty()) {
+        preset.name = name;
+    }
+    preset.category = limitedText(preset.category);
+    for (const auto &desc : PresetSettings::descriptors()) {
+        if (preset.options.contains(desc.key)) {
+            preset.options.insert(desc.key, coercedOption(desc, preset.options.value(desc.key)));
+        }
+    }
+}
+
 } // namespace
 
 PresetModel::PresetModel(QObject *parent)
@@ -115,7 +146,7 @@ QStringList PresetModel::applyFields(TimerPreset &preset, const QVariantMap &fie
     QStringList adjusted;
     const auto text = [&](const QString &key) {
         const QString given = fields.value(key).toString().trimmed();
-        const QString kept = given.left(PresetLimits::MaxNameLength).trimmed();
+        const QString kept = limitedText(given);
         if (kept != given) {
             adjusted.append(key);
         }
@@ -158,11 +189,18 @@ QStringList PresetModel::applyFields(TimerPreset &preset, const QVariantMap &fie
 
     for (const auto &desc : PresetSettings::descriptors()) {
         if (fields.contains(desc.key)) {
-            const QVariant value = coercedOption(desc, fields.value(desc.key));
-            if (desc.type == QLatin1String("int") && value.toInt() != fields.value(desc.key).toInt()) {
-                adjusted.append(desc.key);
+            const QVariant given = fields.value(desc.key);
+            if (desc.type == QLatin1String("int")) {
+                bool ok = false;
+                const int n = given.toInt(&ok);
+                if (!ok || std::clamp(n, desc.minimum, desc.maximum) != n) {
+                    adjusted.append(desc.key);
+                }
+                if (!ok) {
+                    continue; // unreadable: the current value stays, as for the fields above
+                }
             }
-            preset.options.insert(desc.key, value);
+            preset.options.insert(desc.key, coercedOption(desc, given));
         }
     }
     return adjusted;
@@ -272,6 +310,7 @@ void PresetModel::setPresets(const QList<TimerPreset> &presets, const QString &c
         }
         seen.insert(preset.uuid);
         preset.builtin = (preset.uuid == DefaultUuid);
+        clampToLimits(preset);
         clean.append(preset);
     }
     if (!seen.contains(DefaultUuid)) {
@@ -409,7 +448,11 @@ QString PresetModel::duplicate(const QString &uuid)
     TimerPreset copy = m_presets.at(source);
     copy.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
     copy.builtin = false;
-    copy.name = i18n("%1 (copy)", copy.name);
+    // Shorten the original name first so the suffix always fits: cut from the end instead, the
+    // copy of a name at the limit would lose " (copy)" and carry the very same name.
+    const auto suffixLength = static_cast<int>(i18n("%1 (copy)", QString()).size());
+    const QString base = limitedText(copy.name, PresetLimits::MaxNameLength - suffixLength);
+    copy.name = limitedText(i18n("%1 (copy)", base));
     copy.createdAt = copy.updatedAt = nowMs();
     copy.updatedBy.clear();
 
@@ -429,14 +472,15 @@ bool PresetModel::remove(const QString &uuid)
     if (row < 0 || m_presets.at(row).builtin) {
         return false;
     }
+    // The selection moves first, so a listener to the removal never finds the current timer
+    // missing (currentIndex() -1, currentPreset() the factory defaults).
+    if (uuid == m_currentUuid) {
+        m_currentUuid = DefaultUuid;
+    }
     beginRemoveRows({}, row, row);
     m_presets.removeAt(row);
     endRemoveRows();
     Q_EMIT countChanged();
-
-    if (uuid == m_currentUuid) {
-        m_currentUuid = DefaultUuid;
-    }
     Q_EMIT currentChanged();
     Q_EMIT modified();
     return true;

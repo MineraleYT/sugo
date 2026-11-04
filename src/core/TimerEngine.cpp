@@ -164,8 +164,9 @@ void TimerEngine::stop()
         return;
     }
     // A phase that finishIfDue() just auto-started has not run yet: nothing to record for it.
+    // One that ended there and left a break waiting is still stopped: back to Work, cycles reset.
     const bool finished = finishIfDue();
-    if (m_state == State::Idle) {
+    if (m_state == State::Idle && !finished) {
         return;
     }
     if (!finished) {
@@ -241,7 +242,7 @@ void TimerEngine::refresh()
 
 // --- Transitions -----------------------------------------------------------
 
-void TimerEngine::startPhase(Phase phase, qint64 plannedMs)
+TimerEngine::Phase TimerEngine::phaseToRun(Phase phase)
 {
     if (phase == Phase::LongBreak && durationMs(phase) <= 0) {
         // A pending long break whose duration was set to 0 meanwhile: it still ends the set, and
@@ -253,6 +254,12 @@ void TimerEngine::startPhase(Phase phase, qint64 plannedMs)
         // A zero-length break means "no break": go straight back to work.
         phase = Phase::Work;
     }
+    return phase;
+}
+
+void TimerEngine::startPhase(Phase phase, qint64 plannedMs)
+{
+    phase = phaseToRun(phase);
 
     // The new timing is in place before phaseChanged/stateChanged go out, so a listener never
     // sees the new phase with the old (passed) deadline.
@@ -404,9 +411,17 @@ void TimerEngine::notifyTime(bool force)
 
 void TimerEngine::refreshIdleDisplay()
 {
-    if (m_state == State::Idle) {
-        notifyTime(true);
+    if (m_state != State::Idle) {
+        return;
     }
+    // A pending break whose duration was just set to 0 gives way now, as it would on start, so
+    // the display, the tray and the notification never offer a 0:00 break that starts Work.
+    const Phase pending = phaseToRun(m_phase);
+    if (pending != m_phase) {
+        setIdle(pending);
+        return;
+    }
+    notifyTime(true);
 }
 
 // --- Configuration ---------------------------------------------------------

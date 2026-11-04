@@ -24,9 +24,26 @@ QQC2.Page {
     /// Deleting the running timer would switch timers, which stops the session.
     readonly property bool lockedByTimer: isCurrent && TimerEngine.active
 
+    // `preset` is read once, for the controls' starting values; what shows the stored name follows
+    // every change of the timer (a save, a rename elsewhere) through this count.
+    property int storedRevision: 0
+    Connections {
+        target: PresetModel
+        function onPresetChanged(changedUuid) {
+            if (changedUuid === page.uuid) {
+                ++page.storedRevision;
+            }
+        }
+    }
+    /// The name as stored, not as being typed.
+    readonly property string storedName: {
+        void storedRevision;
+        return isNew ? "" : (PresetModel.get(uuid).name || "");
+    }
+
     /// The top bar shows "Timers / <name>".
     readonly property string section: i18n("Timers")
-    title: isNew ? i18n("New Timer") : (preset.name || "")
+    title: isNew ? i18n("New Timer") : storedName
     background: null
 
     /// What Save would store, as the controls show it now.
@@ -52,12 +69,21 @@ QQC2.Page {
     Component.onCompleted: Qt.callLater(() => initialFields = JSON.stringify(currentFields()))
     readonly property bool modified: initialFields.length > 0 && JSON.stringify(currentFields()) !== initialFields
     /// A confirmation is showing (also read by the smoke test).
-    readonly property bool confirming: discardDialog.visible || resetDialog.visible
+    readonly property bool confirming: discardDialog.visible || resetDialog.visible || deleteDialog.visible
 
     /// Save does something: a new timer, or changes to store.
     readonly property bool canSave: valid && (isNew || modified)
 
+    /// Takes the numbers still being typed: clicking a button or a shortcut leaves the focus in the field.
+    function commitFields(): void {
+        workBox.commit();
+        shortBox.commit();
+        longBox.commit();
+        cyclesBox.commit();
+    }
+
     function save(): void {
+        commitFields();
         if (!canSave) {
             return;
         }
@@ -94,6 +120,7 @@ QQC2.Page {
 
     /// Escape and the sidebar: unsaved changes are only thrown away once confirmed.
     function requestClose(then: var): void {
+        commitFields();
         discardDialog.then = then ?? null;
         if (modified) {
             discardDialog.open();
@@ -102,12 +129,23 @@ QQC2.Page {
         }
     }
 
+    /// Opens a copy of the stored timer, once unsaved changes are confirmed thrown away: the
+    /// copy is not made while the question is open, nor when the answer is Keep Editing.
+    function duplicate(): void {
+        requestClose(() => {
+            const copy = PresetModel.duplicate(page.uuid);
+            applicationWindow().openTimer(copy.length > 0 ? copy : page.uuid, true);
+        });
+    }
+
     function requestReset(): void {
         resetDialog.open();
     }
 
     function start(): void {
-        if (TimerEngine.active) {
+        commitFields();
+        // Changes are saved first (Start is disabled meanwhile).
+        if (TimerEngine.active || modified) {
             return;
         }
         PresetModel.currentUuid = uuid;
@@ -132,7 +170,7 @@ QQC2.Page {
     ConfirmDialog {
         id: resetDialog
         title: i18n("Reset to Defaults?")
-        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.preset.name || "")
+        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.storedName)
         confirmText: i18n("Reset")
         onConfirmed: {
             resetDialog.close();
@@ -145,7 +183,7 @@ QQC2.Page {
     ConfirmDialog {
         id: deleteDialog
         title: i18n("Delete Timer")
-        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.preset.name || "")
+        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.storedName)
         confirmText: i18n("Delete")
         confirmKind: "danger"
         onConfirmed: {
@@ -153,7 +191,7 @@ QQC2.Page {
             // The timer may have been started meanwhile (tray, shortcut, D-Bus).
             if (page.lockedByTimer) {
                 applicationWindow().showPassiveNotification(
-                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.preset.name));
+                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.storedName));
                 return;
             }
             page.leaving = true;
@@ -251,6 +289,9 @@ QQC2.Page {
         width: Theme.space4xl * 6.5
         padding: Theme.spaceMd
         focus: true
+        // A press on the tile is left to the tile, which toggles the popup: closing on the press
+        // would have the click open it again.
+        closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
         background: Rectangle {
             radius: Theme.radiusLg
             color: Theme.raised
@@ -275,7 +316,7 @@ QQC2.Page {
                     QQC2.ToolTip.text: modelData.label
                     QQC2.ToolTip.delay: Theme.toolTipDelay
                     background: Rectangle {
-                        radius: Theme.radius + 2
+                        radius: Theme.radiusMd
                         color: iconBtn.isSelected ? Theme.selected : (iconBtn.hovered ? Theme.hover : "transparent")
                         border.width: iconBtn.isSelected || iconBtn.visualFocus ? Theme.hairline : 0
                         border.color: iconBtn.visualFocus ? Theme.focusRing : Theme.borderStrong
@@ -374,14 +415,33 @@ QQC2.Page {
                     }
                 }
 
-                SButton {
+                // A disabled button gets no hover events, so the wrapper says why it cannot start.
+                Item {
                     visible: !page.isNew
-                    kind: page.isCurrent && TimerEngine.active ? "ghost" : "primary"
-                    iconName: page.isCurrent && TimerEngine.active ? "dot" : "play"
-                    text: page.isCurrent && TimerEngine.active ? i18n("Running") : i18n("Start")
-                    enabled: !TimerEngine.active && !page.modified
-                    toolTipText: TimerEngine.active && !page.isCurrent ? i18n("Stop the timer to switch to a different timer.") : ""
-                    onClicked: page.start()
+                    implicitWidth: startButton.implicitWidth
+                    implicitHeight: startButton.implicitHeight
+                    HoverHandler {
+                        id: startHover
+                    }
+                    QQC2.ToolTip.visible: !startButton.enabled && startHover.hovered && startButton.blockedBy.length > 0
+                    QQC2.ToolTip.text: startButton.blockedBy
+                    QQC2.ToolTip.delay: Theme.toolTipDelay
+                    SButton {
+                        id: startButton
+                        readonly property bool running: page.isCurrent && TimerEngine.active
+                        /// Why Start is disabled ("Running" says it for this timer).
+                        readonly property string blockedBy: running ? ""
+                            : TimerEngine.active ? i18n("Stop the timer to switch to a different timer.")
+                            : page.modified ? i18n("Save your changes to start this timer.")
+                            : ""
+                        anchors.fill: parent
+                        kind: running ? "ghost" : "primary"
+                        iconName: running ? "dot" : "play"
+                        text: running ? i18n("Running") : i18n("Start")
+                        labels: [i18n("Start"), i18n("Running")]
+                        enabled: !TimerEngine.active && !page.modified
+                        onClicked: page.start()
+                    }
                 }
                 SButton {
                     visible: !page.isNew
@@ -389,12 +449,7 @@ QQC2.Page {
                     iconOnly: true
                     iconName: "copy"
                     text: i18n("Duplicate")
-                    onClicked: {
-                        const copy = PresetModel.duplicate(page.uuid);
-                        if (copy.length > 0) {
-                            applicationWindow().openTimer(copy);
-                        }
-                    }
+                    onClicked: page.duplicate()
                 }
                 // A disabled button gets no hover events, so the wrapper says why it cannot be deleted.
                 Item {
@@ -478,20 +533,38 @@ QQC2.Page {
 
                     Item {
                         id: cycleRow
+                        objectName: "cyclePreview"
                         Layout.fillWidth: true
                         implicitHeight: Theme.spaceXl + Theme.spaceSm
+                        // A long set (up to 99 work phases) still fits: the gaps take at most half the
+                        // row, the blocks' minimum width shrinks to their share of the rest, and the
+                        // row clips what rounding leaves over.
+                        clip: true
                         readonly property var phases: cycleColumn.parent.phases
-                        readonly property real gaps: Theme.hairline * 3 * (phases.length - 1)
+                        readonly property int count: phases.length
+                        readonly property real total: Math.max(1, cycleColumn.parent.totalMinutes)
+                        readonly property real gap: count > 1 ? Math.min(Theme.hairline * 3, width / 2 / (count - 1)) : 0
+                        readonly property real available: Math.max(0, width - gap * (count - 1))
+                        readonly property real minBlock: Math.min(Theme.spaceXs, available / Math.max(1, count))
+                        // Each block as long as its phase, at least minBlock; when those minimums would
+                        // push the row past its box, each gets the minimum plus its share of what is left
+                        // (the hairline only absorbs floating-point error in a sum that fits).
+                        readonly property bool crowded: phases.reduce(
+                            (sum, p) => sum + Math.max(minBlock, available * p.minutes / total), 0) > available + Theme.hairline
+                        /// Pixels per minute of the blocks' variable part (what a drag moves).
+                        readonly property real pixelsPerMinute: (crowded ? available - minBlock * count : available) / total
                         Row {
                             id: cycleBlocks
+                            objectName: "cycleBlocks"
                             anchors.fill: parent
-                            spacing: Theme.hairline * 3
+                            spacing: cycleRow.gap
                             Repeater {
                                 model: cycleRow.phases
                                 Rectangle {
                                     id: block
                                     required property var modelData
-                                    width: Math.max(Theme.spaceXs, (cycleRow.width - cycleRow.gaps) * modelData.minutes / Math.max(1, cycleColumn.parent.totalMinutes))
+                                    width: cycleRow.crowded ? cycleRow.minBlock + cycleRow.pixelsPerMinute * modelData.minutes
+                                                            : Math.max(cycleRow.minBlock, cycleRow.pixelsPerMinute * modelData.minutes)
                                     height: cycleRow.height
                                     radius: Theme.radiusSm
                                     color: modelData.work ? Theme.brand : Theme.alpha(Theme.breakColor, modelData.long ? 0.7 : 0.35)
@@ -536,11 +609,12 @@ QQC2.Page {
                                 startValue = box.value;
                                 startX = mouse.x;
                                 direction = mouse.x < block.x + block.width / 2 ? -1 : 1;
-                                pixelsPerMinute = Math.max(1, (cycleRow.width - cycleRow.gaps) / Math.max(1, cycleColumn.parent.totalMinutes));
+                                pixelsPerMinute = Math.max(1, cycleRow.pixelsPerMinute);
                             }
                             onPositionChanged: mouse => {
                                 if (box) {
-                                    box.setValue(startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute));
+                                    // At least a minute: a phase dragged to nothing would leave no block to drag back.
+                                    box.setValue(Math.max(1, startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute)));
                                 }
                             }
                             onReleased: box = null
@@ -601,10 +675,13 @@ QQC2.Page {
                     title: i18n("Short break")
                     NumberField {
                         id: shortBox
-                        from: 1
+                        objectName: "shortBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.shortBreakSeconds / 60))
+                        value: Math.round(page.preset.shortBreakSeconds / 60)
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Short break")
                     }
                 }
@@ -612,10 +689,13 @@ QQC2.Page {
                     title: i18n("Long break")
                     NumberField {
                         id: longBox
-                        from: 1
+                        objectName: "longBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.longBreakSeconds / 60))
+                        value: Math.round(page.preset.longBreakSeconds / 60)
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Long break")
                     }
                 }
@@ -624,10 +704,11 @@ QQC2.Page {
                     description: i18n("How many work sessions come before the long break.")
                     NumberField {
                         id: cyclesBox
+                        objectName: "cyclesField"
                         from: 0
                         to: PresetModel.maxCycles
                         value: page.preset.cyclesBeforeLong
-                        unit: i18nc("work sessions, short", "sessions")
+                        unit: i18ncp("work sessions, short", "session", "sessions", cyclesBox.value)
                         fromText: i18n("Never")
                         Accessible.name: i18n("Long break after")
                     }
@@ -652,13 +733,15 @@ QQC2.Page {
                 }
                 FormRow {
                     title: i18n("Silence notifications while working")
-                    description: SilenceController.available
-                        ? (DesktopStyle.macos
-                           ? i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts.")
-                           : i18n("Turns off all system notifications for the work phase and back on for the break."))
-                        : DesktopStyle.macos
-                          ? i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")
-                          : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
+                    // Availability can change while the page is open (the shortcuts installed, the
+                    // notification service appearing): the row keeps the height of the taller text.
+                    readonly property var silenceTexts: DesktopStyle.macos
+                        ? [i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts."),
+                           i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")]
+                        : [i18n("Turns off all system notifications for the work phase and back on for the break."),
+                           i18n("Not available: this desktop's notification service cannot be silenced by applications.")]
+                    description: silenceTexts[SilenceController.available ? 0 : 1]
+                    descriptionVariants: silenceTexts
                     enabled: SilenceController.available || DesktopStyle.macos
                     // macOS: until the shortcuts exist, a way to set them up instead of the switch.
                     SButton {

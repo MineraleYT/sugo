@@ -9,7 +9,9 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Create a timer with a name, category, icon, work duration, break durations, and long-break interval. Save it and confirm the displayed values.
 - [ ] Edit a user timer, duplicate it, select each resulting timer, and delete the duplicate.
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
+- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
+- [ ] Give a timer a category of 100 characters and start it in a narrow window: "Focusing · …" is cut with an ellipsis inside its pill, which is never wider than the cycle track.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
 - [ ] Check automatic phase start in each supported mode, Manual, Breaks only and All phases.
 - [ ] Try the minimum and maximum supported durations, zero-length breaks, and a long-break interval of zero.
@@ -28,9 +30,11 @@ Run these checks in a fresh user profile where practical. Record the application
 
 - [ ] Complete and interrupt sessions; confirm completed and interrupted records appear with the correct durations.
 - [ ] Check daily totals, streaks, previous/next period navigation, and chart ranges across a day boundary.
+- [ ] Record only breaks in a day (skip or interrupt the work under the minimum): the day's chart shows the green break bars, and "No focus time in this period yet." stays hidden.
 - [ ] Back up the database, change presets and history, restore the backup, and confirm both are restored.
 - [ ] Try restoring an invalid or newer-schema backup; confirm it is rejected without replacing current data.
 - [ ] Clear session history and confirm presets remain intact.
+- [ ] Quit, overwrite `sugo.db` with junk, start again: a warning names the `sugo.db.corrupt-*` file it kept, "Open folder" shows it, the close button hides the warning, and the page under it does not move.
 
 ## Packaging and first run
 
@@ -60,3 +64,15 @@ Secrets (the calendar password; the sync's token and key once the sync is in) ar
 ## No layout shift
 
 - [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
+- [ ] On a timer's page, make silencing notifications available or unavailable while the page is open (macOS: install or remove the Focus shortcuts; Linux: start or stop the notification inhibitor service): the "Silence notifications while working" row and those below do not move.
+
+## Window and dialogs
+
+- [ ] Start a work phase with "Pause timer when screen is locked" on, lock and unlock the screen: "Screen Unlocked" asks to resume. Resume from the tray menu (or the global shortcut, or KRunner): the dialog closes by itself. With a task note being asked for when the screen is unlocked, the resume question comes only after the note dialog is closed.
+- [ ] Make the window narrow, open the menu (the sidebar slides in), then maximise or widen the window: the drawer closes and only the sidebar is shown, with the page not dimmed.
+- [ ] With a timer running, open Statistics and double-click the status pill in the top bar: the timer page opens and the window is neither maximised nor restored. A double-click on an empty part of the top bar still maximises and restores it.
+- [ ] With eight or more timers and an update found (AppImage, or the macOS app), make the window as short as it goes: the timer list shrinks and scrolls, and Settings and About stay inside the window, in the sidebar and in the menu of a narrow window.
+- [ ] On a timer's page and in Settings, Tab into a number field (e.g. "Work") and press Shift+Tab: the focus goes back to the control before it and is not kept in the field.
+- [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.
+- [ ] macOS: minimise the window (Cmd+M), then choose Window › Sugo in the menu bar: the window comes out of the Dock, maximised (zoomed) again if it was.
+- [ ] macOS: start a work phase, close the window (Cmd+W), then press Cmd+Q (or choose Sugo › Quit Sugo): the window comes back with "Quit Sugo?". Do the same with the window minimised.

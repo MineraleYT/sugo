@@ -163,6 +163,15 @@ bool Database::connect(bool *corrupt)
         }
         return false;
     }
+    // Deleted rows (cleared history, private notes) are overwritten rather than left readable in
+    // free pages. Like foreign_keys, a setting of the connection: it writes nothing by itself.
+    if (!query.exec(QStringLiteral("PRAGMA secure_delete = ON"))) {
+        m_error = query.lastError().text();
+        if (corrupt) {
+            *corrupt = isCorruptionError(query.lastError().nativeErrorCode());
+        }
+        return false;
+    }
     return true;
 }
 
@@ -274,7 +283,13 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
     if (!check.exec(QStringLiteral("PRAGMA quick_check(1)"))) {
         return failed(check.lastError());
     }
-    if (!check.next() || check.value(0).toString() != QLatin1String("ok")) {
+    if (!check.next()) {
+        m_error = QStringLiteral("The integrity check returned no result");
+        return Ownership::Corrupt;
+    }
+    const QString integrity = check.value(0).toString();
+    if (integrity != QLatin1String("ok")) {
+        m_error = QStringLiteral("The integrity check failed: %1").arg(integrity);
         return Ownership::Corrupt;
     }
 

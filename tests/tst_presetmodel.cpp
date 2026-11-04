@@ -151,6 +151,14 @@ private Q_SLOTS:
         QCOMPARE(p.value(QStringLiteral("shortBreakSeconds")).toInt(), 0);
         QCOMPARE(p.value(QStringLiteral("cyclesBeforeLong")).toInt(), 4);
         QCOMPARE(p.value(QStringLiteral("longBreakSeconds")).toInt(), 10 * 60);
+
+        // An unreadable option is reported too, and keeps its value (even one that reads as 0).
+        QVERIFY(model->setOption(uuid, PresetOption::AutoStartMode, 1));
+        adjusted.clear();
+        QVERIFY(model->update(uuid, {{PresetOption::AutoStartMode, QStringLiteral("abc")}}));
+        QCOMPARE(adjusted.count(), 1);
+        QCOMPARE(adjusted.first().at(1).toStringList(), QStringList{PresetOption::AutoStartMode});
+        QCOMPARE(model->option(uuid, PresetOption::AutoStartMode).toInt(), 1);
     }
 
         void namesAreLimitedLikeTheEditorFields()
@@ -165,6 +173,52 @@ private Q_SLOTS:
         QCOMPARE(PresetModel::maxWorkMinutes() * 60, PresetLimits::MaxWorkSeconds);
         QCOMPARE(PresetModel::maxBreakMinutes() * 60, PresetLimits::MaxBreakSeconds);
         QCOMPARE(PresetModel::maxCycles(), PresetLimits::MaxCycles);
+    }
+
+    void namesAreNeverCutInsideACharacter()
+    {
+        // An emoji takes two UTF-16 units: cut after the first, it would be half a character.
+        const QString name = QString(PresetModel::maxNameLength() - 1, QLatin1Char('n')) + QString::fromUtf8("\xF0\x9F\x8D\x85");
+        QSignalSpy adjusted(model.get(), &PresetModel::valuesAdjusted);
+        const QString uuid = model->create({{QStringLiteral("name"), name}});
+        QCOMPARE(model->get(uuid).value(QStringLiteral("name")).toString(), name.left(PresetModel::maxNameLength() - 1));
+        QCOMPARE(adjusted.count(), 1);
+    }
+
+    void loadedPresetsAreBroughtWithinTheLimits()
+    {
+        TimerPreset stored;
+        stored.uuid = QStringLiteral("stored");
+        stored.name = QString(500, QLatin1Char('n'));
+        stored.category = QString(500, QLatin1Char('c'));
+        stored.workSeconds = 0;
+        stored.shortBreakSeconds = -5;
+        stored.longBreakSeconds = PresetLimits::MaxBreakSeconds + 1;
+        stored.cyclesBeforeLong = 1000;
+        stored.options.insert(PresetOption::AutoStartMode, 9);
+
+        QSignalSpy modified(model.get(), &PresetModel::modified);
+        model->setPresets({stored}, stored.uuid);
+        QCOMPARE(modified.count(), 0); // loading never writes back
+
+        const QVariantMap p = model->get(stored.uuid);
+        QCOMPARE(p.value(QStringLiteral("workSeconds")).toInt(), 1);
+        QCOMPARE(p.value(QStringLiteral("shortBreakSeconds")).toInt(), 0);
+        QCOMPARE(p.value(QStringLiteral("longBreakSeconds")).toInt(), PresetLimits::MaxBreakSeconds);
+        QCOMPARE(p.value(QStringLiteral("cyclesBeforeLong")).toInt(), PresetLimits::MaxCycles);
+        QCOMPARE(p.value(QStringLiteral("name")).toString().size(), PresetModel::maxNameLength());
+        QCOMPARE(p.value(QStringLiteral("category")).toString().size(), PresetModel::maxNameLength());
+        QCOMPARE(model->option(stored.uuid, PresetOption::AutoStartMode).toInt(), 2);
+    }
+
+    void duplicateKeepsTheNameWithinTheLimit()
+    {
+        const QString uuid = model->create({{QStringLiteral("name"), QString(500, QLatin1Char('n'))}});
+        const QString copyUuid = model->duplicate(uuid);
+        const QString copyName = model->get(copyUuid).value(QStringLiteral("name")).toString();
+        QVERIFY(!copyName.isEmpty());
+        QVERIFY(copyName.size() <= PresetModel::maxNameLength());
+        QVERIFY(copyName != model->get(uuid).value(QStringLiteral("name")).toString());
     }
 
         void createWithBlankNameGetsFallbackName()
@@ -254,6 +308,30 @@ private Q_SLOTS:
         QCOMPARE(model->count(), 1);
         QCOMPARE(model->currentUuid(), PresetModel::DefaultUuid);
         QVERIFY(current.count() >= 1);
+    }
+
+    void removalListenersAlreadySeeTheNewSelection()
+    {
+        // The built-in timer, edited: its values are no longer the factory ones.
+        QVERIFY(model->update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 40 * 60}}));
+        const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("Temp")}});
+        model->setCurrentUuid(uuid);
+
+        QList<int> indexes;
+        QList<int> workSeconds;
+        const auto record = [&] {
+            indexes.append(model->currentIndex());
+            workSeconds.append(model->currentPreset().workSeconds);
+        };
+        const auto removed = connect(model.get(), &QAbstractItemModel::rowsRemoved, this, record);
+        const auto counted = connect(model.get(), &PresetModel::countChanged, this, record);
+
+        const bool ok = model->remove(uuid);
+        disconnect(removed); // the slot reads locals of this test
+        disconnect(counted);
+        QVERIFY(ok);
+        QCOMPARE(indexes, (QList<int>{0, 0}));
+        QCOMPARE(workSeconds, (QList<int>{40 * 60, 40 * 60}));
     }
 
     void removingOtherPresetKeepsSelection()

@@ -17,6 +17,9 @@ class TimerEngine;
  * change of engine state, selected timer or timer options, so the durations always follow
  * the timer's own work/break values, and switching timers mid-phase cannot leave
  * notifications off.
+ *
+ * When an elapsed phase auto-starts Work, the silencing follows one event-loop turn later, so
+ * the end-of-phase announcement reaches the desktop before the inhibition does.
  */
 class SilenceController : public QObject
 {
@@ -55,4 +58,6 @@ private:
     bool m_active = false;
     bool m_decided = false; ///< update() has told the inhibitor at least once
     bool m_wanted = false;  ///< what the inhibitor was last told
+    bool m_phaseEnding = false;     ///< between sessionEnded and phaseFinished of an elapsed phase
+    bool m_silenceDeferred = false; ///< silencing put off until that phase end is announced
 };

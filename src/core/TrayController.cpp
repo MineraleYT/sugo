@@ -12,7 +12,6 @@
 #include "Localization.h"
 
 #include <QAction>
-#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QMenu>
@@ -189,7 +188,11 @@ TrayController::TrayController(TimerEngine *engine, PresetModel *presets, AppSet
     sync();
 }
 
-TrayController::~TrayController() = default;
+TrayController::~TrayController()
+{
+    // The icon goes before the menu it shows (members would go the other way round).
+    destroyItem();
+}
 
 void TrayController::setWindow(QWindow *window)
 {
@@ -242,7 +245,8 @@ void TrayController::createItem()
     });
     menu->addSeparator();
     m_windowAction = menu->addAction(QString(), this, &TrayController::toggleWindow);
-    m_quitAction = menu->addAction(QIcon::fromTheme(QStringLiteral("application-exit")), QString(), qApp, &QCoreApplication::quit);
+    m_quitAction = menu->addAction(QIcon::fromTheme(QStringLiteral("application-exit")), QString(), this,
+                                   &TrayController::quitRequested);
     // The clock in the status line is refreshed only when the menu opens, never on a tick.
     connect(menu, &QMenu::aboutToShow, this, [this]() {
         updateStatusLine();
@@ -268,6 +272,7 @@ void TrayController::createItem()
 
 void TrayController::destroyItem()
 {
+    // The icon first: it still refers to its menu.
     m_item.reset();
     m_timerActions.reset();
     m_menu.reset(); // also deletes the actions

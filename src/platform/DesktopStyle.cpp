@@ -175,6 +175,19 @@ QString DesktopStyle::shortcutText(const QString &sequence)
     return QKeySequence(sequence, QKeySequence::PortableText).toString(QKeySequence::NativeText);
 }
 
+void DesktopStyle::showRestored(QWindow *window)
+{
+    if (!window) {
+        return;
+    }
+    // show() keeps the window's states (it does not call showNormal()).
+    window->show();
+    const Qt::WindowStates states = window->windowStates();
+    if (states & Qt::WindowMinimized) {
+        window->setWindowStates(states & ~Qt::WindowMinimized);
+    }
+}
+
 DesktopStyle::DesktopStyle(QObject *parent)
     : QObject(parent)
     , m_style(detectStyle())
