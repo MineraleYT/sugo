@@ -164,8 +164,9 @@ void TimerEngine::stop()
         return;
     }
     // A phase that finishIfDue() just auto-started has not run yet: nothing to record for it.
+    // One that ended there and left a break waiting is still stopped: back to Work, cycles reset.
     const bool finished = finishIfDue();
-    if (m_state == State::Idle) {
+    if (m_state == State::Idle && !finished) {
         return;
     }
     if (!finished) {

@@ -673,6 +673,23 @@ private Q_SLOTS:
         QCOMPARE(ended.count(), 1);
         QCOMPARE(ended.first().at(5).toBool(), true); // completed
         QCOMPARE(engine->state(), State::Idle);
+        // Still a stop: the break the finished phase left waiting is dropped, the set starts over.
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->completedCycles(), 0);
+    }
+
+    void resetAfterTheDeadlineButBeforeTheTickStartsAFreshSet()
+    {
+        engine->setCyclesBeforeLong(1); // the finished work phase would leave a long break waiting
+        QSignalSpy ended(engine.get(), &TimerEngine::sessionEnded);
+        engine->start();
+        clock.advanceSeconds(25 * 60 + 1);
+        engine->reset();
+        QCOMPARE(ended.count(), 1);
+        QCOMPARE(ended.first().at(5).toBool(), true);
+        QCOMPARE(engine->state(), State::Idle);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->completedCycles(), 0);
     }
 
     void skipAfterTheDeadlineCompletesAndStartsTheNextPhase()
