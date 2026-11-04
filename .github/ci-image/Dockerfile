@@ -28,3 +28,6 @@ RUN apt-get update \
 # The tests run as an ordinary user, with the user id of the runner (the owner of the workspace the
 # runner mounts): as root, the tests that take away write access to a folder would still write.
 RUN useradd --create-home --uid 1001 runner
+# Docker sets no USER; the runner does, and Diagnostics::redact() falls back on the name of the home
+# folder without it, which here (/github/home) is "home".
+ENV USER=runner
