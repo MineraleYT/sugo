@@ -32,6 +32,8 @@ class AppSettings : public QObject
     Q_PROPERTY(bool trayAvailable READ trayAvailable NOTIFY trayAvailableChanged FINAL)
     /// This platform can manage a login entry from inside the application.
     Q_PROPERTY(bool autostartSupported READ autostartSupported CONSTANT FINAL)
+    /// Other programs can drive the timer: D-Bus, KRunner, global shortcuts (not on macOS).
+    Q_PROPERTY(bool externalControlSupported READ externalControlSupported CONSTANT FINAL)
 
     Q_PROPERTY(bool showTrayIcon READ showTrayIcon WRITE setShowTrayIcon NOTIFY showTrayIconChanged FINAL)
     /// Closing the window hides it instead of quitting (needs the tray icon).
@@ -100,6 +102,14 @@ public:
     /// Normally driven by the D-Bus watcher of the tray host; public for tests.
     void setTrayAvailable(bool available);
     bool autostartSupported() const;
+    static constexpr bool externalControlSupported()
+    {
+#ifdef Q_OS_MACOS
+        return false;
+#else
+        return true;
+#endif
+    }
 
     bool showTrayIcon() const { return m_showTrayIcon; }
     void setShowTrayIcon(bool show);

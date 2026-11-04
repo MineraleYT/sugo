@@ -377,7 +377,10 @@ QQC2.Page {
                 step: timersStep
                 eyebrow: i18n("Timers")
                 title: i18n("Work in rounds, rest in between")
-                text: i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
+                // macOS does not let applications silence notifications (Focus modes do that).
+                text: DesktopStyle.macos
+                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the sidebar.")
+                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
             }
 
             Panel {
@@ -540,8 +543,8 @@ QQC2.Page {
                 rowSpacing: Theme.spaceMd + Theme.spaceXs
 
                 Feature {
-                    title: i18n("Live tray icon")
-                    text: i18n("The minutes left, right in the panel.")
+                    title: DesktopStyle.macos ? i18n("Live menu bar icon") : i18n("Live tray icon")
+                    text: DesktopStyle.macos ? i18n("The minutes left, right in the menu bar.") : i18n("The minutes left, right in the panel.")
                     opacity: timersStep.reveal(7)
                     transform: Translate { y: timersStep.rise(7) }
 
@@ -620,7 +623,7 @@ QQC2.Page {
                     FormRow {
                         id: trayRow
                         visible: AppSettings.trayAvailable
-                        title: i18n("Show an icon in the tray")
+                        title: DesktopStyle.macos ? i18n("Show an icon in the menu bar") : i18n("Show an icon in the tray")
                         description: i18n("While a timer runs, it shows the phase and the minutes left.")
                         opacity: setupStep.reveal(4)
                         transform: Translate { y: setupStep.rise(4) }
@@ -628,7 +631,8 @@ QQC2.Page {
                     }
                     FormRow {
                         id: closeRow
-                        visible: AppSettings.trayAvailable
+                        // On macOS closing the window always hides it.
+                        visible: AppSettings.trayAvailable && !DesktopStyle.nativeChrome
                         enabled: AppSettings.showTrayIcon
                         title: i18n("Keep running in the tray")
                         description: i18n("Closing the window leaves the timer running.")
@@ -740,7 +744,7 @@ QQC2.Page {
                     color: Theme.subtle
                     font.pixelSize: Theme.fontCaption
                 }
-                Kbd { text: i18nc("keyboard shortcut", "Ctrl K") }
+                Kbd { text: DesktopStyle.shortcutText("Ctrl+K") }
                 Text {
                     text: i18n("finds anything")
                     color: Theme.subtle

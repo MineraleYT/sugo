@@ -100,6 +100,9 @@ QtObject {
     readonly property int navHeight: 34
     readonly property int sidebarWidth: 236
     readonly property int topBarHeight: 46
+    /// Room left of the top bar's content for macOS's window buttons, which the system draws over
+    /// the window's top-left corner (DesktopStyle.nativeChrome).
+    readonly property int trafficLightsWidth: 76
     readonly property int contentMaxWidth: 760
     readonly property int windowWidth: 980
     readonly property int windowHeight: 680
@@ -109,7 +112,8 @@ QtObject {
     readonly property int wideBreakpoint: 680
 
     // --- Type --------------------------------------------------------------------------------
-    readonly property string monoFamily: "monospace"
+    /// The system's fixed-width font ("monospace" is a fontconfig alias, unknown to macOS).
+    readonly property string monoFamily: DesktopStyle.monoFamily
     readonly property int fontMicro: 10
     readonly property int fontSmall: 11
     readonly property int fontCaption: 12
