@@ -12,8 +12,8 @@
 #
 # The app is signed ad hoc (Apple Silicon runs no unsigned code, and macdeployqt's changes break
 # the linker's signature), so Gatekeeper asks the user to confirm the first launch. SIGN_IDENTITY
-# set to a "Developer ID Application" identity signs it for distribution instead (notarization is
-# a separate step, not done here).
+# set to a "Developer ID Application" identity signs it for distribution instead, with the hardened
+# runtime and the entitlements in entitlements.plist (notarization is a separate step, not done here).
 set -euo pipefail
 
 VERSION=${1:?version}
@@ -215,7 +215,9 @@ xattr -cr "$APP"
 if [ "$SIGN_IDENTITY" = - ]; then
     codesign --force --deep --sign - "$APP"
 else
-    codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+    # The hardened runtime: entitlements.plist lets Qt's QML engine use its JIT.
+    codesign --force --deep --options runtime --timestamp --entitlements "$SRC/packaging/macos/entitlements.plist" \
+        --sign "$SIGN_IDENTITY" "$APP"
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 
