@@ -180,6 +180,17 @@ public:
     /// An event sound name ("complete", "alarm-clock-elapsed") or an absolute path to a file.
     /// Anything else from the configuration ("../x", "-x", "a/b") is not looked up or played.
     static bool isUsableSoundName(const QString &soundName);
+    /// The directories that may hold sounds/<theme>/stereo/<name>.<ext>, searched in order: the
+    /// XDG data dirs (so it also works inside Flatpak), the host's /usr/share and, on macOS, the
+    /// sounds bundled in the app's Resources.
+    static QStringList soundSearchRoots();
+    /// The file for an event sound name under one of the roots ("ocean" before "freedesktop",
+    /// .oga before .ogg before .wav), or empty. An absolute path is used as is if it is a file.
+    static QString findSoundFile(const QString &soundName, const QStringList &roots);
+    /// afplay (macOS) can play the file: it has a format Core Audio decodes (not Ogg).
+    static bool afplayCanPlay(const QString &file);
+    /// afplay arguments for a file at a volume percentage (afplay's volume is linear, 1 = 100 %).
+    static QStringList afplayArguments(const QString &file, int volume);
     Q_INVOKABLE void openShortcutsSettings();
 
     bool keepRunningInTray() const;

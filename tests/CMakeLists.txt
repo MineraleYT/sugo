@@ -11,7 +11,7 @@ function(sugo_add_test name)
 endfunction()
 
 sugo_add_test(tst_timerengine Qt6::Core Qt6::Qml)
-sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
+sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus Qt6::Multimedia)
 sugo_add_test(tst_datamanager Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetmodel Qt6::Core Qt6::Qml)
 sugo_add_test(tst_timerbinding Qt6::Core Qt6::Qml)
@@ -110,3 +110,7 @@ add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )
 set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
+
+# --- macOS port: B3 sounds ---
+# The sounds bundled for macOS (data/sounds), checked against the names the settings page offers.
+target_compile_definitions(tst_appsettings PRIVATE SUGO_BUNDLED_SOUNDS_ROOT="${PROJECT_SOURCE_DIR}/data")

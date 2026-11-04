@@ -201,3 +201,27 @@ target_link_libraries(sugo PRIVATE
 )
 
 install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+
+# --- macOS port: B3 sounds ---
+# The alert sounds the settings page offers, for macOS, which has no freedesktop sound themes:
+# copied into Sugo.app/Contents/Resources/sounds/<theme>/stereo/ (see AppSettings::findSoundFile).
+if(APPLE)
+    set(SUGO_BUNDLED_SOUNDS
+        ocean/stereo/alarm-clock-elapsed.oga
+        ocean/stereo/bell.oga
+        ocean/stereo/completion-success.oga
+        ocean/stereo/dialog-information.oga
+        ocean/stereo/message-new-instant.oga
+        ocean/stereo/phone-incoming-call.oga
+        ocean/stereo/service-login.oga
+        freedesktop/stereo/complete.oga
+        freedesktop/stereo/message.oga
+        freedesktop/stereo/window-attention.oga
+    )
+    foreach(sound IN LISTS SUGO_BUNDLED_SOUNDS)
+        set(sound_file "${PROJECT_SOURCE_DIR}/data/sounds/${sound}")
+        get_filename_component(sound_dir "${sound}" DIRECTORY)
+        set_source_files_properties("${sound_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/sounds/${sound_dir}")
+        target_sources(sugo PRIVATE "${sound_file}")
+    endforeach()
+endif()

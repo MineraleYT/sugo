@@ -9,6 +9,8 @@
 #include <QDBusConnection>
 #include <QDebug>
 #include <QDBusServiceWatcher>
+#include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -58,39 +60,19 @@ QString validColorScheme(const QString &scheme)
     return QStringLiteral("system");
 }
 
-/// A sound file for an event sound name, looked up in the XDG data dirs (so it also works
-/// inside Flatpak), then in the host's /usr/share. An absolute path is used as is.
-QString findSoundFile(const QString &soundName)
-{
-    if (soundName.startsWith(QLatin1Char('/'))) {
-        return QFileInfo(soundName).isFile() ? soundName : QString();
-    }
-    for (const char *theme : {"ocean", "freedesktop"}) {
-        for (const char *ext : {"oga", "ogg", "wav"}) {
-            const QString relative = QStringLiteral("sounds/%1/stereo/%2.%3").arg(QLatin1String(theme), soundName, QLatin1String(ext));
-            QString file = QStandardPaths::locate(QStandardPaths::GenericDataLocation, relative);
-            if (file.isEmpty()) {
-                for (const QString &prefix : {QStringLiteral("/usr/share/"), QStringLiteral("/run/host/usr/share/")}) {
-                    if (QFile::exists(prefix + relative)) {
-                        file = prefix + relative;
-                        break;
-                    }
-                }
-            }
-            if (!file.isEmpty()) {
-                return file;
-            }
-        }
-    }
-    return {};
-}
-
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
 
-/// Plays a file with pw-play or paplay, at a fixed volume.
+/// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume.
 void playWithPlayerProgram(const QString &file, int vol)
 {
+#ifdef Q_OS_MACOS
+    if (AppSettings::afplayCanPlay(file)
+        && QProcess::startDetached(QStringLiteral("/usr/bin/afplay"), AppSettings::afplayArguments(file, vol))) {
+        return;
+    }
+    qWarning() << "Cannot play" << file << "- afplay could not be started or cannot read the format";
+#else
     if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
         const double volFactor = vol / 100.0;
         if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
@@ -105,6 +87,7 @@ void playWithPlayerProgram(const QString &file, int vol)
         }
     }
     qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+#endif
 }
 
 /// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
@@ -523,7 +506,7 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
         m_soundPlayer(soundName, vol);
         return;
     }
-    const QString file = findSoundFile(soundName);
+    const QString file = findSoundFile(soundName, soundSearchRoots());
     if (file.isEmpty()) {
         // Not a file we can find: let libcanberra resolve the event sound name.
         if (QStandardPaths::findExecutable(QStringLiteral("canberra-gtk-play")).isEmpty()
@@ -550,6 +533,52 @@ double AppSettings::alertFadeGain(qint64 positionMs, qint64 durationMs)
         }
     }
     return gain;
+}
+
+QStringList AppSettings::soundSearchRoots()
+{
+    QStringList roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    roots << QStringLiteral("/usr/share") << QStringLiteral("/run/host/usr/share");
+#ifdef Q_OS_MACOS
+    // The sounds bundled in Sugo.app/Contents/Resources/sounds/ (macOS has no sound themes).
+    roots << QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources"));
+#endif
+    return roots;
+}
+
+QString AppSettings::findSoundFile(const QString &soundName, const QStringList &roots)
+{
+    if (soundName.startsWith(QLatin1Char('/'))) {
+        return QFileInfo(soundName).isFile() ? soundName : QString();
+    }
+    for (const char *theme : {"ocean", "freedesktop"}) {
+        for (const char *ext : {"oga", "ogg", "wav"}) {
+            const QString relative = QStringLiteral("/sounds/%1/stereo/%2.%3").arg(QLatin1String(theme), soundName, QLatin1String(ext));
+            for (const QString &root : roots) {
+                const QString file = root + relative;
+                if (!root.isEmpty() && QFileInfo(file).isFile()) {
+                    return file;
+                }
+            }
+        }
+    }
+    return {};
+}
+
+bool AppSettings::afplayCanPlay(const QString &file)
+{
+    static const QStringList formats = {
+        QStringLiteral("wav"), QStringLiteral("aif"), QStringLiteral("aiff"), QStringLiteral("aifc"),
+        QStringLiteral("caf"), QStringLiteral("mp3"), QStringLiteral("m4a"), QStringLiteral("aac"),
+    };
+    return formats.contains(QFileInfo(file).suffix().toLower());
+}
+
+QStringList AppSettings::afplayArguments(const QString &file, int volume)
+{
+    const double factor = std::clamp(volume, 0, 100) / 100.0;
+    // The file is an absolute path (see findSoundFile()), so it is never read as an option.
+    return {QStringLiteral("-v"), QString::number(factor, 'f', 2), file};
 }
 
 bool AppSettings::isUsableSoundName(const QString &soundName)
