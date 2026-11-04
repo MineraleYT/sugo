@@ -157,6 +157,11 @@ sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)
 sugo_add_test(tst_shortcutsfocusinstaller Qt6::Core)
 target_compile_definitions(tst_shortcutsfocusinstaller PRIVATE SUGO_SHORTCUTS_SOURCE_DIR="${PROJECT_SOURCE_DIR}/data/shortcuts")
 
+# These use QStandardPaths' test mode, whose folders (~/.qttest) every test process shares, and
+# write the default settings file there: `ctest --parallel` runs them one at a time.
+set_tests_properties(tst_appsettings tst_calendarsync tst_desktopstyle tst_phasenotifier tst_screenlockwatcher
+    PROPERTIES RESOURCE_LOCK qt_test_mode_dirs)
+
 # --- Platform parity ---
 # Every screen offers the same on Linux and macOS, but for the differences listed with their
 # reasons in platform-parity.json; each platform feature has its tests here. Runs the program in
