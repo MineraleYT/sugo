@@ -625,6 +625,30 @@ private Q_SLOTS:
         QCOMPARE(cals.at(0).url, QStringLiteral("https://dav.example.net/dav/cal/home"));
     }
 
+    void parseCalendarsTakesTheDefaultPortForTheSameServer()
+    {
+        const auto response = [](const QString &href) {
+            return QStringLiteral("<d:response><d:href>%1</d:href><d:propstat><d:prop><d:resourcetype><d:collection/>"
+                                  "<c:calendar/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                                  "</d:response>")
+                .arg(href);
+        };
+        const QString xml = QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" "
+                                           "xmlns:c=\"urn:ietf:params:xml:ns:caldav\">")
+            + response(QStringLiteral("https://cloud.example.org/dav/cal/plain/"))
+            + response(QStringLiteral("https://cloud.example.org:443/dav/cal/explicit/"))
+            + response(QStringLiteral("https://cloud.example.org:8443/dav/cal/elsewhere/"))
+            + QStringLiteral("</d:multistatus>");
+        // The port written out or not, https://host and https://host:443 are the same server;
+        // another port is not.
+        for (const QString &request : {QStringLiteral("https://cloud.example.org/dav/cal/"), QStringLiteral("https://cloud.example.org:443/dav/cal/")}) {
+            const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(request));
+            QCOMPARE(cals.size(), 2);
+            QVERIFY(cals.at(0).url.endsWith(QStringLiteral("/dav/cal/plain")));
+            QVERIFY(cals.at(1).url.endsWith(QStringLiteral("/dav/cal/explicit")));
+        }
+    }
+
     void discoveryNextcloud()
     {
         m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);

@@ -87,6 +87,13 @@ QString withoutTrailingSlash(QUrl url)
     return url.toString(QUrl::FullyEncoded);
 }
 
+/// The port, or the scheme's default one when the URL does not name it.
+int effectivePort(const QUrl &url)
+{
+    const QString scheme = url.scheme().toLower();
+    return url.port(scheme == QLatin1String("https") ? 443 : scheme == QLatin1String("http") ? 80 : -1);
+}
+
 QString lastSegment(const QString &url)
 {
     const QString path = QUrl(url).path();
@@ -347,7 +354,7 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 }
                 const QUrl resolved = requestUrl.resolved(QUrl(cur.href));
                 if (resolved.scheme() != requestUrl.scheme() || resolved.host() != requestUrl.host()
-                    || resolved.port(0) != requestUrl.port(0)) {
+                    || effectivePort(resolved) != effectivePort(requestUrl)) {
                     continue; // never hand our credentials to another server
                 }
                 const QString url = withoutTrailingSlash(resolved);
