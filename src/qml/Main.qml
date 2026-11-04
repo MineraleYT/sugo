@@ -295,6 +295,7 @@ QQC2.ApplicationWindow {
         property real welcomePanelY: 0
         // The stage at which the timer page's track check began (0: not yet).
         property int trackCheckStage: 0
+        property bool longSetChecked: false
 
         function findItem(item: var, predicate: var): var {
             if (!item) {
@@ -533,6 +534,15 @@ QQC2.ApplicationWindow {
                 fail(49, "A work phase of one second did not end");
                 return true;
             }
+            if (longSetChecked) {
+                const track = findItem(page, item => item.objectName === "cycleTrack");
+                const row = findItem(page, item => item.objectName === "cycleSegments");
+                if (!track || !row || row.childrenRect.width > track.width + 1) {
+                    fail(52, "The track of a long set runs past its place: "
+                         + (row ? row.childrenRect.width : "missing") + " > " + (track ? track.width : "missing"));
+                }
+                return true;
+            }
             const first = findItem(page, item => item.objectName === "cycleSegment-0");
             const second = findItem(page, item => item.objectName === "cycleSegment-1");
             if (!first || !second) {
@@ -550,7 +560,10 @@ QQC2.ApplicationWindow {
                 fail(49, "The track still shows work done after Stop");
                 return true;
             }
-            return true;
+            // The longest set: its track lays out on the next tick.
+            PresetModel.update(PresetModel.currentUuid, { cyclesBeforeLong: PresetModel.maxCycles });
+            longSetChecked = true;
+            return false;
         }
 
         // A timer's page: one stage per tick, so bindings and Qt.callLater() run in between.
@@ -663,9 +676,26 @@ QQC2.ApplicationWindow {
                          + ", modified " + editor.modified);
                     return true;
                 }
+                // The longest set: its preview lays out on the next tick.
+                const cyclesField = findItem(editor, item => item.objectName === "cyclesField");
+                if (!cyclesField) {
+                    fail(52, "The field of the cycles is missing");
+                    return true;
+                }
+                cyclesField.setValue(PresetModel.maxCycles);
+                return false;
+            }
+            case 6: {
+                // The preview of the longest set stays within its box.
+                const preview = findItem(editor, item => item.objectName === "cyclePreview");
+                const blocks = findItem(editor, item => item.objectName === "cycleBlocks");
+                if (!preview || !blocks || blocks.childrenRect.width > preview.width + 1) {
+                    fail(52, "The preview of a long set runs past its box: "
+                         + (blocks ? blocks.childrenRect.width : "missing") + " > " + (preview ? preview.width : "missing"));
+                    return true;
+                }
                 // Duplicate with unsaved changes asks first, and makes no copy meanwhile.
                 const count = PresetModel.count;
-                editor.selectedIcon = editor.selectedIcon === "chronometer" ? "clock" : "chronometer";
                 editor.duplicate();
                 if (root.pageStack.currentItem !== editor || !editor.confirming || PresetModel.count !== count) {
                     fail(51, "Duplicate with unsaved changes did not ask first, or copied before the answer");

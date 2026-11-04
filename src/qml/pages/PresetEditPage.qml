@@ -482,20 +482,38 @@ QQC2.Page {
 
                     Item {
                         id: cycleRow
+                        objectName: "cyclePreview"
                         Layout.fillWidth: true
                         implicitHeight: Theme.spaceXl + Theme.spaceSm
+                        // A long set (up to 99 work phases) still fits: the gaps take at most half the
+                        // row, the blocks' minimum width shrinks to their share of the rest, and the
+                        // row clips what rounding leaves over.
+                        clip: true
                         readonly property var phases: cycleColumn.parent.phases
-                        readonly property real gaps: Theme.hairline * 3 * (phases.length - 1)
+                        readonly property int count: phases.length
+                        readonly property real total: Math.max(1, cycleColumn.parent.totalMinutes)
+                        readonly property real gap: count > 1 ? Math.min(Theme.hairline * 3, width / 2 / (count - 1)) : 0
+                        readonly property real available: Math.max(0, width - gap * (count - 1))
+                        readonly property real minBlock: Math.min(Theme.spaceXs, available / Math.max(1, count))
+                        // Each block as long as its phase, at least minBlock; when those minimums would
+                        // push the row past its box, each gets the minimum plus its share of what is left
+                        // (the hairline only absorbs floating-point error in a sum that fits).
+                        readonly property bool crowded: phases.reduce(
+                            (sum, p) => sum + Math.max(minBlock, available * p.minutes / total), 0) > available + Theme.hairline
+                        /// Pixels per minute of the blocks' variable part (what a drag moves).
+                        readonly property real pixelsPerMinute: (crowded ? available - minBlock * count : available) / total
                         Row {
                             id: cycleBlocks
+                            objectName: "cycleBlocks"
                             anchors.fill: parent
-                            spacing: Theme.hairline * 3
+                            spacing: cycleRow.gap
                             Repeater {
                                 model: cycleRow.phases
                                 Rectangle {
                                     id: block
                                     required property var modelData
-                                    width: Math.max(Theme.spaceXs, (cycleRow.width - cycleRow.gaps) * modelData.minutes / Math.max(1, cycleColumn.parent.totalMinutes))
+                                    width: cycleRow.crowded ? cycleRow.minBlock + cycleRow.pixelsPerMinute * modelData.minutes
+                                                            : Math.max(cycleRow.minBlock, cycleRow.pixelsPerMinute * modelData.minutes)
                                     height: cycleRow.height
                                     radius: Theme.radiusSm
                                     color: modelData.work ? Theme.brand : Theme.alpha(Theme.breakColor, modelData.long ? 0.7 : 0.35)
@@ -540,7 +558,7 @@ QQC2.Page {
                                 startValue = box.value;
                                 startX = mouse.x;
                                 direction = mouse.x < block.x + block.width / 2 ? -1 : 1;
-                                pixelsPerMinute = Math.max(1, (cycleRow.width - cycleRow.gaps) / Math.max(1, cycleColumn.parent.totalMinutes));
+                                pixelsPerMinute = Math.max(1, cycleRow.pixelsPerMinute);
                             }
                             onPositionChanged: mouse => {
                                 if (box) {
@@ -635,6 +653,7 @@ QQC2.Page {
                     description: i18n("How many work sessions come before the long break.")
                     NumberField {
                         id: cyclesBox
+                        objectName: "cyclesField"
                         from: 0
                         to: PresetModel.maxCycles
                         value: page.preset.cyclesBeforeLong
