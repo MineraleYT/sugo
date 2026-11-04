@@ -6,7 +6,6 @@
 #include "Localization.h"
 
 #include <QCoreApplication>
-#include <QDBusConnection>
 #include <QDesktopServices>
 #include <QJsonArray>
 #include <QJsonDocument>

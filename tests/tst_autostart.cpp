@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QtGlobal>
+#ifdef Q_OS_LINUX
 #include <QDBusConnection>
 #include <QDBusContext>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#endif
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -13,7 +16,10 @@
 
 #include "AppImage.h"
 #include "Autostart.h"
+#ifdef Q_OS_LINUX
+#include "PortalAutostart.h"
 #include "PrivateDBus.h"
+#endif
 
 namespace
 {
@@ -35,6 +41,7 @@ XdgAutostart make(const QString &dir, const QStringList &command = {QStringLiter
 {
     return XdgAutostart(dir, QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("Sugo"), QStringLiteral("Pomodoro timer"), command);
 }
+#ifdef Q_OS_LINUX
 const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
 
@@ -70,6 +77,7 @@ public Q_SLOTS:
         return QDBusObjectPath(handle);
     }
 };
+#endif
 } // namespace
 
 class AutostartTest : public QObject
@@ -284,7 +292,7 @@ private Q_SLOTS:
     {
 #ifndef Q_OS_LINUX
         QSKIP("Flatpak and its portal exist on Linux only");
-#endif
+#else
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");
@@ -333,6 +341,7 @@ private Q_SLOTS:
         server.unregisterObject(kPortalPath);
         QDBusConnection::disconnectFromBus(QStringLiteral("portal-client"));
         QDBusConnection::disconnectFromBus(QStringLiteral("portal-server"));
+#endif
     }
 
     void theUnsupportedImplementationSaysSo()

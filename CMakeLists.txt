@@ -54,7 +54,15 @@ add_compile_definitions(
     QT_DISABLE_DEPRECATED_BEFORE=0x060800
 )
 
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql DBus Network Multimedia)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Sql Network Multimedia)
+# D-Bus (notifications, inhibition, KRunner, Secret Service, the single-instance name...) is the
+# freedesktop desktop's: macOS uses its own services and does not ship QtDBus.
+if(NOT APPLE)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS DBus)
+    set(SUGO_DBUS Qt6::DBus)
+else()
+    set(SUGO_DBUS "")
+endif()
 
 # QML modules live under qrc:/qt/qml/ (QTP0001). Qt >= 6.8: one qmldir per QML subdirectory (QTP0004).
 qt6_policy(SET QTP0001 NEW)

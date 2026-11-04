@@ -14,7 +14,7 @@
 #include <memory>
 
 #include "PrivateDBus.h"
-#include "SecretStore.h"
+#include "SecretServiceStore.h"
 
 namespace
 {

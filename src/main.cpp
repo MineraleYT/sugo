@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QApplication>
 #include <QCommandLineParser>
-#include <QDBusConnection>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -26,8 +25,6 @@
 #include "AppSettings.h"
 #include "DataManager.h"
 #include "Database.h"
-#include "DBusTimerService.h"
-#include "KRunnerService.h"
 #include "InhibitorFactory.h"
 #include "NotifierFactory.h"
 #include "FocusSoundController.h"
@@ -44,7 +41,11 @@
 #include "MacApp.h"
 #include "ShortcutsFocusInhibitor.h"
 #else
+#include "DBusTimerService.h"
+#include "KRunnerService.h"
 #include "SingleInstance.h"
+
+#include <QDBusConnection>
 #endif
 #include "StatsModel.h"
 #include "TimerBinding.h"
@@ -309,15 +310,13 @@ int main(int argc, char *argv[])
     silence->attach(timer, presets, inhibitor.get());
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
+#ifndef Q_OS_MACOS
     auto *timerDBusObject = new TimerDBusObject(timer);
     auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
-#ifdef Q_OS_LINUX
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
-#endif
     auto *krunner = new KRunnerService(timer, presets, &services);
     krunner->setControlAllowed(externalControlAllowed);
-#ifdef Q_OS_LINUX
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
 #endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
@@ -339,7 +338,11 @@ int main(int argc, char *argv[])
         updates->attach(settings);
     }
 
+#ifdef Q_OS_MACOS
+    auto *powerInhibitor = new PowerInhibitor(&services);
+#else
     auto *powerInhibitor = new PowerInhibitor(QDBusConnection::sessionBus(), &services);
+#endif
     powerInhibitor->attach(timer, settings);
     auto *screenLockWatcher = engine.singletonInstance<ScreenLockWatcher *>("io.github.mineraleyt.sugo", "ScreenLockWatcher");
     if (screenLockWatcher) {
@@ -472,8 +475,10 @@ int main(int argc, char *argv[])
         }
 #endif
 
+#ifndef Q_OS_MACOS
         // KRunner runner action to open window
         QObject::connect(krunner, &KRunnerService::openRequested, window, [activateWindow]() { activateWindow(); });
+#endif
 
         // The tray menu's Statistics / Settings entries: show the window on that page.
         QObject::connect(tray, &TrayController::openPageRequested, window, [window, activateWindow](const QString &page) {
@@ -498,7 +503,7 @@ int main(int argc, char *argv[])
     // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
     // is an engine singleton, the runner a child of `services`), then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
-#ifdef Q_OS_LINUX
+#ifndef Q_OS_MACOS
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
 #endif

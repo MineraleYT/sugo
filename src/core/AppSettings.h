@@ -304,7 +304,10 @@ private:
     void store(const char *key, bool value);
     void storeInt(const char *key, int value);
     void storeString(const char *key, const QString &value);
+#ifdef Q_OS_LINUX
+    /// Follows the StatusNotifierWatcher on the session bus (the tray host).
     void watchTray();
+#endif
 
     Settings::Ptr m_config;
     std::unique_ptr<Autostart> m_autostart;

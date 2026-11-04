@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include <QDBusConnection>
 #include <QObject>
 #include <QtQml/qqmlregistration.h>
 
@@ -10,6 +9,8 @@
 class AppSettings;
 #ifdef Q_OS_MACOS
 class MacSessionEvents;
+#else
+#include <QDBusConnection>
 #endif
 class TimerEngine;
 
@@ -24,7 +25,8 @@ class TimerEngine;
  * the user to resume it instead of carrying on by itself.
  *
  * On macOS the default constructor listens through MacSessionEvents instead (the login window's
- * lock notifications and IOKit's system power messages), which call the same slots.
+ * lock notifications and IOKit's system power messages), which call the same slots; the D-Bus
+ * constructors exist on the other systems only.
  */
 class ScreenLockWatcher : public QObject
 {
@@ -38,10 +40,17 @@ class ScreenLockWatcher : public QObject
     Q_PROPERTY(bool available READ available CONSTANT FINAL)
 
 public:
+    /// What the watcher listens to: the system's own lock and sleep events, or nothing (the
+    /// slots are then only called directly, as tests do; available() is false).
+    enum class Source { System, Nothing };
+
     explicit ScreenLockWatcher(QObject *parent = nullptr);
+    explicit ScreenLockWatcher(Source source, QObject *parent = nullptr);
+#ifndef Q_OS_MACOS
     ScreenLockWatcher(const QDBusConnection &bus, QObject *parent = nullptr);
     /// `systemBus` carries logind's sleep signal.
     ScreenLockWatcher(const QDBusConnection &bus, const QDBusConnection &systemBus, QObject *parent = nullptr);
+#endif
     ~ScreenLockWatcher() override;
 
     void attach(TimerEngine *engine, AppSettings *settings);
@@ -66,8 +75,10 @@ Q_SIGNALS:
 private:
     void setPausedBySleep(bool paused);
 
+#ifndef Q_OS_MACOS
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
+#endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
     bool m_pausedByScreenLock = false;

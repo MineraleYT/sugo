@@ -3,7 +3,8 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
 include(ECMAddTests)
 
 # Each test links the program's code (sugo_core, see src/CMakeLists.txt), Qt Test and the Qt modules
-# it uses itself. Those decide what QTEST_MAIN creates: a QApplication with Qt6::Widgets, a
+# it uses itself; a test built on every system names Qt6::DBus as ${SUGO_DBUS}, empty on macOS.
+# The modules decide what QTEST_MAIN creates: a QApplication with Qt6::Widgets, a
 # QGuiApplication with Qt6::Gui (both need QT_QPA_PLATFORM=offscreen on CI), else a QCoreApplication.
 function(sugo_add_test name)
     ecm_add_test(${name}.cpp TEST_NAME ${name} LINK_LIBRARIES Qt6::Test sugo_core ${ARGN})
@@ -11,7 +12,7 @@ function(sugo_add_test name)
 endfunction()
 
 sugo_add_test(tst_timerengine Qt6::Core Qt6::Qml)
-sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus Qt6::Multimedia)
+sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS} Qt6::Multimedia)
 sugo_add_test(tst_datamanager Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetmodel Qt6::Core Qt6::Qml)
 sugo_add_test(tst_timerbinding Qt6::Core Qt6::Qml)
@@ -19,29 +20,28 @@ sugo_add_test(tst_database Qt6::Core Qt6::Sql)
 sugo_add_test(tst_presetrepository Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
-sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-sugo_add_test(tst_autostart Qt6::Core Qt6::Gui Qt6::DBus)
-sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
+sugo_add_test(tst_autostart Qt6::Core Qt6::Gui ${SUGO_DBUS})
+sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 sugo_add_test(tst_traypresenter Qt6::Core Qt6::Qml)
 sugo_add_test(tst_statsaggregator Qt6::Core Qt6::Sql)
 sugo_add_test(tst_statsmodel Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_updatechecker Qt6::Core Qt6::Qml Qt6::Network)
-sugo_add_test(tst_screenlockwatcher Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql Qt6::DBus)
+sugo_add_test(tst_screenlockwatcher Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
+sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql ${SUGO_DBUS})
 # The test builds a QGuiApplication (clipboard access): run it without a display, e.g. on CI.
 set_tests_properties(tst_diagnostics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_calendarsync Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::DBus)
+sugo_add_test(tst_calendarsync Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network ${SUGO_DBUS})
 set_tests_properties(tst_calendarsync PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
+sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 # A GUI application (AppSettings); no display on CI.
 set_tests_properties(tst_phasenotifier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_traynotifier Qt6::Core Qt6::Gui Qt6::Widgets)
 set_tests_properties(tst_traynotifier PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
-sugo_add_test(tst_traycontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus)
+sugo_add_test(tst_traycontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml ${SUGO_DBUS})
 set_tests_properties(tst_traycontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_desktopstyle Qt6::Core Qt6::Gui Qt6::Qml)
@@ -60,6 +60,8 @@ add_test(NAME tst_runner_version
 # Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,
 # the single-instance bus name and the /Timer service), and the shutdown test (D-Bus, GNU tools).
 if(NOT APPLE)
+    # macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion).
+    sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
     sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
     sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
     sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
@@ -124,10 +126,10 @@ sugo_add_test(tst_localsingleinstance Qt6::Core Qt6::Network)
 sugo_add_test(tst_macnotificationmapping Qt6::Core)
 
 # --- macOS port: B2 (keep-awake, screen lock and sleep, Keychain, login item) ---
-sugo_add_test(tst_launchagentautostart Qt6::Core Qt6::DBus)
+sugo_add_test(tst_launchagentautostart Qt6::Core ${SUGO_DBUS})
 if(APPLE)
-    sugo_add_test(tst_macpowerassertion Qt6::Core Qt6::DBus "-framework CoreFoundation" "-framework IOKit")
-    sugo_add_test(tst_mackeychainstore Qt6::Core Qt6::DBus "-framework Security")
+    sugo_add_test(tst_macpowerassertion Qt6::Core "-framework CoreFoundation" "-framework IOKit")
+    sugo_add_test(tst_mackeychainstore Qt6::Core "-framework Security")
 endif()
 
 # --- macOS port: B3 sounds ---
@@ -135,7 +137,7 @@ endif()
 target_compile_definitions(tst_appsettings PRIVATE SUGO_BUNDLED_SOUNDS_ROOT="${PROJECT_SOURCE_DIR}/data")
 
 # --- macOS port: W2-B Dock integration and fallback icons ---
-sugo_add_test(tst_dockcontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml Qt6::DBus)
+sugo_add_test(tst_dockcontroller Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Qml ${SUGO_DBUS})
 set_tests_properties(tst_dockcontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 # --- macOS port: W2-A (Focus through Shortcuts, sugo:// links) ---

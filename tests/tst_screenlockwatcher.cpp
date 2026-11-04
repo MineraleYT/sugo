@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QtGlobal>
+#ifndef Q_OS_MACOS
 #include <QDBusConnection>
 #include <QDBusMessage>
+#endif
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTest>
@@ -38,9 +41,8 @@ private Q_SLOTS:
         settings = std::make_unique<AppSettings>(Settings::openDefault(), nullptr, false);
         settings->setAutoPauseOnScreenLock(true);
 
-        // Disconnected bus so tests don't touch system D-Bus
-        QDBusConnection bus(QStringLiteral("tst_disconnected_bus"));
-        watcher = std::make_unique<ScreenLockWatcher>(bus);
+        // Listening to nothing (on Linux: disconnected buses), so tests don't touch the system's events
+        watcher = std::make_unique<ScreenLockWatcher>(ScreenLockWatcher::Source::Nothing);
         watcher->attach(engine.get(), settings.get());
     }
 
@@ -198,7 +200,7 @@ private Q_SLOTS:
     {
 #ifndef Q_OS_LINUX
         QSKIP("The screen saver is watched over D-Bus on Linux only");
-#endif
+#else
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");
@@ -229,11 +231,12 @@ private Q_SLOTS:
         for (const auto &name : {QStringLiteral("watcher-session"), QStringLiteral("impostor"), QStringLiteral("screen-saver")}) {
             QDBusConnection::disconnectFromBus(name);
         }
+#endif
     }
 
     void availableFollowsTheBackend()
     {
-        const ScreenLockWatcher offline(QDBusConnection(QStringLiteral("tst_disconnected_bus")));
+        const ScreenLockWatcher offline(ScreenLockWatcher::Source::Nothing);
         QVERIFY(!offline.available());
 
 #ifdef Q_OS_MACOS
@@ -258,7 +261,7 @@ private Q_SLOTS:
     {
 #ifndef Q_OS_LINUX
         QSKIP("logind exists on Linux only");
-#endif
+#else
         PrivateDBus bus;
         if (!bus.start()) {
             QSKIP("dbus-daemon is not available");
@@ -281,6 +284,7 @@ private Q_SLOTS:
 
         QDBusConnection::disconnectFromBus(QStringLiteral("fake-logind"));
         QDBusConnection::disconnectFromBus(QStringLiteral("fake-system"));
+#endif
     }
 };
 

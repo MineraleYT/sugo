@@ -90,13 +90,9 @@ target_sources(sugo_core PRIVATE
     platform/PowerInhibitor.h
     platform/PowerInhibitor.cpp
     platform/NoopInhibitor.h
-    platform/FreedesktopInhibitor.h
-    platform/FreedesktopInhibitor.cpp
     platform/InhibitorFactory.h
     platform/InhibitorFactory.cpp
     platform/Notifier.h
-    platform/FreedesktopNotifier.h
-    platform/FreedesktopNotifier.cpp
     platform/TrayNotifier.h
     platform/TrayNotifier.cpp
     platform/NotifierFactory.h
@@ -107,12 +103,6 @@ target_sources(sugo_core PRIVATE
     platform/Autostart.cpp
     platform/SystemTray.h
     platform/SystemTray.cpp
-    platform/SingleInstance.h
-    platform/SingleInstance.cpp
-    platform/DBusTimerService.h
-    platform/DBusTimerService.cpp
-    platform/KRunnerService.h
-    platform/KRunnerService.cpp
     platform/ScreenLockWatcher.h
     platform/ScreenLockWatcher.cpp
     platform/SecretStore.h
@@ -153,7 +143,7 @@ target_link_libraries(sugo_core PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Sql
-    Qt6::DBus
+    ${SUGO_DBUS}
     Qt6::Network
     Qt6::Multimedia
 )
@@ -223,7 +213,7 @@ target_link_libraries(sugo PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Sql
-    Qt6::DBus
+    ${SUGO_DBUS}
     Qt6::Network
 )
 
@@ -346,3 +336,27 @@ target_sources(sugo_core PRIVATE
     platform/MacBundle.h
     platform/MacBundle.cpp
 )
+
+# --- macOS port: W3 QtDBus only on Linux ---
+# The freedesktop services over D-Bus: notifications, notification and screen-sleep inhibition,
+# the single-instance bus name, /Timer, KRunner, the Background portal and the Secret Service.
+# PowerInhibitor, ScreenLockWatcher, AppSettings and the factories keep their D-Bus code under
+# #ifndef Q_OS_MACOS / #ifdef Q_OS_LINUX, built everywhere.
+if(NOT APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/FreedesktopInhibitor.h
+        platform/FreedesktopInhibitor.cpp
+        platform/FreedesktopNotifier.h
+        platform/FreedesktopNotifier.cpp
+        platform/SingleInstance.h
+        platform/SingleInstance.cpp
+        platform/DBusTimerService.h
+        platform/DBusTimerService.cpp
+        platform/KRunnerService.h
+        platform/KRunnerService.cpp
+        platform/PortalAutostart.h
+        platform/PortalAutostart.cpp
+        platform/SecretServiceStore.h
+        platform/SecretServiceStore.cpp
+    )
+endif()

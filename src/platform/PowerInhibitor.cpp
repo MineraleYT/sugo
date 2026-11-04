@@ -6,8 +6,13 @@
 
 #ifdef Q_OS_MACOS
 #include "MacPowerAssertion.h"
-#endif
 
+PowerInhibitor::PowerInhibitor(QObject *parent)
+    : QObject(parent)
+    , m_macAssertion(std::make_unique<MacPowerAssertion>())
+{
+}
+#else
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingReply>
@@ -32,16 +37,13 @@ PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
     m_retryTimer.setSingleShot(true);
     m_retryTimer.setInterval(kRetryDelayMs);
     connect(&m_retryTimer, &QTimer::timeout, this, &PowerInhibitor::sync);
-#ifdef Q_OS_MACOS
-    m_macAssertion = std::make_unique<MacPowerAssertion>();
-#else
     if (m_bus.isConnected()) {
         m_watcher = new QDBusServiceWatcher(kService, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
         connect(m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
                 [this](const QString &, const QString &, const QString &newOwner) { onOwnerChanged(newOwner); });
     }
-#endif
 }
+#endif
 
 PowerInhibitor::~PowerInhibitor()
 {
@@ -87,6 +89,7 @@ void PowerInhibitor::shutdown()
 {
     m_engine = nullptr; // turns update() off: nothing may inhibit again while quitting
     release();
+#ifndef Q_OS_MACOS
     if (!m_pending || !m_pendingWatcher) {
         return;
     }
@@ -95,6 +98,7 @@ void PowerInhibitor::shutdown()
     connect(m_pendingWatcher, &QDBusPendingCallWatcher::finished, &loop, &QEventLoop::quit);
     QTimer::singleShot(kShutdownWaitMs, &loop, &QEventLoop::quit);
     loop.exec();
+#endif
 }
 
 void PowerInhibitor::sync()
@@ -121,6 +125,7 @@ void PowerInhibitor::sync()
 #endif
 }
 
+#ifndef Q_OS_MACOS
 void PowerInhibitor::sendInhibit()
 {
     if (!m_bus.isConnected()) {
@@ -184,3 +189,4 @@ void PowerInhibitor::onOwnerChanged(const QString &newOwner)
         sync();
     }
 }
+#endif

@@ -145,6 +145,21 @@ done
 [ "$(find "$CONTENTS/PlugIns/sqldrivers" -name '*.dylib' | wc -l | tr -d ' ')" = 1 ] \
     || fail "SQL drivers other than SQLite were deployed"
 
+# D-Bus is Linux-only: Sugo itself must not link QtDBus on macOS. Qt from qt.io is built with
+# its dbus feature, though, and QtGui links QtDBus.framework, so macdeployqt has to ship it: name
+# what pulls it in instead of deleting it (QtGui would not load without it).
+if deps "$CONTENTS/MacOS/Sugo" | grep -q 'QtDBus\.framework/'; then
+    fail "Sugo links QtDBus.framework: D-Bus code is built on macOS (see SUGO_DBUS in CMakeLists.txt)"
+fi
+if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
+    users=$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -not -path '*/QtDBus.framework/*' -print0 \
+        | while IFS= read -r -d '' f; do
+              if otool -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
+          done)
+    [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
+    echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
+fi
+
 # HTTPS (update checks, CalDAV): a TLS backend that needs nothing outside the bundle.
 if [ ! -e "$CONTENTS/PlugIns/tls/libqsecuretransportbackend.dylib" ]; then
     [ -e "$CONTENTS/PlugIns/tls/libqopensslbackend.dylib" ] || fail "no TLS backend in PlugIns/tls"

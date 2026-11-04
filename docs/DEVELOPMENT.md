@@ -26,7 +26,7 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 
 - **C++17** compiler (GCC 11+ or Clang 14+)
 - **CMake** 3.20+ and **Ninja**
-- **Qt 6.8+** (Core, Gui, Widgets, Qml, Quick, QuickControls2, Sql, DBus, Network)
+- **Qt 6.8+** (Core, Gui, Widgets, Qml, Quick, QuickControls2, Sql, Network, Multimedia; DBus on Linux only: Sugo does not link it on macOS, though the app bundle still carries QtDBus.framework because qt.io's QtGui links it)
 - **extra-cmake-modules 6.8+** (build tool only: no KDE Frameworks library is used)
 - **Gettext** (`xgettext`), only to extract the strings
 
@@ -134,7 +134,7 @@ A test that builds a GUI application sets `QT_QPA_PLATFORM=offscreen` for itself
 
 CI builds on Linux with GCC (and runs the suite), with Clang and warnings as errors (its warnings are close to those of Apple's compiler), and on macOS (arm64, Qt from qt.io, warnings as errors, the whole suite; not blocking yet).
 
-**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the tests that start a private D-Bus daemon (`tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_screenlockwatcher`, `tst_secretstore`, `tst_autostart`'s portal cases) skip when there is no `dbus-daemon`, which macOS does not have; the freedesktop services they cover (notifications, notification and power inhibitors, KRunner, the AppImage self-update) are not used on macOS anyway.
+**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage self-update is not used on macOS either.
 
 ### Environment variables for development
 

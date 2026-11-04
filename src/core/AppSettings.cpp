@@ -7,9 +7,11 @@
 #include "SystemTray.h"
 
 #include <QAudioOutput>
-#include <QDBusConnection>
 #include <QDebug>
+#ifdef Q_OS_LINUX
+#include <QDBusConnection>
 #include <QDBusServiceWatcher>
+#endif
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -133,7 +135,9 @@ bool playWithFade(const QString &file, int vol, QObject *parent)
 AppSettings::AppSettings(QObject *parent)
     : AppSettings(Settings::openDefault(), createAutostart(), systemTrayAvailable(), parent)
 {
+#ifdef Q_OS_LINUX
     watchTray();
+#endif
 }
 
 AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autostart, bool trayAvailable, QObject *parent)
@@ -201,6 +205,7 @@ void AppSettings::storeString(const char *key, const QString &value)
     Settings::sync(*m_config);
 }
 
+#ifdef Q_OS_LINUX
 void AppSettings::watchTray()
 {
     // The tray host can appear after us (login) or restart (plasmashell crash).
@@ -215,6 +220,7 @@ void AppSettings::watchTray()
         setTrayAvailable(false);
     });
 }
+#endif
 
 void AppSettings::setTrayAvailable(bool available)
 {
