@@ -752,6 +752,44 @@ QQC2.Page {
                 interactive: contentWidth > width
                 clip: interactive
 
+                /// Scrolls just enough to show the chosen category, with a margin when it can.
+                function showCurrent(animated: bool): void {
+                    const rect = categoryTabs.choiceRect(page.category);
+                    if (!rect) {
+                        return;
+                    }
+                    let x = contentX;
+                    if (rect.x - Theme.spaceLg < x) {
+                        x = rect.x - Theme.spaceLg;
+                    } else if (rect.x + rect.width + Theme.spaceLg > x + width) {
+                        x = rect.x + rect.width + Theme.spaceLg - width;
+                    }
+                    x = Math.max(0, Math.min(contentWidth - width, x));
+                    stripScroll.stop();
+                    if (animated && x !== contentX) {
+                        stripScroll.to = x;
+                        stripScroll.start();
+                    } else {
+                        contentX = x;
+                    }
+                }
+                NumberAnimation {
+                    id: stripScroll
+                    target: categoryStrip
+                    property: "contentX"
+                    duration: Theme.durationShort
+                    easing.type: Easing.OutCubic
+                }
+                onWidthChanged: showCurrent(false)
+                onContentWidthChanged: showCurrent(false)
+                Component.onCompleted: Qt.callLater(() => showCurrent(false))
+                Connections {
+                    target: page
+                    function onCategoryChanged() {
+                        categoryStrip.showCurrent(true);
+                    }
+                }
+
                 Segmented {
                     id: categoryTabs
                     model: page.categories
