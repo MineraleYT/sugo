@@ -112,6 +112,26 @@ private Q_SLOTS:
         QCOMPARE(PresetModel::maxCycles(), PresetLimits::MaxCycles);
     }
 
+    void namesAreNeverCutInsideACharacter()
+    {
+        // An emoji takes two UTF-16 units: cut after the first, it would be half a character.
+        const QString name = QString(PresetModel::maxNameLength() - 1, QLatin1Char('n')) + QString::fromUtf8("\xF0\x9F\x8D\x85");
+        QSignalSpy adjusted(model.get(), &PresetModel::valuesAdjusted);
+        const QString uuid = model->create({{QStringLiteral("name"), name}});
+        QCOMPARE(model->get(uuid).value(QStringLiteral("name")).toString(), name.left(PresetModel::maxNameLength() - 1));
+        QCOMPARE(adjusted.count(), 1);
+    }
+
+    void duplicateKeepsTheNameWithinTheLimit()
+    {
+        const QString uuid = model->create({{QStringLiteral("name"), QString(500, QLatin1Char('n'))}});
+        const QString copyUuid = model->duplicate(uuid);
+        const QString copyName = model->get(copyUuid).value(QStringLiteral("name")).toString();
+        QVERIFY(!copyName.isEmpty());
+        QVERIFY(copyName.size() <= PresetModel::maxNameLength());
+        QVERIFY(copyName != model->get(uuid).value(QStringLiteral("name")).toString());
+    }
+
         void createWithBlankNameGetsFallbackName()
     {
         const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("   ")}});

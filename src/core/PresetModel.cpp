@@ -45,6 +45,17 @@ QVariant coercedOption(const OptionDescriptor &desc, const QVariant &value)
     return value.toBool();
 }
 
+/// A name or category as stored: trimmed, at most `maxLength` (MaxNameLength) UTF-16 units, and
+/// never cut between the two halves of a character outside the Basic Multilingual Plane (an emoji).
+QString limitedText(const QString &text, int maxLength = PresetLimits::MaxNameLength)
+{
+    QString kept = text.trimmed().left(std::max(0, maxLength));
+    if (!kept.isEmpty() && kept.back().isHighSurrogate()) {
+        kept.chop(1);
+    }
+    return kept.trimmed();
+}
+
 } // namespace
 
 PresetModel::PresetModel(QObject *parent)
@@ -105,7 +116,7 @@ QStringList PresetModel::applyFields(TimerPreset &preset, const QVariantMap &fie
     QStringList adjusted;
     const auto text = [&](const QString &key) {
         const QString given = fields.value(key).toString().trimmed();
-        const QString kept = given.left(PresetLimits::MaxNameLength).trimmed();
+        const QString kept = limitedText(given);
         if (kept != given) {
             adjusted.append(key);
         }
@@ -393,7 +404,11 @@ QString PresetModel::duplicate(const QString &uuid)
     TimerPreset copy = m_presets.at(source);
     copy.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
     copy.builtin = false;
-    copy.name = i18n("%1 (copy)", copy.name);
+    // Shorten the original name first so the suffix always fits: cut from the end instead, the
+    // copy of a name at the limit would lose " (copy)" and carry the very same name.
+    const auto suffixLength = static_cast<int>(i18n("%1 (copy)", QString()).size());
+    const QString base = limitedText(copy.name, PresetLimits::MaxNameLength - suffixLength);
+    copy.name = limitedText(i18n("%1 (copy)", base));
 
     const int row = source + 1;
     beginInsertRows({}, row, row);
