@@ -73,12 +73,12 @@ cmake -S "$SRC" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
     -DCMAKE_OSX_ARCHITECTURES="$ARCHS" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
     -DSUGO_VERSION="$VERSION" >/dev/null
 cmake --build build
-[ -x build/src/Sugo.app/Contents/MacOS/Sugo ] || fail "build/src/Sugo.app was not built"
+[ -x build/bin/Sugo.app/Contents/MacOS/Sugo ] || fail "build/bin/Sugo.app was not built"
 
 # A copy, so that a rebuild never sees a bundle macdeployqt has already changed.
 rm -rf app
 mkdir app
-ditto build/src/Sugo.app app/Sugo.app
+ditto build/bin/Sugo.app app/Sugo.app
 APP="$WORK/app/Sugo.app"
 CONTENTS="$APP/Contents"
 
@@ -169,10 +169,12 @@ macho_files() {
 problems=0
 while IFS= read -r -d '' f; do
     archs=$(lipo -archs "$f" 2>/dev/null || true)
-    case " $archs " in
-        *" x86_64 "*" arm64 "* | *" arm64 "*" x86_64 "*) ;;
-        *) echo "not universal ($archs): ${f#"$APP"/}" >&2; problems=1 ;;
-    esac
+    for arch in x86_64 arm64; do
+        case " $archs " in
+            *" $arch "*) ;;
+            *) echo "no $arch ($archs): ${f#"$APP"/}" >&2; problems=1 ;;
+        esac
+    done
     dir=$(dirname "$f")
     # A library lists its own install name among its dependencies: skip it.
     own=$(otool -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')

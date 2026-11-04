@@ -64,10 +64,10 @@ brew install qt cmake ninja extra-cmake-modules
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
     -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
-open build/src/Sugo.app
+open build/bin/Sugo.app
 ```
 
-The program is the app bundle `build/src/Sugo.app` (its binary is `Sugo.app/Contents/MacOS/Sugo`); there is nothing to install. The Linux files (desktop entry, KRunner plugin, D-Bus service, metainfo) are not installed on macOS. Homebrew's Qt is enough to develop; the app published in the releases is built with Qt from qt.io, see [Building the macOS app](#building-the-macos-app).
+The program is the app bundle `build/bin/Sugo.app` (its binary is `Sugo.app/Contents/MacOS/Sugo`); there is nothing to install. The Linux files (desktop entry, KRunner plugin, D-Bus service, metainfo) are not installed on macOS. Homebrew's Qt is enough to develop; the app published in the releases is built with Qt from qt.io, see [Building the macOS app](#building-the-macos-app).
 
 For a system-wide install use `-DCMAKE_INSTALL_PREFIX=/usr` and run the install step with `sudo`.
 
