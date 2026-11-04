@@ -52,7 +52,7 @@ QQC2.Page {
     Component.onCompleted: Qt.callLater(() => initialFields = JSON.stringify(currentFields()))
     readonly property bool modified: initialFields.length > 0 && JSON.stringify(currentFields()) !== initialFields
     /// A confirmation is showing (also read by the smoke test).
-    readonly property bool confirming: discardDialog.visible || resetDialog.visible
+    readonly property bool confirming: discardDialog.visible || resetDialog.visible || deleteDialog.visible
 
     /// Save does something: a new timer, or changes to store.
     readonly property bool canSave: valid && (isNew || modified)
