@@ -21,6 +21,7 @@
 #include "SyncAccount.h"
 #include "TimerPreset.h"
 
+class Notifier;
 class PresetModel;
 class PresetPersistence;
 class PresetRepository;
@@ -114,6 +115,13 @@ public:
     /// How the desktop opens a page and copies text (main.cpp; QML may also do it itself).
     void setDesktopActions(std::function<bool(const QUrl &)> openUrl, std::function<void(const QString &)> copyText);
 
+    /**
+     * Desktop notifications: a device asking for approval while the window is hidden (as
+     * `windowVisible` says) is announced, and a click on it emits showSyncPageRequested().
+     * `notifier` is not owned; nullptr stops the notifications.
+     */
+    void attachNotifier(Notifier *notifier, std::function<bool()> windowVisible);
+
     /// One second in ms for every wait (tests make it short).
     void setTimeUnitMs(int ms);
 
@@ -195,6 +203,9 @@ Q_SIGNALS:
     void signedOut(bool remoteDone);
     /// Something worth a toast.
     void message(const QString &text);
+    /// The approval notification was clicked: show the window on the Sync settings.
+    /// `activationToken` (may be empty) lets the window take the focus on Wayland.
+    void showSyncPageRequested(const QString &activationToken);
 
 private:
     enum class Op { None, Pull, Push };
@@ -230,6 +241,7 @@ private:
     void writeSetting(const char *name, const QVariant &value);
     bool readyToSync() const;
     void showNextApproval();
+    void notifyApproval();
     void dropApproval(const QString &id);
 
     Settings::Ptr m_settings;
@@ -245,6 +257,8 @@ private:
 
     std::function<bool(const QUrl &)> m_openUrl;
     std::function<void(const QString &)> m_copyText;
+    QPointer<Notifier> m_notifier;
+    std::function<bool()> m_windowVisible;
     int m_unitMs = 1000;
 
     State m_state = Off;

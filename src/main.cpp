@@ -516,6 +516,20 @@ int main(int argc, char *argv[])
         // A click on a notification with nothing more specific to do.
         QObject::connect(notifier, &PhaseNotifier::showWindowRequested, window, activateWindow);
 
+        // Sugo Sync: a device asking for approval while the window is hidden is notified; a click
+        // shows the window on the Sync settings, where the approval dialog waits.
+        if (presetSync && !smokeTest) {
+            const QPointer<QQuickWindow> shown(window);
+            presetSync->attachNotifier(notifications, [shown]() {
+                return shown && shown->isVisible() && !(shown->windowStates() & Qt::WindowMinimized);
+            });
+            QObject::connect(presetSync, &SyncController::showSyncPageRequested, window,
+                             [window, activateWindow](const QString &activationToken) {
+                                 activateWindow(activationToken);
+                                 QMetaObject::invokeMethod(window, "openSettings", Q_ARG(QString, QStringLiteral("sync")));
+                             });
+        }
+
         // When a task note prompt is requested (e.g. from end-of-work notification action)
         QObject::connect(notifier, &PhaseNotifier::taskNotePromptRequested, window,
                          [window, activateWindow](const QString &presetName, qint64 sessionId, const QString &activationToken) {
@@ -537,6 +551,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
     if (presetSync) {
         presetSync->attach(nullptr, nullptr, nullptr); // its persistence goes with `services`
+        presetSync->attachNotifier(nullptr, {});        // and so do the notifications
     }
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
     if (smokeTest && status == EXIT_SUCCESS && smokeWarnings > 0) {

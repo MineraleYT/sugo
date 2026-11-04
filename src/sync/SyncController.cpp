@@ -2,6 +2,7 @@
 #include "SyncController.h"
 
 #include "Localization.h"
+#include "Notifier.h"
 #include "PresetModel.h"
 #include "PresetPersistence.h"
 #include "PresetRepository.h"
@@ -112,6 +113,12 @@ void SyncController::setDesktopActions(std::function<bool(const QUrl &)> openUrl
 {
     m_openUrl = std::move(openUrl);
     m_copyText = std::move(copyText);
+}
+
+void SyncController::attachNotifier(Notifier *notifier, std::function<bool()> windowVisible)
+{
+    m_notifier = notifier;
+    m_windowVisible = std::move(windowVisible);
 }
 
 void SyncController::connectAccount()
@@ -871,7 +878,26 @@ void SyncController::showNextApproval()
     Q_EMIT pendingApprovalChanged();
     if (!m_approvals.isEmpty()) {
         Q_EMIT approvalRequested();
+        notifyApproval();
     }
+}
+
+void SyncController::notifyApproval()
+{
+    // The window asks by itself when it is on screen.
+    if (!m_notifier || (m_windowVisible && m_windowVisible())) {
+        return;
+    }
+    const QString name = m_approvals.constFirst().value(QStringLiteral("name")).toString();
+    Notifier::Notification notification;
+    notification.title = i18n("New device wants to sync");
+    notification.text = i18n("%1 asks for your timers. Open Sugo to compare the verification code and approve it.", name);
+    notification.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+    const Notifier::Handler review = [this](const QString &token) { Q_EMIT showSyncPageRequested(token); };
+    notification.actions.append({i18n("Review"), review});
+    notification.defaultActionLabel = i18n("Review");
+    notification.defaultAction = review;
+    m_notifier->notify(this, notification);
 }
 
 void SyncController::dropApproval(const QString &id)

@@ -10,6 +10,7 @@
 
 #include "Database.h"
 #include "DataManager.h"
+#include "FakeNotifier.h"
 #include "FakeSecretStore.h"
 #include "FakeSyncServer.h"
 #include "PresetModel.h"
@@ -619,6 +620,55 @@ private Q_SLOTS:
         QTest::qWait(20 * kUnitMs);
         QCOMPARE(asked.size(), 1);
         QCOMPARE(b.sync->state(), SyncController::WaitingForApproval);
+    }
+
+    void approvalIsNotifiedOnlyWhileTheWindowIsHidden()
+    {
+        server->deviceLimit = 3;
+        Device a(*server);
+        Device b(*server);
+        Device c(*server);
+        FakeNotifier notifier;
+        bool windowVisible = true;
+        a.sync->attachNotifier(&notifier, [&windowVisible]() { return windowVisible; });
+        signInFirst(a);
+
+        // On screen: the window asks by itself, no notification.
+        b.sync->signIn(QStringLiteral("Laptop"));
+        QTRY_VERIFY(!b.sync->userCode().isEmpty());
+        QVERIFY(server->approve(b.sync->userCode(), kUser).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.sync->verificationCode().isEmpty());
+        QSignalSpy asked(a.sync.get(), &SyncController::approvalRequested);
+        a.sync->syncNow();
+        QVERIFY(asked.wait(5000));
+        QVERIFY(notifier.shown.isEmpty());
+        a.sync->ignoreDevice(b.account()->deviceId());
+
+        // Hidden: a notification names the device; a click asks for the Sync page.
+        windowVisible = false;
+        c.sync->signIn(QStringLiteral("Desktop"));
+        QTRY_VERIFY(!c.sync->userCode().isEmpty());
+        QVERIFY(server->approve(c.sync->userCode(), kUser).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!c.sync->verificationCode().isEmpty());
+        a.sync->syncNow();
+        QVERIFY(asked.wait(5000));
+        QCOMPARE(notifier.shown.size(), 1);
+        QVERIFY(notifier.last().text.contains(QStringLiteral("Desktop")));
+        // Nothing secret in it: the code is compared in the window.
+        QVERIFY(!notifier.last().text.contains(c.sync->verificationCode()));
+        QVERIFY(!notifier.last().title.contains(c.sync->verificationCode()));
+        QVERIFY(notifier.last().defaultAction);
+        QSignalSpy showPage(a.sync.get(), &SyncController::showSyncPageRequested);
+        notifier.last().defaultAction(QStringLiteral("token"));
+        QCOMPARE(showPage.size(), 1);
+        QCOMPARE(showPage.first().first().toString(), QStringLiteral("token"));
+        QVERIFY(notifier.invoke(notifier.actionLabels().value(0)));
+        QCOMPARE(showPage.size(), 2);
+
+        // Detached: no more notifications.
+        a.sync->attachNotifier(nullptr, {});
+        a.sync->ignoreDevice(c.account()->deviceId());
+        QCOMPARE(notifier.shown.size(), 1);
     }
 
     void signOutStopsSyncing()
