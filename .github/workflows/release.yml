@@ -65,9 +65,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            appstream cmake ninja-build g++ dbus-daemon \
+            appstream cmake ninja-build g++ dbus-daemon dbus-bin \
             qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
-            qt6-svg-plugins libqt6sql6-sqlite extra-cmake-modules
+            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
@@ -171,8 +171,11 @@ jobs:
           fi
           cat stable.json
 
-      # The feed last: it must never announce a file that is not there yet. The release is the
-      # "latest" one, so releases/latest/download/stable.json points to it.
+      # The feed must never announce a file that is not there, nor be missing. A new release gets
+      # it with the other assets: gh creates the release as a draft, uploads everything, then
+      # publishes it, so the files and the feed appear together. The release is the "latest" one,
+      # so releases/latest/download/stable.json points to it. A re-run removes the feed first (the
+      # rebuilt files have other checksums) and puts it back last.
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -184,14 +187,16 @@ jobs:
           if [ -f Sugo-macOS-universal.dmg ]; then
             assets+=(Sugo-macOS-universal.dmg)
             cat > notes.md <<'EOF'
-          **macOS** (13 or later, Apple Silicon or Intel): open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS reports new versions but does not install them.
+          **macOS** (13 or later, Apple Silicon or Intel): open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS installs its updates by itself when it is in a folder it can write to (Applications for an administrator).
           EOF
           fi
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME already exists, updating its assets..."
+            # Missing on a release whose earlier run failed before the feed: nothing to remove then.
+            gh release delete-asset "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
             gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release upload "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --clobber
           else
             echo "Creating release $GITHUB_REF_NAME..."
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --title "Sugo $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --latest
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" stable.json --repo "$GITHUB_REPOSITORY" --title "Sugo $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --latest
           fi
-          gh release upload "$GITHUB_REF_NAME" stable.json --repo "$GITHUB_REPOSITORY" --clobber
