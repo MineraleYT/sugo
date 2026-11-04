@@ -46,6 +46,8 @@ public:
 
     /// Replaces the clock (local time) used for "older than" cut-offs; for tests.
     void setNowProvider(std::function<QDateTime()> provider);
+    /// Tells whether a timer is running or paused: a backup is not restored then.
+    void setTimerActiveProvider(std::function<bool()> provider);
 
     /// Tracks newly recorded sessions: keeps sessionCount current and provides lastWorkSessionId().
     void setSessionRecorder(SessionRecorder *recorder);
@@ -86,4 +88,5 @@ private:
     SessionRecorder *m_recorder = nullptr;
     PresetPersistence *m_presetPersistence = nullptr;
     std::function<QDateTime()> m_now;
+    std::function<bool()> m_timerActive;
 };

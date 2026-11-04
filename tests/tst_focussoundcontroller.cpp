@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <cstring>
 #include <memory>
 
@@ -216,6 +217,39 @@ private Q_SLOTS:
         QTest::qWait(2500); // longer than a whole fade-out
         QVERIFY(playerRunning());
         QCOMPARE(startedPlayers().size(), 1);
+    }
+
+    void theEndOfAPreviewFadesOutThePreviewSound()
+    {
+        // Not working: the end of the preview stops the player, after a fade-out.
+        sounds->preview(static_cast<int>(FocusSoundController::Mode::ClockTick), 50);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
+        QTest::qWait(300); // let it fade in a little, so there is something to fade out
+        sounds->stopPreview(); // the configured sound (white noise) does not take over
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
+
+        // A clock tick is silent but for 20 ms a second; white noise almost never is.
+        const QByteArray raw = capturedAudio();
+        const qsizetype n = raw.size() / 2;
+        QVERIFY(n > 22050);
+        const auto *samples = reinterpret_cast<const qint16 *>(raw.constData());
+        const qsizetype sounding = std::count_if(samples, samples + n, [](qint16 s) { return s != 0; });
+        QVERIFY2(sounding < n / 10, qPrintable(QStringLiteral("%1 of %2 samples not silent").arg(qlonglong(sounding)).arg(qlonglong(n))));
+    }
+
+    void theEndOfAPreviewKeepsItsVolume()
+    {
+        sounds->preview(static_cast<int>(FocusSoundController::Mode::WhiteNoise), 10);
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
+        QTest::qWait(1000); // well into the fade-in
+        sounds->setVolume(100); // the setting changes during the preview
+        sounds->stopPreview();
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
+
+        // White noise at 10 % never goes past half of a tenth of full scale.
+        const QByteArray raw = capturedAudio();
+        QVERIFY(raw.size() > 0);
+        QVERIFY(loudest(raw, 0, raw.size() / 2) <= 1700);
     }
 
     void soundFadesInFromSilence()

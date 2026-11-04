@@ -197,6 +197,54 @@ private Q_SLOTS:
 #endif
         QVERIFY(DesktopStyle::shortcutText(QString()).isEmpty());
     }
+
+    // A maximised window minimised to the taskbar or the Dock comes back maximised.
+    void showRestoredKeepsTheMaximisedState()
+    {
+        QWindow window;
+        window.setWindowStates(Qt::WindowMaximized | Qt::WindowMinimized);
+        DesktopStyle::showRestored(&window);
+        QVERIFY(window.isVisible());
+        QVERIFY(!(window.windowStates() & Qt::WindowMinimized));
+        if (!platformKeeps(Qt::WindowMaximized)) {
+            QSKIP("this platform (offscreen) does not keep a window maximised");
+        }
+        QCOMPARE(window.windowStates(), Qt::WindowStates(Qt::WindowMaximized));
+    }
+
+    void showRestoredBringsBackAMinimisedWindow()
+    {
+        QWindow window;
+        window.setWindowStates(Qt::WindowMinimized);
+        DesktopStyle::showRestored(&window);
+        QVERIFY(window.isVisible());
+        QCOMPARE(window.windowStates(), Qt::WindowStates(Qt::WindowNoState));
+    }
+
+    void showRestoredLeavesAShownWindowAsItIs()
+    {
+        QWindow window;
+        window.setWindowStates(Qt::WindowFullScreen);
+        window.show();
+        DesktopStyle::showRestored(&window);
+        QVERIFY(window.isVisible());
+        QVERIFY(!(window.windowStates() & Qt::WindowMinimized));
+        if (!platformKeeps(Qt::WindowFullScreen)) {
+            QSKIP("this platform (offscreen) does not keep a window full screen");
+        }
+        QCOMPARE(window.windowStates(), Qt::WindowStates(Qt::WindowFullScreen));
+        DesktopStyle::showRestored(nullptr);
+    }
+
+private:
+    /// Whether a shown window keeps `state` on this platform (offscreen reports none of them).
+    static bool platformKeeps(Qt::WindowState state)
+    {
+        QWindow probe;
+        probe.setWindowStates(state);
+        probe.show();
+        return probe.windowStates() & state;
+    }
 };
 
 QTEST_MAIN(DesktopStyleTest)

@@ -159,6 +159,64 @@ private Q_SLOTS:
                  QStringLiteral("Persisted preset"));
     }
 
+    void restoreTakesTheWriteAheadLogAlong()
+    {
+        // A copy of a database in use, as Sugo leaves it: the newest sessions are only in its -wal file.
+        QTemporaryDir elsewhere;
+        QVERIFY(elsewhere.isValid());
+        const QString sourcePath = elsewhere.filePath(QStringLiteral("source.db"));
+        const QString copiedPath = elsewhere.filePath(QStringLiteral("copied.db"));
+        const QString wal = QStringLiteral("-wal");
+        {
+            Database source(sourcePath);
+            QVERIFY(source.open());
+        } // closing it folds the schema into the file
+        {
+            Database source(sourcePath);
+            QVERIFY(source.open());
+            SessionRepository sourceSessions(source.connectionName());
+            for (int i = 0; i < 3; ++i) {
+                QVERIFY(sourceSessions.insert(sampleRecord(QStringLiteral("In the log %1").arg(i))));
+            }
+            QVERIFY(QFileInfo(sourcePath + wal).size() > 0);
+            QVERIFY(QFile::copy(sourcePath, copiedPath));
+            QVERIFY(QFile::copy(sourcePath + wal, copiedPath + wal));
+        }
+        QVERIFY(sessions->insert(sampleRecord(QStringLiteral("Current"))));
+
+        QSignalSpy succeeded(manager.get(), &DataManager::operationSucceeded);
+        QVERIFY(manager->restoreDatabase(QUrl::fromLocalFile(copiedPath)));
+        QCOMPARE(succeeded.count(), 1);
+        QCOMPARE(manager->sessionCount(), 3);
+        QCOMPARE(sessions->between(0, 2000).first().presetName, QStringLiteral("In the log 0"));
+        // The user's files are left as they were.
+        QVERIFY(QFile::exists(copiedPath + wal));
+        QVERIFY(!QFile::exists(copiedPath + QStringLiteral("-shm")));
+    }
+
+    void restoreWaitsForTheTimerToStop()
+    {
+        QVERIFY(sessions->insert(sampleRecord(QStringLiteral("In the backup"))));
+        const QUrl backup = QUrl::fromLocalFile(dir.filePath(QStringLiteral("backup.db")));
+        QVERIFY(manager->backupDatabase(backup));
+        QVERIFY(manager->clearHistory());
+
+        FakeClock clock;
+        TimerEngine engine(&clock, nullptr);
+        manager->setTimerActiveProvider([&engine]() { return engine.isActive(); });
+        engine.start();
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QVERIFY(!manager->restoreDatabase(backup));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(failed.first().first().toString(), i18n("Stop the active timer before restoring a backup."));
+        QCOMPARE(manager->sessionCount(), 0);
+
+        engine.stop();
+        QVERIFY(manager->restoreDatabase(backup));
+        QCOMPARE(manager->sessionCount(), 1);
+        manager->setTimerActiveProvider(nullptr);
+    }
+
     void invalidBackupAndActiveDatabaseAreRejectedWithoutDataLoss()
     {
         SessionRecord record;
@@ -263,6 +321,26 @@ private Q_SLOTS:
 
         manager->setSessionRecorder(nullptr);
         QCOMPARE(manager->lastWorkSessionId(), -1);
+    }
+
+    void noteForAMissingSessionChangesNothing()
+    {
+        SessionRecord record;
+        record.startedAtMs = 1000;
+        record.endedAtMs = 1600;
+        record.durationSec = 600;
+        record.plannedSec = 1500;
+        record.completed = true;
+        qint64 id = 0;
+        QVERIFY(sessions->insert(record, &id));
+        QVERIFY(manager->clearHistory());
+
+        QSignalSpy changed(manager.get(), &DataManager::dataChanged);
+        QSignalSpy noteChanged(manager.get(), &DataManager::sessionNoteChanged);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("there is no session")));
+        QVERIFY(!manager->updateSessionNote(id, QStringLiteral("Lost")));
+        QCOMPARE(changed.count(), 0);
+        QCOMPARE(noteChanged.count(), 0);
     }
 
     void saveFailuresAreReportedUntilTheyAreStored()

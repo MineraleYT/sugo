@@ -19,6 +19,7 @@
 #include "PresetModel.h"
 #include "PresetSettings.h"
 #include "Settings.h"
+#include "SilenceController.h"
 #include "TimerEngine.h"
 
 /// The end-of-phase announcement depends on the desktop handing notifications back
@@ -252,6 +253,38 @@ private Q_SLOTS:
         QVERIFY(notifications->invoke(QStringLiteral("Pause Break")));
         QVERIFY(engine->isPaused());
         QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
+    }
+
+    void anAutoStartedWorkPhaseIsAnnouncedBeforeItSilences()
+    {
+        // The real order: SilenceController is wired before the notifier (src/main.cpp).
+        notifier.reset();
+        SilenceController silence;
+        silence.attach(engine.get(), presets.get(), inhibitor.get());
+        notifier = std::make_unique<PhaseNotifier>(engine.get(), presets.get(), inhibitor.get(), notifications.get());
+        notifier->setReleaseTimeoutMs(300);
+
+        const QString uuid = useTimer();
+        QVERIFY(presets->setOption(uuid, PresetOption::SilenceWhileWorking, true));
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        endWork(); // the break auto-starts: released, then announced
+        QVERIFY(!inhibitor->isInhibited());
+        QCOMPARE(notifications->shown.size(), 1);
+
+        inhibitor->calls.clear();
+        clock.advanceSeconds(5 * 60);
+        engine->refresh(); // the break ends, Work auto-starts
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        // Announced at once, while nothing is silenced yet: the desktop shows it.
+        QCOMPARE(notifications->shown.size(), 2);
+        QCOMPARE(notifications->last().title, QStringLiteral("Break is over"));
+        QCOMPARE(notifications->last().text, QStringLiteral("Work session started."));
+        QVERIFY(inhibitor->calls.isEmpty());
+        // Then the work phase is silenced as usual.
+        QTRY_VERIFY(inhibitor->isInhibited());
+        QCOMPARE(inhibitor->calls, QStringList{QStringLiteral("inhibit")});
+        QVERIFY(silence.active());
+        notifier.reset(); // before the local controller goes
     }
 
     void actionsOfAnOutdatedNotificationDoNothing()

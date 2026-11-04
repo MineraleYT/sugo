@@ -267,6 +267,12 @@ private Q_SLOTS:
         QVERIFY(redacted.contains(QStringLiteral("/remote.php/dav/calendars/")));
         Diagnostics::setAccountRedactions({});
         QVERIFY(Diagnostics::redact(QStringLiteral("cloud.example.org")).contains(QStringLiteral("cloud.example.org")));
+
+        // An account word is redacted only where it stands on its own, in any case.
+        Diagnostics::setAccountRedactions({QStringLiteral("tim")});
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Timer for tim started")), QStringLiteral("Timer for <account> started"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Tim: login failed")), QStringLiteral("<account>: login failed"));
+        Diagnostics::setAccountRedactions({});
     }
 
     void testExportRejectsNonLocalUrls()

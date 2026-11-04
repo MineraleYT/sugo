@@ -58,6 +58,7 @@
 #include "ScreenLockWatcher.h"
 #include "Diagnostics.h"
 #include "CalendarSync.h"
+#include "DesktopStyle.h"
 #include "ThemeIcons.h"
 #include "UpdateChecker.h"
 
@@ -81,7 +82,8 @@ namespace
  *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
  *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
  *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
- *   so this also covers the menu bar icon's Quit. The running phase is then saved as
+ *   so this also covers the window's own Quit (requestQuit(), which the menu bar icon's Quit
+ *   calls too), once it has asked. The running phase is then saved as
  *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
  * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
  *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
@@ -207,6 +209,19 @@ int main(int argc, char *argv[])
 #else
     SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
     using AppSingleInstance = SingleInstance;
+
+    // The D-Bus objects of global shortcuts, scripts and KRunner are registered before the name is
+    // taken: a call that starts Sugo by D-Bus activation is delivered as soon as the name is ours,
+    // and must find its object (else: UnknownObject). It waits in the event queue until
+    // app.exec(); by then the objects are attached to the timer (below). Declared here, they
+    // outlive the engine: they are unregistered and detached right after app.exec(). (A second
+    // launch registers them too, on its own connection, which nobody calls, then exits.)
+    TimerDBusObject timerDBusObject;
+    auto *dbusTimer = new DBusTimerService(nullptr, nullptr, &timerDBusObject);
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), &timerDBusObject, QDBusConnection::ExportAdaptors);
+    KRunnerService krunnerService(nullptr, nullptr);
+    auto *krunner = &krunnerService;
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
 #endif
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
@@ -246,6 +261,9 @@ int main(int argc, char *argv[])
     SessionRepository sessionRepository(database->connectionName());
     const auto inhibitor = createNotificationInhibitor();
 
+    // QML warnings of a smoke run, counted by a handler of the engine: declared before it, so
+    // the handler's reference stays valid while the engine and its window are destroyed.
+    int smokeWarnings = 0;
     QQmlApplicationEngine engine;
     QObject services; // parent of the C++ helpers below; destroyed before the engine
     // i18n() and friends for the QML files.
@@ -266,7 +284,6 @@ int main(int argc, char *argv[])
     // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
-    int smokeWarnings = 0;
     if (smokeTest) {
         // Any QML warning (a failed binding, an undefined property...) fails the smoke test.
         QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app, [&smokeWarnings](const QList<QQmlError> &warnings) {
@@ -319,13 +336,10 @@ int main(int argc, char *argv[])
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
 #ifndef Q_OS_MACOS
-    auto *timerDBusObject = new TimerDBusObject(timer);
-    auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
-    auto *krunner = new KRunnerService(timer, presets, &services);
+    dbusTimer->attach(timer, presets);
     krunner->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
+    krunner->attach(timer, presets);
 #endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
@@ -339,6 +353,7 @@ int main(int argc, char *argv[])
     dataManager->setMovedAsideDatabase(movedAsidePath, movedAsideWasCorrupt);
     dataManager->setSessionRecorder(recorder);
     dataManager->setPresetPersistence(presetPersistence);
+    dataManager->setTimerActiveProvider([timer]() { return timer->isActive(); });
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
     // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
@@ -449,10 +464,8 @@ int main(int argc, char *argv[])
             // requestActivate() alone would leave the window behind the active application.
             macActivateApp();
 #endif
-            window->show();
-            if (window->windowStates() & Qt::WindowMinimized) {
-                window->showNormal();
-            }
+            // Back from the taskbar or the Dock as it was: a maximised window stays maximised.
+            DesktopStyle::showRestored(window);
             window->raise();
             window->requestActivate();
         };
@@ -501,6 +514,15 @@ int main(int argc, char *argv[])
             QMetaObject::invokeMethod(window, "openPage", Q_ARG(QString, page));
         });
 
+        // The tray menu's Quit: the window's own, which asks first while a phase runs; the window
+        // comes to the front then, so the question is seen.
+        QObject::connect(tray, &TrayController::quitRequested, window, [window, timer, activateWindow]() {
+            if (timer->isActive()) {
+                activateWindow();
+            }
+            QMetaObject::invokeMethod(window, "requestQuit");
+        });
+
         // A click on a notification with nothing more specific to do.
         QObject::connect(notifier, &PhaseNotifier::showWindowRequested, window, activateWindow);
 
@@ -511,16 +533,22 @@ int main(int argc, char *argv[])
                              QMetaObject::invokeMethod(window, "openTaskNotePrompt", Q_ARG(QVariant, presetName),
                                                        Q_ARG(QVariant, sessionId));
                          });
+    } else {
+        // No window to ask from.
+        QObject::connect(tray, &TrayController::quitRequested, &app, &QCoreApplication::quit);
     }
 
     const int status = app.exec();
 
-    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
-    // is an engine singleton, the runner a child of `services`), then the context properties
+    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects, which
+    // outlive the timer (an engine singleton) and so let go of it too, in case a call already
+    // queued for them is still delivered; then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
 #ifndef Q_OS_MACOS
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
+    krunner->attach(nullptr, nullptr);
+    dbusTimer->attach(nullptr, nullptr);
 #endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));

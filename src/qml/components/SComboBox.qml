@@ -82,7 +82,7 @@ QQC2.ComboBox {
             QQC2.ScrollIndicator.vertical: QQC2.ScrollIndicator {}
         }
         background: Rectangle {
-            radius: Theme.radius + 2
+            radius: Theme.radiusMd
             color: Theme.raised
             border.width: Theme.hairline
             border.color: Theme.borderStrong

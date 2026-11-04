@@ -132,7 +132,7 @@ QtObject {
         };
         if (!Diagnostics.saveInventory(JSON.stringify(report, null, 1))) {
             console.error("Cannot save the inventory: is SUGO_INVENTORY set?");
-            Qt.exit(48);
+            Qt.exit(54);
         }
         return true;
     }

@@ -219,6 +219,24 @@ private Q_SLOTS:
         QCOMPARE(presets->currentUuid(), other);
         QVERIFY(reading->isChecked());
     }
+
+    void menuKeepsTheTimerWhileAPhaseRuns()
+    {
+        const QString current = presets->currentUuid();
+        presets->create({{QStringLiteral("name"), QStringLiteral("Reading")}});
+        QCOMPARE(presets->currentUuid(), current);
+        QAction *timers = actionNamed(dock->menu(), QStringLiteral("Timer"));
+        QAction *reading = actionNamed(timers->menu(), QStringLiteral("Reading"));
+        QVERIFY(reading);
+
+        engine->start();
+        QVERIFY(!timers->isEnabled());
+        // A copy of the menu shown before the start can still trigger the entry itself.
+        reading->trigger();
+        QCOMPARE(presets->currentUuid(), current);
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(!reading->isChecked());
+    }
 };
 
 QTEST_MAIN(DockControllerTest)

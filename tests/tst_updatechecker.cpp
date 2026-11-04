@@ -12,7 +12,10 @@
 
 #include <memory>
 
+#include "AppSettings.h"
+#include "Autostart.h"
 #include "MacBundle.h"
+#include "Settings.h"
 #include "UpdateChecker.h"
 #include "UpdateInstaller.h"
 
@@ -308,6 +311,13 @@ private Q_SLOTS:
         QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.0.2")));
         QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.1.0-rc.1+build5")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("latest")));
+        // Empty pre-release or build identifiers would compare as the release itself.
+        QVERIFY(UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.1-nightly.20261031.42")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-.")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-rc..1")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0-rc.")));
+        QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("1.0.0+.")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.0 <b>click here</b>")));
         QVERIFY(!UpdateChecker::isPlausibleVersionTag(QStringLiteral("v1.") + QString(200, QLatin1Char('1'))));
     }
@@ -322,6 +332,17 @@ private Q_SLOTS:
         QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.1.0-rc.1"), QStringLiteral("1.1.0-rc.1.1")), -1);
         QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.1.0-rc1"), QStringLiteral("1.1.0-rc1")), 0);
         QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.1.0+build5"), QStringLiteral("1.1.0")), 0);
+    }
+
+    void preReleasesDifferingInCaseCompareOneWay()
+    {
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rcA"), QStringLiteral("1.0.0-rca")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rca"), QStringLiteral("1.0.0-rcA")), 1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-RC.1"), QStringLiteral("1.0.0-rc.1")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rc.1"), QStringLiteral("1.0.0-RC.1")), 1);
+        // Otherwise letters still compare regardless of case.
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-Beta"), QStringLiteral("1.0.0-rc1")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rc1"), QStringLiteral("1.0.0-Beta")), 1);
     }
 
     void releaseUrlMustPointIntoTheProjectOnGitHub()
@@ -367,6 +388,24 @@ private Q_SLOTS:
         UpdateChecker missing;
         missing.setAppImagePathForTesting(release.dir.filePath(QStringLiteral("gone.AppImage")));
         QVERIFY(!missing.canInstall());
+    }
+
+    void readOnlyAppImageIsNotInstalled()
+    {
+        // QSaveFile would refuse to replace it, in a folder it can write to or not: no "Install".
+        LocalRelease release;
+        QVERIFY(QFile::setPermissions(release.appImage, QFileDevice::ReadOwner | QFileDevice::ExeOwner | QFileDevice::ReadGroup
+                                                            | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::ExeOther));
+        if (QFileInfo(release.appImage).isWritable()) {
+            QSKIP("Running as a user who can write to any file (root)");
+        }
+        QVERIFY(QFileInfo(release.dir.path()).isWritable());
+        UpdateChecker checker;
+        checker.setAppImagePathForTesting(release.appImage);
+        QVERIFY(!checker.canInstall());
+        checker.setChannel(QStringLiteral("nightly"));
+        QCOMPARE(checker.channel(), QStringLiteral("stable"));
+        QVERIFY(!AppImageInstaller(release.appImage).canInstall());
     }
 
     void sameOrOlderFeedIsUpToDate()
@@ -477,6 +516,46 @@ private Q_SLOTS:
         QCOMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
         QCOMPARE(readFile(release.appImage), release.oldContent);
         QVERIFY(release.leftovers().isEmpty());
+        qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
+    void periodicCheckRefreshesAFoundUpdate()
+    {
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.setAutoCheck(true);
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.0"));
+
+        // The update stays offered while the feed is read again, and a newer one replaces it.
+        QList<UpdateChecker::Status> seen;
+        connect(&checker, &UpdateChecker::statusChanged, &checker, [&]() {
+            seen.append(checker.status());
+        });
+        release.announce(QStringLiteral("2.0.1"));
+        checker.scheduleChecksForTesting(50, 50);
+        QTRY_COMPARE(checker.latestVersion(), QStringLiteral("2.0.1"));
+        QCOMPARE(checker.releaseUrl(), QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v2.0.1"));
+        QVERIFY(checker.isInstallable());
+
+        // A feed that cannot be read keeps what was found.
+        writeFile(release.feed, QByteArrayLiteral("not json"));
+        QTest::qWait(300);
+        QCOMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.1"));
+        QVERIFY(checker.isInstallable());
+        QVERIFY(checker.errorMessage().isEmpty());
+        for (const UpdateChecker::Status status : std::as_const(seen)) {
+            QCOMPARE(status, UpdateChecker::Status::UpdateAvailable);
+        }
+        QCOMPARE(readFile(release.appImage), release.oldContent); // never downloaded unasked
+
+        checker.installUpdate();
+        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::ReadyToRestart, 10000);
+        QCOMPARE(readFile(release.appImage), release.newContent);
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 
@@ -808,6 +887,58 @@ private Q_SLOTS:
         QTest::qWait(300); // the aborted reply finishes but must not change anything
         QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
         QVERIFY(checker.errorMessage().isEmpty());
+    }
+
+    void switchingChannelDropsWhatTheOldOneFound()
+    {
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        release.announce(QStringLiteral("1.0.1-nightly.20261031.42"));
+        QTemporaryDir configDir;
+        AppSettings settings(Settings::open(configDir.filePath(QStringLiteral("settings.conf"))), nullptr, false);
+        settings.setAutoCheckUpdates(false);
+        settings.setUpdateChannel(QStringLiteral("nightly"));
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.attach(&settings);
+        QCOMPARE(checker.channel(), QStringLiteral("nightly"));
+
+        // A check by hand finds a nightly; back on stable, it is no longer offered.
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QVERIFY(checker.isInstallable());
+        settings.setUpdateChannel(QStringLiteral("stable"));
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QVERIFY(!checker.isInstallable());
+        checker.installUpdate();
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QTest::qWait(300); // and no automatic check either
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QCOMPARE(readFile(release.appImage), release.oldContent);
+
+        // Its download is given up.
+        settings.setUpdateChannel(QStringLiteral("nightly"));
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        checker.installUpdate();
+        QCOMPARE(checker.status(), UpdateChecker::Status::Downloading);
+        settings.setUpdateChannel(QStringLiteral("stable"));
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QTest::qWait(300);
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QCOMPARE(readFile(release.appImage), release.oldContent);
+        QVERIFY2(release.leftovers().isEmpty(), qPrintable(release.leftovers().join(QLatin1Char(' '))));
+
+        // So is the answer of a check still running on the old channel.
+        settings.setUpdateChannel(QStringLiteral("nightly"));
+        checker.checkForUpdates();
+        QCOMPARE(checker.status(), UpdateChecker::Status::Checking);
+        settings.setUpdateChannel(QStringLiteral("stable"));
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QTest::qWait(300);
+        QCOMPARE(checker.status(), UpdateChecker::Status::Idle);
+        QVERIFY(checker.latestVersion().isEmpty());
+        qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 };
 

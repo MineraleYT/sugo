@@ -35,7 +35,8 @@ public:
     /// Returns false (and logs) on failure. On success `insertedId` (if given) receives the row id.
     bool insert(const SessionRecord &record, qint64 *insertedId = nullptr);
 
-    /// Updates the task note for an existing session.
+    /// Updates the task note for an existing session. Returns false (and logs) on failure or
+    /// when there is no session with that id.
     bool updateNote(qint64 sessionId, const QString &note);
 
     /// Recent unique non-empty task notes (trimmed), most recently used first.

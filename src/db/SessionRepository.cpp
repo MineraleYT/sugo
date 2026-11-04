@@ -90,6 +90,11 @@ bool SessionRepository::updateNote(qint64 sessionId, const QString &note)
         qCWarning(lcSessionRepo) << "Cannot update session note:" << query.lastError().text();
         return false;
     }
+    // No such session (e.g. the history was cleared since): the note has nowhere to go.
+    if (query.numRowsAffected() < 1) {
+        qCWarning(lcSessionRepo) << "Cannot update session note: there is no session" << sessionId;
+        return false;
+    }
     return true;
 }
 
