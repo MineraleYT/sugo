@@ -169,11 +169,16 @@ Rectangle {
             Layout.bottomMargin: Theme.spaceXs
         }
 
+        // The one part that gives way when the column is short: as tall as its rows, but it
+        // shrinks (down to two rows, then scrolls) so that what follows stays in the window,
+        // whatever else is shown (window buttons, the update entry, macOS's title strip).
         ListView {
             id: timerList
             Layout.fillWidth: true
+            Layout.fillHeight: true
             Layout.preferredHeight: contentHeight
-            Layout.maximumHeight: Math.max(Theme.navHeight * 3, sidebar.height - Theme.navHeight * 9)
+            Layout.maximumHeight: contentHeight
+            Layout.minimumHeight: Math.min(contentHeight, Theme.navHeight * 2 + spacing)
             clip: true
             model: PresetModel
             spacing: Theme.hairline * 2
