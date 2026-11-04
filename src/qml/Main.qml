@@ -1220,6 +1220,14 @@ QQC2.ApplicationWindow {
         }
     }
 
+    // Sugo Sync: what happened, once, in a toast (the Sync tab shows how things stand).
+    Connections {
+        target: SyncController
+        function onMessage(text) {
+            root.showPassiveNotification(text, "long");
+        }
+    }
+
     ConfirmDialog {
         id: screenLockResumeDialog
         title: ScreenLockWatcher.pausedBySleep ? i18n("Welcome Back") : i18n("Screen Unlocked")
