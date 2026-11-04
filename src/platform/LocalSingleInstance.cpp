@@ -55,6 +55,12 @@ LocalSingleInstance::~LocalSingleInstance()
 
 QString LocalSingleInstance::defaultDirectory()
 {
+    // An isolated run (tests, SUGO_DATA_DIR) is an instance of its own: it must not hand over to
+    // the Sugo the user is running.
+    const QString dataDir = qEnvironmentVariable("SUGO_DATA_DIR");
+    if (!dataDir.isEmpty()) {
+        return dataDir;
+    }
 #ifdef Q_OS_MACOS
     return QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
 #else
