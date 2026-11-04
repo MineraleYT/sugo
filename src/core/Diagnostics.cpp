@@ -170,10 +170,11 @@ QString Diagnostics::recentLogs() const
 
 namespace
 {
+// Leaked like the buffer: redact() runs from the message handler, also during static destruction.
 QStringList &accountRedactions()
 {
-    static QStringList words;
-    return words;
+    static auto *words = new QStringList;
+    return *words;
 }
 } // namespace
 
@@ -195,12 +196,15 @@ QString Diagnostics::redact(const QString &text)
 
     // 0. Secrets first: Authorization headers, user:password@host in URLs, password/token
     // assignments (the calendar sync keeps an app password; none of it may leave in a report).
-    static const QRegularExpression authHeaderRegex(QStringLiteral(R"((authorization\s*[:=]\s*)[^\r\n]*)"),
-                                                    QRegularExpression::CaseInsensitiveOption);
+    // The expressions are never destroyed: the message handler calls this function, and Qt can
+    // still print a message after function-local statics are destroyed at exit.
+    static const QRegularExpression &authHeaderRegex = *new QRegularExpression(
+        QStringLiteral(R"((authorization\s*[:=]\s*)[^\r\n]*)"), QRegularExpression::CaseInsensitiveOption);
     result.replace(authHeaderRegex, QStringLiteral("\\1<redacted>"));
-    static const QRegularExpression urlCredentialsRegex(QStringLiteral(R"(\b([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@)"));
+    static const QRegularExpression &urlCredentialsRegex =
+        *new QRegularExpression(QStringLiteral(R"(\b([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@)"));
     result.replace(urlCredentialsRegex, QStringLiteral("\\1<redacted>@"));
-    static const QRegularExpression secretAssignmentRegex(
+    static const QRegularExpression &secretAssignmentRegex = *new QRegularExpression(
         // A quoted value up to its closing quote; an unquoted one up to the end of the line or a
         // query-string '&' (a password may contain spaces, so a space does not end it).
         QStringLiteral(R"re(("?\b(?:app[_-]?password|password|passwd|secret|token)"?\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\r\n&]+))re"),
@@ -226,11 +230,12 @@ QString Diagnostics::redact(const QString &text)
     }
 
     // 2. Redact /home/<username> and /var/home/<username> (Fedora Silverblue/Kinoite) of anyone
-    static const QRegularExpression homeUserRegex(QStringLiteral(R"((/(?:var/)?home/)[^/\s'"]+)"));
+    static const QRegularExpression &homeUserRegex = *new QRegularExpression(QStringLiteral(R"((/(?:var/)?home/)[^/\s'"]+)"));
     result.replace(homeUserRegex, QStringLiteral("\\1<user>"));
 
     // 3. Redact the user part of user@host (shell prompts, ssh, e-mail addresses)
-    static const QRegularExpression userAtHostRegex(QStringLiteral(R"([A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*))"));
+    static const QRegularExpression &userAtHostRegex =
+        *new QRegularExpression(QStringLiteral(R"([A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*))"));
     result.replace(userAtHostRegex, QStringLiteral("<user>@\\1"));
 
     // 4. Redact the current user name wherever it stands as a word of its own
