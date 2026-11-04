@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QTest>
+#include <QTimeZone>
 
 #include "Localization.h"
 
@@ -28,6 +30,59 @@ private Q_SLOTS:
     void init()
     {
         model = std::make_unique<PresetModel>();
+    }
+
+    void editsAreStampedWithTheWallClock()
+    {
+        qint64 now = 1762300000000;
+        model->setNowProvider([&now] { return QDateTime::fromMSecsSinceEpoch(now, QTimeZone::UTC); });
+
+        // The built-in timer as shipped: the same, unstamped, on every computer.
+        QCOMPARE(model->presets().at(0).createdAt, 0);
+        QCOMPARE(model->presets().at(0).updatedAt, 0);
+
+        const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("A")}});
+        const auto stored = [this](const QString &id) { return model->presets().at(model->indexOf(id)); };
+        QCOMPARE(stored(uuid).createdAt, now);
+        QCOMPARE(stored(uuid).updatedAt, now);
+
+        now += 1000;
+        QVERIFY(model->update(uuid, {{QStringLiteral("name"), QStringLiteral("A")}})); // nothing changes
+        QCOMPARE(stored(uuid).updatedAt, now - 1000);
+        QVERIFY(model->update(uuid, {{QStringLiteral("workSeconds"), 600}}));
+        QCOMPARE(stored(uuid).updatedAt, now);
+        QCOMPARE(stored(uuid).createdAt, now - 1000);
+
+        now += 1000;
+        QVERIFY(model->setOption(uuid, PresetOption::NotifyOnEnd, false));
+        QCOMPARE(stored(uuid).updatedAt, now);
+        now += 1000;
+        QVERIFY(model->setOption(uuid, PresetOption::NotifyOnEnd, false)); // the same value again
+        QCOMPARE(stored(uuid).updatedAt, now - 1000);
+
+        now += 1000;
+        const QString copy = model->duplicate(uuid);
+        QCOMPARE(stored(copy).createdAt, now);
+        QCOMPARE(stored(copy).updatedAt, now);
+
+        now += 1000;
+        QVERIFY(model->reset(PresetModel::DefaultUuid));
+        QCOMPARE(stored(PresetModel::DefaultUuid).updatedAt, now); // a reset reaches other computers
+        QCOMPARE(stored(PresetModel::DefaultUuid).createdAt, 0);
+    }
+
+    void anEditHereClearsTheAuthor()
+    {
+        TimerPreset received;
+        received.uuid = QStringLiteral("r");
+        received.name = QStringLiteral("From elsewhere");
+        received.updatedAt = 5;
+        received.updatedBy = QStringLiteral("dev_other");
+        model->setPresets({received}, received.uuid);
+        QCOMPARE(model->presets().at(model->indexOf(received.uuid)).updatedBy, QStringLiteral("dev_other"));
+
+        QVERIFY(model->update(received.uuid, {{QStringLiteral("name"), QStringLiteral("Mine now")}}));
+        QCOMPARE(model->presets().at(model->indexOf(received.uuid)).updatedBy, QString());
     }
 
     void defaultPresetIsPresentAndCurrent()

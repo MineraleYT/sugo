@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTest>
+#include <QTimeZone>
 
 #include "Localization.h"
 
@@ -108,6 +110,89 @@ private Q_SLOTS:
         QCOMPARE(p.cyclesBeforeLong, 2);
         QCOMPARE(p.options, custom.options);
         QCOMPARE(p.options.value(PresetOption::SilenceWhileWorking).typeId(), QMetaType::Bool);
+    }
+
+    void timesAndAuthorRoundTrip()
+    {
+        TimerPreset custom = makePreset(QStringLiteral("u1"), QStringLiteral("Synced"));
+        custom.createdAt = 1762250000123;
+        custom.updatedAt = 1762251234567;
+        custom.updatedBy = QStringLiteral("dev_other");
+        QVERIFY(repo->saveAll({builtinDefault(), custom}));
+
+        const QList<TimerPreset> loaded = repo->loadAll();
+        QCOMPARE(loaded.at(0).createdAt, 0);
+        QCOMPARE(loaded.at(0).updatedBy, QString());
+        QCOMPARE(loaded.at(1).createdAt, custom.createdAt);
+        QCOMPARE(loaded.at(1).updatedAt, custom.updatedAt);
+        QCOMPARE(loaded.at(1).updatedBy, custom.updatedBy);
+
+        custom.updatedAt += 1000;
+        custom.updatedBy.clear(); // edited here
+        QVERIFY(repo->saveAll({builtinDefault(), custom}));
+        QCOMPARE(repo->loadAll().at(1).updatedAt, custom.updatedAt);
+        QCOMPARE(repo->loadAll().at(1).updatedBy, QString());
+    }
+
+    void deletingLeavesATombstoneStampedNow()
+    {
+        const QDateTime now = QDateTime::fromMSecsSinceEpoch(1762300000000, QTimeZone::UTC);
+        repo->setNowProvider([now] { return now; });
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A")),
+                               makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        QVERIFY(repo->tombstones().isEmpty());
+
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        bool ok = false;
+        QCOMPARE(repo->tombstones(&ok), (QList<PresetTombstone>{{QStringLiteral("a"), now.toMSecsSinceEpoch(), QString()}}));
+        QVERIFY(ok);
+    }
+
+    void receivedTombstonesKeepTheirTimeAndDevice()
+    {
+        repo->setNowProvider([] { return QDateTime::fromMSecsSinceEpoch(1762300000000, QTimeZone::UTC); });
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A")),
+                               makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+
+        const PresetTombstone deletedThere{QStringLiteral("a"), 1762200000000, QStringLiteral("dev_other")};
+        const PresetTombstone neverSeenHere{QStringLiteral("z"), 1762100000000, QStringLiteral("dev_other")};
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))},
+                              {deletedThere, neverSeenHere,
+                               // Never stored: the built-in timer, and a timer that is still here.
+                               {PresetModel::DefaultUuid, 1762200000000, QStringLiteral("dev_other")},
+                               {QStringLiteral("b"), 1762200000000, QStringLiteral("dev_other")}}));
+
+        QCOMPARE(repo->tombstones(), (QList<PresetTombstone>{neverSeenHere, deletedThere}));
+        QCOMPARE(uuids(repo->loadAll()), (QStringList{PresetModel::DefaultUuid, QStringLiteral("b")}));
+
+        // Saving again without them keeps them.
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        QCOMPARE(repo->tombstones().size(), 2);
+    }
+
+    void timerThatComesBackLosesItsTombstone()
+    {
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A"))}));
+        QVERIFY(repo->saveAll({builtinDefault()}));
+        QCOMPARE(repo->tombstones().size(), 1);
+
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A again"))}));
+        QVERIFY(repo->tombstones().isEmpty());
+    }
+
+    void oldTombstonesExpire()
+    {
+        qint64 now = 1762300000000;
+        repo->setNowProvider([&now] { return QDateTime::fromMSecsSinceEpoch(now, QTimeZone::UTC); });
+        QVERIFY(repo->saveAll({builtinDefault()},
+                              {{QStringLiteral("old"), now - PresetRepository::TombstoneLifetimeMs - 1, QString()},
+                               {QStringLiteral("recent"), now - 1000, QString()}}));
+        QCOMPARE(repo->tombstones().size(), 1);
+        QCOMPARE(repo->tombstones().at(0).uuid, QStringLiteral("recent"));
+
+        now += PresetRepository::TombstoneLifetimeMs;
+        QVERIFY(repo->saveAll({builtinDefault()}));
+        QVERIFY(repo->tombstones().isEmpty());
     }
 
     void savingAgainUpdatesInPlaceAndReorders()

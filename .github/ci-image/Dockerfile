@@ -12,7 +12,7 @@ LABEL org.opencontainers.image.description="Build and test environment of Sugo's
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 
-# The build (GCC and Clang), the metadata checks, the tests (D-Bus, python3 for the platform parity
+# The build (GCC and Clang, libsodium for Sugo Sync), the metadata checks, the tests (D-Bus, python3 for the platform parity
 # check, a font for the offscreen QML runs), and what the actions need inside a container (git for
 # actions/checkout, zstd for actions/cache).
 RUN apt-get update \
@@ -20,6 +20,7 @@ RUN apt-get update \
         cmake ninja-build g++ clang ccache \
         qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
         qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules \
+        libsodium-dev pkgconf \
         appstream desktop-file-utils \
         dbus-daemon dbus-bin python3 fonts-dejavu-core \
         ca-certificates git zstd \

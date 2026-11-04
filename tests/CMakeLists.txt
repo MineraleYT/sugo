@@ -52,6 +52,10 @@ set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offs
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
 
+# Sugo Sync: no D-Bus, the same tests on Linux and macOS.
+sugo_add_test(tst_synccrypto Qt6::Core)
+sugo_add_test(tst_presetsyncformat Qt6::Core Qt6::Qml)
+
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
     COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
