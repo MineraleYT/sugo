@@ -21,7 +21,8 @@ public:
 
     std::optional<QString> read(const QString &key) override;
     bool write(const QString &key, const QString &secret) override;
-    /// The user answered "Deny" or closed the dialog (errSecAuthFailed, errSecUserCanceled).
+    /// The user refused when macOS asked: "Deny" gives errSecUserCanceled (-128, seen on macOS 27);
+    /// errSecAuthFailed (-25293) is what a refused access gives where no dialog is shown.
     bool lastReadRefused() const override { return m_lastReadRefused; }
 
     /// The OSStatus of the last call (errSecSuccess = 0), for tests and diagnostics.
