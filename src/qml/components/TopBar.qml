@@ -28,7 +28,9 @@ Rectangle {
     signal minimizeRequested()
     signal closeRequested()
 
-    implicitHeight: Theme.topBarHeight
+    // macOS: the strip of the title bar above it, with the traffic lights (0 elsewhere).
+    readonly property real titleStripHeight: DesktopStyle.nativeChrome ? bar.SafeArea.margins.top : 0
+    implicitHeight: Theme.topBarHeight + titleStripHeight
     color: Theme.background
 
     Rectangle {
@@ -65,8 +67,8 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        // On macOS the system's window buttons sit in the corner when the sidebar is hidden.
-        anchors.leftMargin: Theme.spaceLg + (DesktopStyle.nativeChrome && bar.showLeftButtons ? Theme.trafficLightsWidth : 0)
+        anchors.topMargin: bar.titleStripHeight
+        anchors.leftMargin: Theme.spaceLg
         anchors.rightMargin: Theme.spaceLg
         spacing: Theme.spaceMd
 

@@ -38,14 +38,15 @@ Rectangle {
     }
 
     // macOS: the strip of the system's title bar, with the traffic lights. The sidebar starts
-    // below it; dragging it moves the window, a double click zooms it, as in a title bar.
+    // below it, in line with the top bar (which leaves the same strip); dragging the strip moves
+    // the window, a double click zooms it, as in a title bar.
     Item {
         id: titleStrip
         visible: DesktopStyle.nativeChrome
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: Theme.topBarHeight
+        height: sidebar.SafeArea.margins.top
         DragHandler {
             target: null
             onActiveChanged: if (active) sidebar.moveRequested()
@@ -58,7 +59,7 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.spaceMd
-        anchors.topMargin: DesktopStyle.nativeChrome ? titleStrip.height : Theme.spaceMd
+        anchors.topMargin: Theme.spaceMd + (DesktopStyle.nativeChrome ? titleStrip.height : 0)
         anchors.rightMargin: Theme.spaceMd + Theme.hairline
         spacing: Theme.hairline * 2
 

@@ -13,6 +13,13 @@ QQC2.ApplicationWindow {
     // content, with its own buttons (the traffic lights), resizing, full screen and tiling.
     flags: DesktopStyle.nativeChrome ? (Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint)
                                      : (Qt.Window | Qt.FramelessWindowHint)
+    // The content fills the whole window, also under macOS' transparent title bar: by default
+    // ApplicationWindow keeps it in the safe area below it, where nothing could move the window.
+    // The top bar and the sidebar leave that strip free for the traffic lights themselves.
+    topPadding: 0
+    leftPadding: 0
+    rightPadding: 0
+    bottomPadding: 0
     readonly property bool maximized: visibility === Window.Maximized || visibility === Window.FullScreen
     readonly property bool wideScreen: width >= Theme.wideBreakpoint
 

@@ -100,9 +100,6 @@ QtObject {
     readonly property int navHeight: 34
     readonly property int sidebarWidth: 236
     readonly property int topBarHeight: 46
-    /// Room left of the top bar's content for macOS's window buttons, which the system draws over
-    /// the window's top-left corner (DesktopStyle.nativeChrome).
-    readonly property int trafficLightsWidth: 76
     readonly property int contentMaxWidth: 760
     readonly property int windowWidth: 980
     readonly property int windowHeight: 680
