@@ -66,6 +66,7 @@ private:
     QDBusConnection m_bus;
     QDBusServiceWatcher *m_watcher = nullptr;
     uint m_cookie = 0;
+    bool m_hasCookie = false;   // m_cookie is held: 0 is a valid cookie (kscreenlocker starts there)
     bool m_pending = false;     // an Inhibit call is waiting for its reply
     QPointer<QDBusPendingCallWatcher> m_pendingWatcher;
     int m_retries = 0;          // failed Inhibit calls retried since inhibition was last not wanted

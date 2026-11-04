@@ -114,12 +114,11 @@ void PowerInhibitor::sync()
         m_retries = 0;
         m_retryTimer.stop();
     }
-    if (m_wanted && m_cookie == 0 && !m_pending) {
+    if (m_wanted && !m_hasCookie && !m_pending) {
         sendInhibit();
-    } else if (!m_wanted && m_cookie != 0) {
-        const uint cookie = m_cookie;
-        m_cookie = 0;
-        sendUnInhibit(cookie);
+    } else if (!m_wanted && m_hasCookie) {
+        m_hasCookie = false;
+        sendUnInhibit(m_cookie);
     }
     // !m_wanted while a request is pending: the reply handler returns the cookie.
 #endif
@@ -164,13 +163,14 @@ void PowerInhibitor::sendInhibit()
             return;
         }
         m_cookie = cookie;
+        m_hasCookie = true;
         qCDebug(lcPowerInhibit) << "Screen sleep inhibited with cookie" << m_cookie;
     });
 }
 
 void PowerInhibitor::sendUnInhibit(uint cookie)
 {
-    if (cookie == 0 || !m_bus.isConnected()) {
+    if (!m_bus.isConnected()) {
         return;
     }
     QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kInterface, QStringLiteral("UnInhibit"));
@@ -184,7 +184,7 @@ void PowerInhibitor::onOwnerChanged(const QString &newOwner)
     // A cookie belongs to the process that issued it; the new owner does not know it.
     ++m_generation;
     m_pending = false;
-    m_cookie = 0;
+    m_hasCookie = false;
     if (!newOwner.isEmpty()) {
         sync();
     }
