@@ -280,7 +280,7 @@ int main(int argc, char *argv[])
     dataManager->setPresetPersistence(presetPersistence);
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
-    // The AppImage looks for updates by itself (when the user lets it) and installs them.
+    // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
     auto *updates = engine.singletonInstance<UpdateChecker *>("io.github.mineraleyt.sugo", "UpdateChecker");
     if (updates && !smokeTest) {
         updates->attach(settings);
@@ -426,7 +426,8 @@ int main(int argc, char *argv[])
         qCritical() << "The smoke test produced" << smokeWarnings << "QML warning(s)";
         return 30;
     }
-    // "Restart to update": the updated AppImage starts once this process has ended.
+    // "Restart to update": the updated AppImage, or the new Sugo.app put in place now, starts once
+    // this process has ended (on macOS a plain quit also puts it in place).
     if (updates) {
         updates->launchUpdated();
     }

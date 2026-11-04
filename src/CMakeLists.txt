@@ -307,3 +307,12 @@ qt_add_resources(sugo_core "sugo_macos_menu"
     PREFIX "/qt/qml/io/github/mineraleyt/sugo"
     FILES qml/components/MacMenuBar.qml
 )
+
+# --- macOS port: W2-C self-update from the disk image ---
+# Built everywhere: the macOS install steps are QProcess calls, tested on Linux with stand-ins.
+target_sources(sugo_core PRIVATE
+    core/UpdateInstaller.h
+    core/UpdateInstaller.cpp
+    platform/MacBundle.h
+    platform/MacBundle.cpp
+)

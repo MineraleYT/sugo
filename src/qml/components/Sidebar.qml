@@ -196,9 +196,9 @@ Rectangle {
             Layout.fillHeight: true
         }
 
-        // The AppImage's update, one step at a time: found, downloading, installed.
+        // The update of the AppImage or the macOS app, one step at a time: found, downloading, installed.
         NavItem {
-            readonly property bool found: UpdateChecker.canInstall && UpdateChecker.status === UpdateChecker.UpdateAvailable
+            readonly property bool found: UpdateChecker.installable
             readonly property bool downloading: UpdateChecker.status === UpdateChecker.Downloading
             readonly property bool installed: UpdateChecker.status === UpdateChecker.ReadyToRestart
             Layout.fillWidth: true
@@ -209,8 +209,9 @@ Rectangle {
                   : i18n("Install update")
             iconName: installed ? "refresh" : "download"
             dotColor: downloading ? "transparent" : Theme.brand
-            Accessible.description: installed ? i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
-                                              : i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+            Accessible.description: !installed ? i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+                                    : DesktopStyle.macos ? i18n("Sugo %1 is ready; it replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                    : i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
             onClicked: installed ? sidebar.restartRequested() : UpdateChecker.installUpdate()
         }
         NavItem {

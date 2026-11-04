@@ -134,13 +134,13 @@ QQC2.Page {
                     tone: "warning"
                     text: i18n("A newer version (%1) of Sugo is available.", UpdateChecker.latestVersion)
                     SButton {
-                        visible: UpdateChecker.canInstall
+                        visible: UpdateChecker.installable
                         kind: "primary"
                         text: i18n("Install")
                         onClicked: UpdateChecker.installUpdate()
                     }
                     SButton {
-                        kind: UpdateChecker.canInstall ? "ghost" : "primary"
+                        kind: UpdateChecker.installable ? "ghost" : "primary"
                         text: i18n("View Release")
                         onClicked: Qt.openUrlExternally(UpdateChecker.releaseUrl)
                     }
@@ -155,7 +155,9 @@ QQC2.Page {
                 Banner {
                     Layout.fillWidth: true
                     visible: UpdateChecker.status === UpdateChecker.ReadyToRestart
-                    text: i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion)
+                    // On macOS the new Sugo.app waits next to this one and takes its place when Sugo quits.
+                    text: DesktopStyle.macos ? i18n("Sugo %1 is ready. It replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                             : i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion)
                     SButton {
                         kind: "primary"
                         text: i18n("Restart Now")

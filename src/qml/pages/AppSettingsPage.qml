@@ -464,7 +464,8 @@ QQC2.Page {
                 }
             }
 
-            // Only the AppImage replaces itself; other packages are updated by whoever installed them.
+            // Only the AppImage and the macOS app (in a folder the user can write to) replace
+            // themselves; other packages are updated by whoever installed them.
             SettingsCard {
                 category: "general"
                 available: UpdateChecker.canInstall
