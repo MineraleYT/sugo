@@ -663,6 +663,14 @@ QQC2.ApplicationWindow {
                          + ", modified " + editor.modified);
                     return true;
                 }
+                // Duplicate with unsaved changes asks first, and makes no copy meanwhile.
+                const count = PresetModel.count;
+                editor.selectedIcon = editor.selectedIcon === "chronometer" ? "clock" : "chronometer";
+                editor.duplicate();
+                if (root.pageStack.currentItem !== editor || !editor.confirming || PresetModel.count !== count) {
+                    fail(51, "Duplicate with unsaved changes did not ask first, or copied before the answer");
+                    return true;
+                }
                 return true;
             }
             }

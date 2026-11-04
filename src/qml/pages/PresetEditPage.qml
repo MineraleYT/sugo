@@ -102,6 +102,15 @@ QQC2.Page {
         }
     }
 
+    /// Opens a copy of the stored timer, once unsaved changes are confirmed thrown away: the
+    /// copy is not made while the question is open, nor when the answer is Keep Editing.
+    function duplicate(): void {
+        requestClose(() => {
+            const copy = PresetModel.duplicate(page.uuid);
+            applicationWindow().openTimer(copy.length > 0 ? copy : page.uuid, true);
+        });
+    }
+
     function requestReset(): void {
         resetDialog.open();
     }
@@ -389,12 +398,7 @@ QQC2.Page {
                     iconOnly: true
                     iconName: "copy"
                     text: i18n("Duplicate")
-                    onClicked: {
-                        const copy = PresetModel.duplicate(page.uuid);
-                        if (copy.length > 0) {
-                            applicationWindow().openTimer(copy);
-                        }
-                    }
+                    onClicked: page.duplicate()
                 }
                 // A disabled button gets no hover events, so the wrapper says why it cannot be deleted.
                 Item {
