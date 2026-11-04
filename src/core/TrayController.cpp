@@ -188,7 +188,11 @@ TrayController::TrayController(TimerEngine *engine, PresetModel *presets, AppSet
     sync();
 }
 
-TrayController::~TrayController() = default;
+TrayController::~TrayController()
+{
+    // The icon goes before the menu it shows (members would go the other way round).
+    destroyItem();
+}
 
 void TrayController::setWindow(QWindow *window)
 {
@@ -268,6 +272,7 @@ void TrayController::createItem()
 
 void TrayController::destroyItem()
 {
+    // The icon first: it still refers to its menu.
     m_item.reset();
     m_timerActions.reset();
     m_menu.reset(); // also deletes the actions

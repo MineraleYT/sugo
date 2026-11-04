@@ -2,6 +2,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QSystemTrayIcon>
 #include <QTemporaryDir>
@@ -254,6 +255,27 @@ private Q_SLOTS:
         QCOMPARE(quit.count(), 1);
         QVERIFY(engine->isActive());
         QVERIFY(tray->isVisible());
+    }
+
+    void iconGoesBeforeItsMenu()
+    {
+        // Removed by the setting, and with the controller: the icon never outlives its menu.
+        for (const bool byController : {false, true}) {
+            QPointer<QMenu> owned = menu();
+            QVERIFY(owned);
+            bool menuThereWhenIconWent = false;
+            connect(tray->icon(), &QObject::destroyed, this, [&menuThereWhenIconWent, &owned]() {
+                menuThereWhenIconWent = !owned.isNull();
+            });
+            if (byController) {
+                tray.reset();
+            } else {
+                settings->setShowTrayIcon(false);
+                settings->setShowTrayIcon(true);
+            }
+            QVERIFY(menuThereWhenIconWent);
+            QVERIFY(owned.isNull());
+        }
     }
 };
 
