@@ -219,6 +219,8 @@ private:
     QUrl discoveryUrl() const;
 
     void trySend();
+    /// trySend() from the event loop, once however often it is asked for meanwhile.
+    void trySendLater();
     void scheduleRetry();
     void onSendFinished(const Result &result, bool credentialsChangedMeanwhile);
     void rememberSent(const Pending &item);
@@ -260,6 +262,7 @@ private:
     QList<Pending> m_queue;
     QList<Pending> m_sent; ///< The last events sent, oldest first, bounded.
     bool m_inFlight = false;
+    bool m_sendLater = false; ///< A trySendLater() call is waiting for the event loop.
     QString m_inFlightUid;
     /// Connection-test events the server did not let us remove yet.
     QList<LeftoverTest> m_leftoverTests;

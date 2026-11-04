@@ -1126,7 +1126,14 @@ void CalendarSync::enqueueWorkSession(const SessionRecord &record)
         }
     }
     appendBounded(item);
-    trySend();
+    // This runs while the timer is ending the phase. Asking the keyring for a password it could
+    // not give yet may show its unlock prompt and wait for the answer: that is left to the event
+    // loop, so the next phase and its notification are not held up meanwhile.
+    if (m_passwordUnread) {
+        trySendLater();
+    } else {
+        trySend();
+    }
 }
 
 void CalendarSync::onNoteChanged(qint64 sessionId, const QString &note)
@@ -1179,6 +1186,18 @@ void CalendarSync::trySend()
             [this, account, password = m_password](const Result &r) {
                 onSendFinished(r, account != currentAccount() || password != m_password);
             });
+}
+
+void CalendarSync::trySendLater()
+{
+    if (m_sendLater) {
+        return;
+    }
+    m_sendLater = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_sendLater = false;
+        trySend();
+    });
 }
 
 void CalendarSync::scheduleRetry()

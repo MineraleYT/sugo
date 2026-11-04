@@ -57,9 +57,11 @@ class FakeSecretStore : public SecretStore
 public:
     std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
     std::shared_ptr<bool> available = std::make_shared<bool>(true);
+    std::shared_ptr<int> reads = std::make_shared<int>(0);
 
     std::optional<QString> read(const QString &key) override
     {
+        ++*reads;
         if (!*available) {
             return std::nullopt;
         }
@@ -1741,6 +1743,39 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QVERIFY(m_sync->hasPassword());
         QCOMPARE(m_server->stored.size(), 1);
+    }
+
+    void finishedWorkSessionsDoNotWaitForTheKeyring()
+    {
+        FakeSecretStore keyring;
+        m_sync = makeSyncWithKeyring(keyring);
+        configureCustom();
+        QVERIFY(m_sync->isPasswordInKeyring());
+
+        // The keyring does not give the password (its unlock prompt was dismissed).
+        *keyring.available = false;
+        m_sync = makeSyncWithKeyring(keyring);
+        QVERIFY(!m_sync->hasPassword());
+        QTest::qWait(50);
+        const int reads = *keyring.reads;
+
+        // Several sessions end in a row: the keyring is not asked while each one is recorded
+        // (the timer is ending the phase then), and is asked only once afterwards.
+        m_sync->enqueueWorkSession(record(1));
+        m_sync->enqueueWorkSession(record(2));
+        m_sync->enqueueWorkSession(record(3));
+        QCOMPARE(*keyring.reads, reads);
+        QCOMPARE(m_sync->pendingCount(), 3);
+        QTRY_COMPARE(*keyring.reads, reads + 1);
+        QTest::qWait(100);
+        QCOMPARE(*keyring.reads, reads + 1);
+        QVERIFY(m_server->requests.isEmpty());
+
+        // Once the keyring answers, the next session sends them all.
+        *keyring.available = true;
+        m_sync->enqueueWorkSession(record(4));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 4);
     }
 
     void defaults()
