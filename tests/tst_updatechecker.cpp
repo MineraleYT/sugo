@@ -369,6 +369,24 @@ private Q_SLOTS:
         QVERIFY(!missing.canInstall());
     }
 
+    void readOnlyAppImageIsNotInstalled()
+    {
+        // QSaveFile would refuse to replace it, in a folder it can write to or not: no "Install".
+        LocalRelease release;
+        QVERIFY(QFile::setPermissions(release.appImage, QFileDevice::ReadOwner | QFileDevice::ExeOwner | QFileDevice::ReadGroup
+                                                            | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::ExeOther));
+        if (QFileInfo(release.appImage).isWritable()) {
+            QSKIP("Running as a user who can write to any file (root)");
+        }
+        QVERIFY(QFileInfo(release.dir.path()).isWritable());
+        UpdateChecker checker;
+        checker.setAppImagePathForTesting(release.appImage);
+        QVERIFY(!checker.canInstall());
+        checker.setChannel(QStringLiteral("nightly"));
+        QCOMPARE(checker.channel(), QStringLiteral("stable"));
+        QVERIFY(!AppImageInstaller(release.appImage).canInstall());
+    }
+
     void sameOrOlderFeedIsUpToDate()
     {
         qputenv("SUGO_OVERRIDE_VERSION", "2.0.0");
