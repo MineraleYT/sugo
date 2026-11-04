@@ -1673,6 +1673,32 @@ QQC2.Page {
                 }
             }
 
+            // What Sugo Sync will carry next: shown, not offered yet.
+            SettingsCard {
+                objectName: "syncComingSoonCard"
+                category: "sync"
+                title: i18n("Coming to Sugo Sync")
+                iconName: "appointment-soon"
+
+                SettingRow {
+                    first: true
+                    title: i18n("Session history and statistics")
+                    description: i18n("Your finished sessions and their statistics, the same on every device.")
+                    StatusPill {
+                        text: i18n("Coming soon")
+                        dotColor: Theme.subtle
+                    }
+                }
+                SettingRow {
+                    title: i18n("Task notes")
+                    description: i18n("The notes you write after a work session, on every device.")
+                    StatusPill {
+                        text: i18n("Coming soon")
+                        dotColor: Theme.subtle
+                    }
+                }
+            }
+
             SettingsCard {
                 category: "advanced"
                 title: i18n("Data management")
