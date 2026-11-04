@@ -170,24 +170,32 @@ QString Diagnostics::recentLogs() const
 
 namespace
 {
-// Leaked like the buffer: redact() runs from the message handler, also during static destruction.
-QStringList &accountRedactions()
+// One pattern per account word, compiled when the words are set. Leaked like the buffer:
+// redact() runs from the message handler, also during static destruction.
+QList<QRegularExpression> &accountRedactions()
 {
-    static auto *words = new QStringList;
-    return *words;
+    static auto *patterns = new QList<QRegularExpression>;
+    return *patterns;
 }
 } // namespace
 
 void Diagnostics::setAccountRedactions(const QStringList &words)
 {
-    QMutexLocker locker(&logMutex());
-    accountRedactions().clear();
+    QList<QRegularExpression> patterns;
     for (const QString &word : words) {
         // Very short words would blank out ordinary text.
-        if (word.trimmed().size() > 2) {
-            accountRedactions().append(word.trimmed());
+        const QString trimmed = word.trimmed();
+        if (trimmed.size() > 2) {
+            // Only where the word stands on its own: a login "tim" leaves "Timer" alone.
+            QRegularExpression pattern(QStringLiteral(R"((?<![\p{L}\p{N}_])%1(?![\p{L}\p{N}_]))")
+                                           .arg(QRegularExpression::escape(trimmed)),
+                                       QRegularExpression::CaseInsensitiveOption);
+            pattern.optimize();
+            patterns.append(pattern);
         }
     }
+    QMutexLocker locker(&logMutex());
+    accountRedactions() = patterns;
 }
 
 QString Diagnostics::redact(const QString &text)
@@ -212,13 +220,13 @@ QString Diagnostics::redact(const QString &text)
     result.replace(secretAssignmentRegex, QStringLiteral("\\1<redacted>"));
 
     // The accounts the user set up (the calendar login can differ from the system user name).
-    QStringList accounts;
+    QList<QRegularExpression> accounts;
     {
         QMutexLocker locker(&logMutex());
         accounts = accountRedactions();
     }
-    for (const QString &word : std::as_const(accounts)) {
-        result.replace(word, QStringLiteral("<account>"), Qt::CaseInsensitive);
+    for (const QRegularExpression &pattern : std::as_const(accounts)) {
+        result.replace(pattern, QStringLiteral("<account>"));
     }
 
     // 1. Redact the home directory path (and its resolved form, if it is a symlink)
