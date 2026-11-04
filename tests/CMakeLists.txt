@@ -121,6 +121,12 @@ add_test(NAME tst_welcome_page_ui
 )
 set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
 
+# Ended with SIGTERM, Sugo quits cleanly by itself (on every system; without D-Bus).
+add_test(NAME tst_app_quit
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> quit
+)
+set_tests_properties(tst_app_quit PROPERTIES TIMEOUT 25)
+
 # --- macOS port: B1 menu bar icon, notifications, single instance, Dock ---
 sugo_add_test(tst_localsingleinstance Qt6::Core Qt6::Network)
 sugo_add_test(tst_macnotificationmapping Qt6::Core)
@@ -150,3 +156,21 @@ sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)
 # the shipped files in data/shortcuts.
 sugo_add_test(tst_shortcutsfocusinstaller Qt6::Core)
 target_compile_definitions(tst_shortcutsfocusinstaller PRIVATE SUGO_SHORTCUTS_SOURCE_DIR="${PROJECT_SOURCE_DIR}/data/shortcuts")
+
+# --- Platform parity ---
+# Every screen offers the same on Linux and macOS, but for the differences listed with their
+# reasons in platform-parity.json; each platform feature has its tests here. Runs the program in
+# the smoke mode "inventory". Registered last: it checks the tests above are all there.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    get_property(_sugo_registered_tests DIRECTORY PROPERTY TESTS)
+    list(APPEND _sugo_registered_tests tst_platform_parity)
+    list(JOIN _sugo_registered_tests "\n" _sugo_registered_tests_text)
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/registered-tests.txt "${_sugo_registered_tests_text}\n")
+    add_test(NAME tst_platform_parity
+        COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/check_platform_parity.py
+                $<TARGET_FILE:sugo> ${CMAKE_CURRENT_SOURCE_DIR}/platform-parity.json
+                ${CMAKE_CURRENT_BINARY_DIR}/registered-tests.txt
+    )
+    set_tests_properties(tst_platform_parity PROPERTIES TIMEOUT 90)
+endif()

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-04 13:03+0000\n"
+"POT-Creation-Date: 2026-11-04 13:51+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -873,186 +873,186 @@ msgstr ""
 msgid "%1s"
 msgstr ""
 
-#: src/qml/Main.qml:67
+#: src/qml/Main.qml:74
 msgid "[%1] %2 (Paused) — Sugo"
 msgstr ""
 
-#: src/qml/Main.qml:69
+#: src/qml/Main.qml:76
 msgid "[%1] %2 — Sugo"
 msgstr ""
 
-#: src/qml/Main.qml:129
+#: src/qml/Main.qml:136
 msgid "Restart Sugo?"
 msgstr ""
 
-#: src/qml/Main.qml:129
+#: src/qml/Main.qml:136
 msgid "Quit Sugo?"
 msgstr ""
 
-#: src/qml/Main.qml:132
+#: src/qml/Main.qml:139
 msgid ""
 "A work session is in progress. Restarting ends it now, and it is saved as "
 "interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:133
+#: src/qml/Main.qml:140
 msgid "A break is in progress. Restarting ends it now."
 msgstr ""
 
-#: src/qml/Main.qml:135
+#: src/qml/Main.qml:142
 msgid ""
 "A work session is in progress. Quitting ends it now, and it is saved as "
 "interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:136
+#: src/qml/Main.qml:143
 msgid "A break is in progress. Quitting ends it now."
 msgstr ""
 
-#: src/qml/Main.qml:137
+#: src/qml/Main.qml:144
 msgid "Restart"
 msgstr ""
 
-#: src/qml/Main.qml:139
+#: src/qml/Main.qml:146
 msgid "Keep Running"
 msgstr ""
 
-#: src/qml/Main.qml:184
+#: src/qml/Main.qml:191
 msgid "name"
 msgstr ""
 
-#: src/qml/Main.qml:185
+#: src/qml/Main.qml:192
 msgid "category"
 msgstr ""
 
-#: src/qml/Main.qml:186
+#: src/qml/Main.qml:193
 msgid "work duration"
 msgstr ""
 
-#: src/qml/Main.qml:187
+#: src/qml/Main.qml:194
 msgid "short break"
 msgstr ""
 
-#: src/qml/Main.qml:188 src/qml/pages/WelcomePage.qml:451
+#: src/qml/Main.qml:195 src/qml/pages/WelcomePage.qml:451
 msgid "long break"
 msgstr ""
 
-#: src/qml/Main.qml:189
+#: src/qml/Main.qml:196
 msgid "work sessions before the long break"
 msgstr ""
 
-#: src/qml/Main.qml:192
+#: src/qml/Main.qml:199
 msgid "This value of “%2” was outside the allowed range and was adjusted: %3."
 msgid_plural ""
 "These values of “%2” were outside the allowed range and were adjusted: %3."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/qml/Main.qml:777 src/qml/components/Sidebar.qml:149
+#: src/qml/Main.qml:786 src/qml/components/Sidebar.qml:150
 #: src/qml/pages/AppSettingsPage.qml:20 src/qml/pages/TimerPage.qml:13
 msgid "Focus"
 msgstr ""
 
-#: src/qml/Main.qml:780 src/qml/components/Sidebar.qml:245
+#: src/qml/Main.qml:789 src/qml/components/Sidebar.qml:246
 #: src/qml/pages/AboutPage.qml:10
 msgid "About"
 msgstr ""
 
-#: src/qml/Main.qml:781
+#: src/qml/Main.qml:790
 msgid "Resume the timer"
 msgstr ""
 
-#: src/qml/Main.qml:781
+#: src/qml/Main.qml:790
 msgid "Pause the timer"
 msgstr ""
 
-#: src/qml/Main.qml:781
+#: src/qml/Main.qml:790
 msgid "Start the timer"
 msgstr ""
 
-#: src/qml/Main.qml:782 src/qml/pages/TimerPage.qml:386
+#: src/qml/Main.qml:791 src/qml/pages/TimerPage.qml:386
 #: src/qml/pages/WelcomePage.qml:771
 msgctxt "keyboard key"
 msgid "Space"
 msgstr ""
 
-#: src/qml/Main.qml:784 src/qml/components/Sidebar.qml:206
+#: src/qml/Main.qml:793 src/qml/components/Sidebar.qml:207
 msgid "New timer"
 msgstr ""
 
-#: src/qml/Main.qml:787
+#: src/qml/Main.qml:796
 msgid "Stop the timer"
 msgstr ""
 
-#: src/qml/Main.qml:788
+#: src/qml/Main.qml:797
 msgid "Skip to the next phase"
 msgstr ""
 
-#: src/qml/Main.qml:794 src/qml/components/Sidebar.qml:196
+#: src/qml/Main.qml:803 src/qml/components/Sidebar.qml:197
 msgctxt "minutes, short"
 msgid "%1m"
 msgstr ""
 
-#: src/qml/Main.qml:976
+#: src/qml/Main.qml:991
 msgid ""
 "Your data cannot be saved: the database could not be opened. Sugo is using a "
 "temporary database."
 msgstr ""
 
-#: src/qml/Main.qml:977
+#: src/qml/Main.qml:992
 msgid ""
 "Your latest sessions or timer changes could not be saved yet. Sugo keeps "
 "them and tries again; do not quit until this message is gone."
 msgstr ""
 
-#: src/qml/Main.qml:1085
+#: src/qml/Main.qml:1113
 msgid "Work Session Finished"
 msgstr ""
 
-#: src/qml/Main.qml:1087
+#: src/qml/Main.qml:1115
 msgid "What did you accomplish during “%1”?"
 msgstr ""
 
-#: src/qml/Main.qml:1088
+#: src/qml/Main.qml:1116
 msgid "What did you accomplish during this session?"
 msgstr ""
 
-#: src/qml/Main.qml:1089
+#: src/qml/Main.qml:1117
 msgid "Save Note"
 msgstr ""
 
-#: src/qml/Main.qml:1097
+#: src/qml/Main.qml:1125
 msgid "e.g. Refactored auth module, wrote tests…"
 msgstr ""
 
-#: src/qml/Main.qml:1121
+#: src/qml/Main.qml:1149
 msgctxt "@action:button use a recent note"
 msgid "Use “%1”"
 msgstr ""
 
-#: src/qml/Main.qml:1197
+#: src/qml/Main.qml:1225
 msgid "Welcome Back"
 msgstr ""
 
-#: src/qml/Main.qml:1197
+#: src/qml/Main.qml:1225
 msgid "Screen Unlocked"
 msgstr ""
 
-#: src/qml/Main.qml:1199
+#: src/qml/Main.qml:1227
 msgid ""
 "The timer was paused while the computer was asleep. Would you like to resume?"
 msgstr ""
 
-#: src/qml/Main.qml:1200
+#: src/qml/Main.qml:1228
 msgid ""
 "The timer was paused while your screen was locked. Would you like to resume?"
 msgstr ""
 
-#: src/qml/Main.qml:1202
+#: src/qml/Main.qml:1230
 msgid "Keep Paused"
 msgstr ""
 
-#: src/qml/components/CommandPalette.qml:74 src/qml/components/Sidebar.qml:120
+#: src/qml/components/CommandPalette.qml:74 src/qml/components/Sidebar.qml:121
 msgid "Search"
 msgstr ""
 
@@ -1217,55 +1217,55 @@ msgctxt "@action:inmenu"
 msgid "Sugo"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:163 src/qml/pages/PresetEditPage.qml:28
+#: src/qml/components/Sidebar.qml:164 src/qml/pages/PresetEditPage.qml:28
 #: src/qml/pages/WelcomePage.qml:385
 msgid "Timers"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:226
+#: src/qml/components/Sidebar.qml:227
 msgid "Restart to update"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:227
+#: src/qml/components/Sidebar.qml:228
 #, javascript-format
 msgid "Downloading update… %1%"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:228
+#: src/qml/components/Sidebar.qml:229
 msgid "Install update"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:231
+#: src/qml/components/Sidebar.qml:232
 msgid "Sugo %1 is available."
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:232
+#: src/qml/components/Sidebar.qml:233
 msgid "Sugo %1 is ready; it replaces this version when Sugo restarts."
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:233
+#: src/qml/components/Sidebar.qml:234
 msgid "Sugo %1 is installed; it starts after the restart."
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:248
+#: src/qml/components/Sidebar.qml:249
 msgid "Update available"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:53
+#: src/qml/components/TopBar.qml:55
 msgctxt "phase · time"
 msgid "%1 · paused at %2"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:54
+#: src/qml/components/TopBar.qml:56
 msgctxt "phase · time"
 msgid "%1 · %2 left"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:87
+#: src/qml/components/TopBar.qml:89
 msgid "Menu"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:95 src/qml/pages/WelcomePage.qml:880
+#: src/qml/components/TopBar.qml:97 src/qml/pages/WelcomePage.qml:880
 msgid "Back"
 msgstr ""
 
@@ -2391,8 +2391,8 @@ msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:657
 msgid ""
-"Turns your Focus on for the work phase and off for the break, through the "
-"shortcuts chosen in Settings."
+"Turns Do Not Disturb on for the work phase and off for the break, through "
+"the two Focus shortcuts."
 msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:658
@@ -2402,9 +2402,7 @@ msgid ""
 msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:660
-msgid ""
-"Needs two shortcuts of the Shortcuts app that turn a Focus on and off. Set "
-"them up in Settings → Focus."
+msgid "Needs the two Focus shortcuts: install them in Settings → Focus."
 msgstr ""
 
 #: src/qml/pages/PresetEditPage.qml:661

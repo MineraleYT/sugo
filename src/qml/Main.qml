@@ -623,6 +623,8 @@ QQC2.ApplicationWindow {
                     done = checkPresets(currentPage);
                 } else if (appSmokePage === "timer") {
                     done = checkTimer(root.pageStack.get(0));
+                } else if (appSmokePage === "inventory") {
+                    done = featureInventory.step();
                 }
                 if (done && running) {
                     stop();
@@ -811,6 +813,12 @@ QQC2.ApplicationWindow {
 
     CommandPalette {
         id: commandPalette
+    }
+
+    // The smoke run "inventory": what every screen offers, for the platform parity test.
+    FeatureInventory {
+        id: featureInventory
+        app: root
     }
 
     // On macOS the menu bar has these shortcuts: the Shortcut items below that would claim the
@@ -1070,11 +1078,12 @@ QQC2.ApplicationWindow {
             pushPage(destinations.welcome);
         } else {
             if (typeof appSmokePage !== "undefined" && appSmokePage.length > 0) {
-                currentDestination = appSmokePage;
+                // The inventory starts on the focus page and goes through the others itself.
+                currentDestination = appSmokePage === "inventory" ? "timer" : appSmokePage;
             } else if (appStatsSmokeTest) {
                 currentDestination = "stats";
-            } else if (appStartPage.length > 0 && (destinations[appStartPage] || appStartPage === "presets")) {
-                currentDestination = appStartPage;
+            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets")) {
+                currentDestination = startPageName;
             }
             // "presets" (smoke test, development): the page of the timer in use.
             if (currentDestination === "presets") {
@@ -1083,7 +1092,19 @@ QQC2.ApplicationWindow {
             }
             pushPage(destinations[currentDestination], currentDestination === "preset" ? { uuid: openTimerUuid } : {});
         }
+        // "settings/<category>", "welcome/<step>": that part of the page.
+        const startPart = appStartPage.split("/")[1] ?? "";
+        if (startPart.length > 0 && currentDestination === startPageName) {
+            const page = pageStack.currentItem;
+            if (startPageName === "settings") {
+                page.category = startPart;
+            } else if (startPageName === "welcome") {
+                page.current = Number(startPart);
+            }
+        }
     }
+    /// SUGO_START_PAGE without its part ("settings" for "settings/focus").
+    readonly property string startPageName: appStartPage.split("/")[0]
 
     ConfirmDialog {
         id: taskNoteDialog

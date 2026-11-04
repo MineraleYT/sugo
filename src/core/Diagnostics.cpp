@@ -370,3 +370,16 @@ void Diagnostics::copyToClipboard() const
         clipboard->setText(generateReport());
     }
 }
+
+bool Diagnostics::saveInventory(const QString &json) const
+{
+    const QString path = qEnvironmentVariable("SUGO_INVENTORY");
+    if (path.isEmpty()) {
+        return false;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(json.toUtf8()) >= 0;
+}

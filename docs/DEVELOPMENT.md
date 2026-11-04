@@ -144,12 +144,34 @@ CI builds on Linux with GCC (and runs the suite), with Clang and warnings as err
 
 **On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage self-update is not used on macOS either.
 
+### Linux and macOS parity
+
+`tst_platform_parity` makes sure Sugo offers the same on both systems. It starts the program in the smoke mode `inventory` (`src/qml/components/FeatureInventory.qml`), which opens every screen (the focus page, a timer's page, a new timer, statistics, about, each settings category, each step of the welcome tour, the search) and lists what the user can use there: rows, switches (by the setting they change), buttons, choices, fields, sliders and the search's commands. `tests/check_platform_parity.py` compares the list with `tests/platform-parity.json`:
+
+- `common`: on both systems; one missing here fails the test.
+- `linux` / `macos`: on that system only, each with the reason (the Dock, the Focus shortcuts, keeping running in the tray...). Anything else found on one system only fails the test.
+- `updateInstall`: only in builds that install updates (AppImage, `Sugo.app`).
+- `macosNames`: the Mac wording of the same control ("menu bar" for "tray", "Show in Finder" for "Open folder").
+- `tests`: for each platform feature, the tests that must exist on each system (notifications, silencing, screen awake, autostart, keyring, single instance, external control, quitting...).
+
+So a control added on one system only, or lost on one, shows up in CI; if the difference is intended, list it with its reason.
+
+To compare the two by eye, build the same commit on Linux and on a Mac, then:
+
+```sh
+SUGO_MAC_SSH="ssh user@mac" SUGO_MAC_APP='~/sugo/build/bin/Sugo.app/Contents/MacOS/Sugo' \
+    tests/compare_platforms.sh build/bin/sugo /tmp/sugo-compare
+```
+
+It takes the same screenshots of every screen on both and writes `/tmp/sugo-compare/index.html`: each screen side by side, with the declared differences and their reasons.
+
 ### Environment variables for development
 
 | Variable | Effect |
 |---|---|
-| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `about`, `welcome` |
+| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `about`, `welcome`; or on a part of one: `settings/<category>` (`general`, `sounds`, `focus`, `calendar`, `advanced`), `welcome/<step>` (0-3) |
 | `SUGO_SMOKE_PAGE`, `SUGO_STATS_SMOKE_TEST=1` | Smoke runs (`tests/smoke_app.sh`): check a page, then quit |
+| `SUGO_SMOKE_PAGE=inventory`, `SUGO_INVENTORY=file.json` | Writes what every screen offers to the file, then quits ([parity](#linux-and-macos-parity)) |
 | `SUGO_SCREENSHOT=file.png` | Saves a picture of the window after `SUGO_SCREENSHOT_DELAY` ms (1500 by default), then quits |
 | `SUGO_WINDOW_STYLE` | Forces the title bar style (`kde`, `gnome`, `macos`, `windows`, `generic`, ...); `macos` also shows the wording and shortcuts of the Mac version, to preview it on Linux |
 | `SUGO_DATA_DIR` | The folder that holds `sugo.db` and `sugo.conf`, instead of the usual ones: keeps test runs (and the macOS smoke runs, where `XDG_*` has no effect) away from your data |

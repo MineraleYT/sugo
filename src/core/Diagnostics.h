@@ -42,6 +42,10 @@ public:
     /// Copies the full markdown report to the system clipboard.
     Q_INVOKABLE void copyToClipboard() const;
 
+    /// The smoke run "inventory" (FeatureInventory.qml): writes `json` to the file named by
+    /// $SUGO_INVENTORY. False when that variable is not set or the file cannot be written.
+    Q_INVOKABLE bool saveInventory(const QString &json) const;
+
     /// Returns the concatenated recent logs (already redacted).
     QString recentLogs() const;
 

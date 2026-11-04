@@ -50,6 +50,7 @@ The build must stay free of compiler warnings. There is no separate linter.
 - A new test needs a `sugo_add_test(tst_name <Qt modules it uses>)` line in `tests/CMakeLists.txt`. The modules decide what `QTEST_MAIN` creates: `Qt6::Widgets` a QApplication, `Qt6::Gui` a QGuiApplication (both need offscreen, below), else a QCoreApplication.
 - Tests that create a GUI application set `QT_QPA_PLATFORM=offscreen` via `set_tests_properties`. D-Bus tests start a throw-away bus with `tests/PrivateDBus.h` (no service activation, so nothing installed on the machine is started) and must work (or skip) without a session bus.
 - QML pages are covered by smoke runs (`tests/smoke_app.sh`): the real binary starts offscreen with `SUGO_SMOKE_PAGE=<page>` (or `SUGO_STATS_SMOKE_TEST=1`) and isolated XDG dirs; any QML warning fails the run (exit 30), and smoke-mode checks in `Main.qml` call `Qt.exit()` with a non-zero code on failure (e.g. 23-47 for the settings, welcome and timer-page checks; 47: a message on the welcome tour's setup step moved the step). `tests/manual-review-checklist.md` covers what automation doesn't.
+- Linux and macOS must offer the same: `tst_platform_parity` lists every screen's controls (smoke mode `inventory`) and compares them with `tests/platform-parity.json`. A control on one platform only must be listed there with its reason; one on both goes in `common` (`docs/DEVELOPMENT.md`, "Linux and macOS parity").
 
 ## Conventions
 

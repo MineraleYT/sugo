@@ -258,7 +258,8 @@ int main(int argc, char *argv[])
     const bool statsSmokeTest = qEnvironmentVariable("SUGO_STATS_SMOKE_TEST") == QStringLiteral("1");
     engine.rootContext()->setContextProperty(QStringLiteral("appStatsSmokeTest"), statsSmokeTest);
     engine.rootContext()->setContextProperty(QStringLiteral("appSmokePage"), smokePage);
-    // For development: open on another page ("presets" for the timer in use, "stats", "settings", "about", "welcome").
+    // For development and screenshots: open on another page ("presets" for the timer in use, "stats",
+    // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
     int smokeWarnings = 0;
@@ -377,6 +378,11 @@ int main(int argc, char *argv[])
         stats->setProtectWeekendStreak(settings->protectWeekendStreak());
     });
     auto *tray = new TrayController(timer, presets, settings, &services);
+    // The inventory (platform parity test) lists the tray's settings too, which an offscreen run
+    // would hide: no tray there.
+    if (smokePage == QLatin1String("inventory")) {
+        settings->setTrayAvailable(true);
+    }
 #ifdef Q_OS_MACOS
     // The Dock icon: minutes left on its badge, the timer in its menu, hidden on request.
     auto *dock = new DockController(timer, presets, settings, DockController::platformNative(), &services);

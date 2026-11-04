@@ -53,6 +53,43 @@ mkdir -p "$runtime_dir/data/sugo"
 isolation="SUGO_DATA_DIR=$runtime_dir/data/sugo"
 
 set +e
+# Quit: started normally, then ended with SIGTERM (as the system does at logout): it must quit
+# by itself, cleanly (exit status 0, no QML warnings), within 10 seconds. Works without D-Bus,
+# so on every system (Linux also runs tst_app_shutdown, over a private bus).
+if [[ $mode == quit ]]; then
+    env QT_QPA_PLATFORM=offscreen \
+        DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
+        "$isolation" \
+        XDG_DATA_HOME="$runtime_dir/data" \
+        XDG_CONFIG_HOME="$runtime_dir/config" \
+        "$app" &
+    pid=$!
+    sleep 4
+    if ! kill -0 "$pid" 2>/dev/null; then
+        wait "$pid"
+        echo "Sugo ended by itself with status $? before it was asked to quit" >&2
+        exit 1
+    fi
+    kill -TERM "$pid"
+    ticks=100
+    while ((ticks > 0)) && kill -0 "$pid" 2>/dev/null; do
+        sleep 0.1
+        ticks=$((ticks - 1))
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -KILL "$pid" 2>/dev/null
+        echo "Sugo did not quit within 10 seconds of SIGTERM" >&2
+        exit 1
+    fi
+    wait "$pid"
+    status=$?
+    if [[ $status -ne 0 ]]; then
+        echo "Sugo quit with status $status after SIGTERM (expected 0)" >&2
+        exit 1
+    fi
+    exit 0
+fi
+
 if [[ $mode != startup ]]; then
     if [[ $mode == stats ]]; then
         run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \

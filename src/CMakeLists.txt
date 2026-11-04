@@ -34,6 +34,7 @@ qt6_add_qml_module(sugo_core
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
         qml/components/MessageSlot.qml
+        qml/components/FeatureInventory.qml
         qml/components/FocusShortcutsStatus.qml
         qml/components/FormSection.qml
         qml/components/FormRow.qml

@@ -654,10 +654,10 @@ QQC2.Page {
                     title: i18n("Silence notifications while working")
                     description: SilenceController.available
                         ? (DesktopStyle.macos
-                           ? i18n("Turns your Focus on for the work phase and off for the break, through the shortcuts chosen in Settings.")
+                           ? i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts.")
                            : i18n("Turns off all system notifications for the work phase and back on for the break."))
                         : DesktopStyle.macos
-                          ? i18n("Needs two shortcuts of the Shortcuts app that turn a Focus on and off. Set them up in Settings → Focus.")
+                          ? i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")
                           : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
                     enabled: SilenceController.available || DesktopStyle.macos
                     // macOS: until the shortcuts exist, a way to set them up instead of the switch.
