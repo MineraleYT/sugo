@@ -406,7 +406,8 @@ void StatsModel::recompute()
             map[QStringLiteral("name")] = m_env.locale.standaloneDayName(b.date.dayOfWeek(), QLocale::LongFormat);
             break;
         case Period::Month:
-            map[QStringLiteral("name")] = m_env.locale.toString(b.date, QStringLiteral("d MMMM"));
+            map[QStringLiteral("name")] = m_env.locale.toString(
+                b.date, i18nc("QDate::toString() format of a day of the month, e.g. \"30 October\"", "d MMMM"));
             break;
         case Period::Year:
             map[QStringLiteral("name")] = m_env.locale.standaloneMonthName(b.date.month(), QLocale::LongFormat);
