@@ -9,6 +9,8 @@
 #include <QSysInfo>
 
 #include <algorithm>
+#include <memory>
+#include <optional>
 
 namespace
 {
@@ -18,6 +20,9 @@ const char kUserId[] = "UserId";
 const char kDeviceName[] = "DeviceName";
 /// The server knows this device holds K (recovery copy uploaded, or DELETE /v1/key done).
 const char kKeyConfirmed[] = "KeyConfirmed";
+/// updated_at of the recovery copy this device wrote last ("pending" while it writes one).
+const char kRecoveryUpdatedAt[] = "RecoveryUpdatedAt";
+const QLatin1String kPendingStamp("pending");
 
 QString key(const char *name)
 {
@@ -85,6 +90,20 @@ QVariantMap SyncAccount::Device::toVariantMap() const
         {QStringLiteral("pending"), pending},
         {QStringLiteral("current"), current},
     };
+}
+
+QVariantList SyncAccount::devicesAsVariantList() const
+{
+    QVariantList list;
+    for (const Device &d : m_devices) {
+        list.append(d.toVariantMap());
+    }
+    return list;
+}
+
+QString SyncAccount::recoveryCode() const
+{
+    return m_recoveryShowable ? SyncCrypto::formatRecoveryCode(m_secrets->values().recoveryCode) : QString();
 }
 
 const SecretBytes &SyncAccount::dataKey() const
@@ -484,6 +503,7 @@ void SyncAccount::uploadRecovery()
         const QString code = SyncCrypto::formatRecoveryCode(m_secrets->values().recoveryCode);
         becomeReady();
         Q_EMIT recoveryCodeCreated(code);
+        recordRecoveryUpload();
     });
 }
 
@@ -639,11 +659,224 @@ void SyncAccount::ignoreDevice(const QString &id)
 }
 
 // ---------------------------------------------------------------------------------------------
+// Recovery code
+// ---------------------------------------------------------------------------------------------
+
+void SyncAccount::useRecoveryCode(const QString &text)
+{
+    if (m_phase != Phase::WaitingForKey || m_usingRecoveryCode) {
+        return;
+    }
+    std::optional<SecretBytes> parsed = SyncCrypto::parseRecoveryCode(text);
+    if (!parsed) {
+        Q_EMIT recoveryCodeWrong();
+        return;
+    }
+    m_usingRecoveryCode = true;
+    auto code = std::make_shared<SecretBytes>(std::move(*parsed));
+    m_api->getRecovery([this, code](const SyncReply &reply) {
+        m_usingRecoveryCode = false;
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (!reply.ok()) {
+            if (reply.error.kind == SyncError::Kind::NotFound) {
+                Q_EMIT recoveryCodeWrong(); // the account has no recovery copy
+            } else {
+                Q_EMIT requestFailed(reply.error);
+            }
+            return;
+        }
+        const QByteArray sealed = QByteArray::fromBase64(reply.json.value(QLatin1String("recovery")).toString().toLatin1());
+        std::optional<SecretBytes> dataKey = SyncCrypto::openWithRecovery(sealed, *code);
+        if (!dataKey || dataKey->size() != SyncCrypto::KeyBytes) {
+            Q_EMIT recoveryCodeWrong();
+            return;
+        }
+        m_keyTimer.stop();
+        // Stored before the server hears of it, as a key from another device.
+        if (!m_secrets->update([&](SyncSecrets::Values &v) { v.dataKey = std::move(*dataKey); })) {
+            Q_EMIT keyringWriteFailed();
+            scheduleKeyStep(KeyStep::PollKey, keyPollSeconds());
+            return;
+        }
+        confirmKey();
+    });
+}
+
+void SyncAccount::setRecoveryShowable(bool showable)
+{
+    if (m_recoveryShowable == showable) {
+        return;
+    }
+    m_recoveryShowable = showable;
+    Q_EMIT recoveryCodeShowableChanged(showable);
+}
+
+void SyncAccount::recordRecoveryUpload()
+{
+    m_api->getRecovery([this](const SyncReply &reply) {
+        if (m_phase != Phase::Ready || !reply.ok()) {
+            return;
+        }
+        if (reply.json.value(QLatin1String("updated_by")).toString() == deviceId()) {
+            writeSetting(kRecoveryUpdatedAt, reply.json.value(QLatin1String("updated_at")).toString());
+            Settings::sync(*m_settings);
+            setRecoveryShowable(!m_secrets->values().recoveryCode.isEmpty());
+        }
+    });
+}
+
+void SyncAccount::refreshRecoveryStatus()
+{
+    if (m_phase != Phase::Ready) {
+        return;
+    }
+    m_api->getRecovery([this](const SyncReply &reply) {
+        if (m_phase != Phase::Ready) {
+            return;
+        }
+        if (reply.error.kind == SyncError::Kind::NotFound) {
+            setRecoveryShowable(false);
+            return;
+        }
+        if (!reply.ok()) {
+            return;
+        }
+        const QString updatedBy = reply.json.value(QLatin1String("updated_by")).toString();
+        const QString updatedAt = reply.json.value(QLatin1String("updated_at")).toString();
+        const QString mine = m_settings->value(key(kRecoveryUpdatedAt)).toString();
+        const bool hasCode = !m_secrets->values().recoveryCode.isEmpty();
+        if (hasCode && updatedBy == deviceId() && mine.isEmpty()) {
+            // Uploaded at creation, but its time never arrived: no other device writes as this one.
+            writeSetting(kRecoveryUpdatedAt, updatedAt);
+            Settings::sync(*m_settings);
+            setRecoveryShowable(true);
+            return;
+        }
+        setRecoveryShowable(hasCode && updatedBy == deviceId() && updatedAt == mine);
+    });
+}
+
+void SyncAccount::regenerateRecoveryCode()
+{
+    if (m_phase != Phase::Ready || m_regenerating || dataKey().isEmpty()) {
+        return;
+    }
+    m_regenerating = true;
+    auto code = std::make_shared<SecretBytes>(SyncCrypto::newRecoveryCode());
+    const QByteArray sealed = SyncCrypto::sealWithRecovery(dataKey(), *code);
+    // Until the new code is stored, the code in the keyring may not be the server's.
+    const QVariant previousStamp = m_settings->value(key(kRecoveryUpdatedAt));
+    writeSetting(kRecoveryUpdatedAt, kPendingStamp);
+    Settings::sync(*m_settings);
+    setRecoveryShowable(false);
+    m_api->putRecovery(sealed, [this, code, previousStamp](const SyncReply &reply) {
+        m_regenerating = false;
+        if (m_phase != Phase::Ready) {
+            return;
+        }
+        if (!reply.ok()) {
+            if (!reply.error.transient()) {
+                writeSetting(kRecoveryUpdatedAt, previousStamp); // the server kept the old copy
+                Settings::sync(*m_settings);
+            }
+            Q_EMIT recoveryCodeFailed(reply.error);
+            refreshRecoveryStatus();
+            return;
+        }
+        const QString text = SyncCrypto::formatRecoveryCode(*code);
+        const bool saved = m_secrets->update([&](SyncSecrets::Values &v) { v.recoveryCode = std::move(*code); });
+        if (!saved) {
+            Q_EMIT keyringWriteFailed();
+        }
+        // The old code no longer works: the new one must be seen even if it was not stored.
+        Q_EMIT recoveryCodeCreated(text);
+        if (saved) {
+            recordRecoveryUpload();
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Devices
+// ---------------------------------------------------------------------------------------------
+
+void SyncAccount::refreshDevices()
+{
+    if (m_phase != Phase::Ready && m_phase != Phase::WaitingForKey) {
+        return;
+    }
+    m_api->listDevices([this](const SyncReply &reply) {
+        if (m_phase != Phase::Ready && m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (!takeDevices(reply)) {
+            if (reply.error.transient()) {
+                Q_EMIT requestFailed(reply.error);
+            }
+            return;
+        }
+        if (m_phase == Phase::Ready) {
+            askAboutPendingDevices();
+        }
+    });
+}
+
+void SyncAccount::disconnectDevice(const QString &id)
+{
+    if ((m_phase != Phase::Ready && m_phase != Phase::WaitingForKey) || id.isEmpty() || id == deviceId()) {
+        return;
+    }
+    m_api->disconnectDevice(id, [this, id](const SyncReply &reply) {
+        if (m_phase != Phase::Ready && m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (!reply.ok() && reply.error.kind != SyncError::Kind::NotFound) {
+            Q_EMIT disconnectFailed(id, reply.error);
+            return;
+        }
+        m_devices.removeIf([&id](const Device &d) { return d.id == id; });
+        Q_EMIT devicesChanged();
+        Q_EMIT deviceDisconnected(id);
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------------------------
 
+void SyncAccount::signOut()
+{
+    if (m_phase == Phase::SigningIn) {
+        abandonSignIn();
+        Q_EMIT signedOut(true);
+        return;
+    }
+    if (m_phase == Phase::SignedOut || m_secrets->refreshToken().isEmpty()) {
+        signOutLocally();
+        Q_EMIT signedOut(false);
+        return;
+    }
+    // Nothing else may run meanwhile; then, success or not, everything here goes.
+    m_keyTimer.stop();
+    m_api->reset();
+    m_signingOut = true;
+    m_api->disconnectDevice(deviceId(), [this](const SyncReply &reply) {
+        m_signingOut = false;
+        const bool remoteDone = reply.ok() || reply.error.kind == SyncError::Kind::NotFound;
+        signOutLocally();
+        Q_EMIT signedOut(remoteDone);
+    });
+}
+
 void SyncAccount::signOutLocally()
 {
+    m_signingOut = false;
+    m_usingRecoveryCode = false;
+    m_regenerating = false;
+    m_checkingPending = false;
+    setRecoveryShowable(false);
     clearSignInCode();
     m_keyTimer.stop();
     m_devices.clear();
@@ -662,7 +895,7 @@ void SyncAccount::signOutLocally()
 
 void SyncAccount::onSignedOutRemotely()
 {
-    if (m_phase == Phase::SignedOut || m_phase == Phase::SigningIn) {
+    if (m_phase == Phase::SignedOut || m_phase == Phase::SigningIn || m_signingOut) {
         return;
     }
     signOutLocally();

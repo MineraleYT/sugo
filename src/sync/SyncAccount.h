@@ -26,10 +26,15 @@ class SyncSecrets;
  *   the two public keys, and the linked one sends K in an authenticated crypto_box. The new
  *   device takes K only from the device the code was computed with (a server that hands it a
  *   key of its own is caught: keyRejected(), and the key is not confirmed).
+ * - A device can also open K with the recovery code (useRecoveryCode()).
  * - K is stored before the server is told (DELETE /v1/key), so it can never be lost between.
+ * - The recovery code stays in the keyring of the device that made it; it can be shown again
+ *   only while the server's copy is still the one this device wrote (recoveryCodeShowable()).
+ * - signOut() frees the device's slot on the server if it can, and always forgets everything here.
  *
  * Every "store X in the keyring" is a SyncSecrets write of the one `sync-secrets` item. The
- * Settings group `Sync` holds what is not secret: DeviceId, UserId, DeviceName, KeyConfirmed.
+ * Settings group `Sync` holds what is not secret: DeviceId, UserId, DeviceName, KeyConfirmed,
+ * RecoveryUpdatedAt (the group is removed on sign-out, with whatever else others keep there).
  *
  * Rule S4: before sign-in sends anything, a test write proves the keyring can keep secrets;
  * without a keyring there is no sync (no file fallback), the same on every system.
@@ -97,6 +102,13 @@ public:
     QString verificationCode() const { return m_verificationCode; }
     /// The devices of the last list.
     QList<Device> devices() const { return m_devices; }
+    QVariantList devicesAsVariantList() const;
+
+    // --- Recovery code -------------------------------------------------------------------------------
+    /// This device holds the recovery code the server has now (refreshRecoveryStatus()).
+    bool recoveryCodeShowable() const { return m_recoveryShowable; }
+    /// The code as the user writes it, from memory (no keyring access); empty if not showable.
+    QString recoveryCode() const;
 
     /// One second in ms for every wait (polling, retries); tests make it short.
     void setTimeUnitMs(int ms) { m_unitMs = ms; }
@@ -128,6 +140,23 @@ public Q_SLOTS:
     void approveDevice(const QString &id);
     /// Asks no more about this device until the program restarts.
     void ignoreDevice(const QString &id);
+
+    /// While waiting for the key: opens the server's recovery copy with `text` (recoveryCodeWrong()
+    /// if it does not), stores K, confirms it.
+    void useRecoveryCode(const QString &text);
+
+    /// Lists the devices again (devicesChanged()).
+    void refreshDevices();
+    /// Disconnects another device of the account (this one signs out instead).
+    void disconnectDevice(const QString &id);
+
+    /// Asks the server whose recovery copy it holds (recoveryCodeShowableChanged()).
+    void refreshRecoveryStatus();
+    /// A new recovery code replaces the old one, which stops working: recoveryCodeCreated().
+    void regenerateRecoveryCode();
+
+    /// Disconnects this device on the server if it can, then signOutLocally(): signedOut().
+    void signOut();
 
     /// Forgets everything here: secrets item, Settings group `Sync`, pending requests.
     void signOutLocally();
@@ -161,10 +190,22 @@ Q_SIGNALS:
     /// This device created K: the code to show once and have the user confirm.
     void recoveryCodeCreated(const QString &code);
 
+    /// The recovery code typed does not open the server's copy.
+    void recoveryCodeWrong();
+    void recoveryCodeShowableChanged(bool showable);
+    /// regenerateRecoveryCode() failed; the old code still works unless the error was a network one.
+    void recoveryCodeFailed(const SyncError &error);
+
     /// A pending device asks for the key; `verificationCode` must match what it shows.
     void approvalRequested(const QString &id, const QString &name, const QString &platform, const QString &verificationCode);
     void deviceApproved(const QString &id);
     void approvalFailed(const QString &id, const SyncError &error);
+    void deviceDisconnected(const QString &id);
+    void disconnectFailed(const QString &id, const SyncError &error);
+
+    /// Signed out here; `remoteDone` false if the server could not be told: the device keeps its
+    /// slot until disconnected on sugo.stream.
+    void signedOut(bool remoteDone);
 
     /// A request failed in a way worth showing (network, rate limit, server); it is retried.
     void requestFailed(const SyncError &error);
@@ -196,6 +237,9 @@ private:
     /// Reads a device list; false if the answer is not one.
     bool takeDevices(const SyncReply &reply);
     void askAboutPendingDevices();
+    void setRecoveryShowable(bool showable);
+    /// Remembers the time of the server's recovery copy if this device wrote it.
+    void recordRecoveryUpload();
     void onSignedOutRemotely();
     void writeSetting(const char *key, const QVariant &value);
 
@@ -231,4 +275,9 @@ private:
     bool m_checkingPending = false;
     QSet<QString> m_asked;
     QSet<QString> m_ignored;
+
+    bool m_recoveryShowable = false;
+    bool m_usingRecoveryCode = false;
+    bool m_regenerating = false;
+    bool m_signingOut = false;
 };
