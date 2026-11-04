@@ -12,9 +12,9 @@ LABEL org.opencontainers.image.description="Build and test environment of Sugo's
 
 ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8
 
-# The build (GCC and Clang, libsodium for Sugo Sync), the metadata checks, the tests (D-Bus, python3 for the platform parity
-# check, a font for the offscreen QML runs), and what the actions need inside a container (git for
-# actions/checkout, zstd for actions/cache).
+# The build (GCC and Clang, libsodium for Sugo Sync), the metadata checks, the tests (D-Bus,
+# python3 for the platform parity check, a font for the offscreen QML runs), and what the actions
+# need inside a container (git for actions/checkout, zstd for actions/cache).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         cmake ninja-build g++ clang ccache \
