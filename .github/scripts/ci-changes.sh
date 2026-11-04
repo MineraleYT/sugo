@@ -55,6 +55,10 @@ classify() {
         tests/shutdown_app.sh | tests/check_qml_colours.sh | tests/check_qml_sizes.sh)
             linux=true ;;
 
+        # The system the Linux jobs run in.
+        .github/ci-image/*)
+            linux=true clang=true ;;
+
         # Run by the tests on both systems, compiled by neither.
         tests/*.sh | tests/*.py | tests/*.json | data/*.in)
             linux=true macos=true ;;
