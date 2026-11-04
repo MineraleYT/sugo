@@ -1341,6 +1341,18 @@ private Q_SLOTS:
         QVERIFY(!f.readAll().contains(kPassword.toUtf8()));
     }
 
+    void passwordIsStoredAsTyped()
+    {
+        configureCustom();
+        const QString spaced = QStringLiteral(" pass word ");
+        m_server->expectedAuth = basic(QStringLiteral("alice"), spaced);
+        m_sync->setPassword(spaced);
+        QCOMPARE(diskGroup().group(QStringLiteral("caldav")).readEntry("AppPassword", QString()), spaced);
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->of("PUT").first().headers.value("authorization"), basic(QStringLiteral("alice"), spaced));
+    }
+
     // ----- Per-provider settings -----
 
     void providersAreSeparate()

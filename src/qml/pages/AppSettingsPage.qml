@@ -1031,7 +1031,9 @@ QQC2.Page {
                             Accessible.name: i18n("Password")
                             onTextEdited: dirty = true
                             onEditingFinished: {
-                                if (dirty && CalendarSync) {
+                                // Left empty, it keeps the stored password: only Disconnect, which
+                                // asks first, forgets it.
+                                if (dirty && text.length > 0 && CalendarSync) {
                                     CalendarSync.setPassword(text);
                                 }
                                 dirty = false;

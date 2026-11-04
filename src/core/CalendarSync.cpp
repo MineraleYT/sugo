@@ -731,9 +731,9 @@ void CalendarSync::setUsername(const QString &username)
 
 void CalendarSync::setPassword(const QString &password)
 {
-    const QString pw = password.trimmed();
+    // Stored as typed: a space at either end may be part of it.
     const bool had = hasPassword();
-    storePassword(pw);
+    storePassword(password);
     if (had != hasPassword()) {
         Q_EMIT hasPasswordChanged();
     }
