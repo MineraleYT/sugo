@@ -488,6 +488,25 @@ private Q_SLOTS:
         QCOMPARE(reloaded->soundVolume(), 0);
     }
 
+    void emptyOrNonNumericValuesUseTheDefaults()
+    {
+        // A hand-edited or half-written file: such a value must not read as 0 (muting the alerts).
+        // A file of its own: QSettings keeps the parse of a path it has seen before when the
+        // file's size and time stamp have not changed, which a test writing the same path at
+        // once can hit (seen on macOS).
+        const QString path = dir.filePath(QStringLiteral("hand-edited.conf"));
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write("[General]\nSoundVolume=\nFocusSoundVolume=loud\nTrayBadgeStyle=two\nFocusSoundMode=\n");
+        }
+        const auto settings = std::make_unique<AppSettings>(Settings::open(path), std::make_unique<FakeAutostart>(state), true);
+        QCOMPARE(settings->soundVolume(), 80);
+        QCOMPARE(settings->focusSoundVolume(), 30);
+        QCOMPARE(settings->trayBadgeStyle(), 0);
+        QCOMPARE(settings->focusSoundMode(), 0);
+    }
+
     void colorSchemeDefaultsToSystemAndPersists()
     {
         {
