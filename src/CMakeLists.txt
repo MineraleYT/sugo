@@ -86,6 +86,7 @@ target_sources(sugo_core PRIVATE
     core/UpdateChecker.cpp
     core/Diagnostics.h
     core/Diagnostics.cpp
+    core/UrlPolicy.h
     core/CalendarSync.h
     core/CalendarSync.cpp
     platform/NotificationInhibitor.h
