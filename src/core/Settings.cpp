@@ -46,6 +46,15 @@ void sync(QSettings &settings)
     if (QFileInfo::exists(settings.fileName())) {
         QFile::setPermissions(settings.fileName(), QFile::ReadOwner | QFile::WriteOwner);
     }
+    // A folder that cannot be written (wrong owner, full disk) loses every change at the next
+    // start. Said once per settings object: every later change fails the same way.
+    static const char warnedProperty[] = "sugoSyncFailureReported";
+    if (settings.status() != QSettings::NoError && !settings.property(warnedProperty).toBool()) {
+        settings.setProperty(warnedProperty, true);
+        qWarning("Cannot save the settings to %s (%s): changes will be lost when Sugo ends",
+                 qUtf8Printable(settings.fileName()),
+                 settings.status() == QSettings::AccessError ? "access error" : "format error");
+    }
 }
 
 } // namespace Settings
