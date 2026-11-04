@@ -122,6 +122,32 @@ private Q_SLOTS:
         QCOMPARE(adjusted.count(), 1);
     }
 
+    void loadedPresetsAreBroughtWithinTheLimits()
+    {
+        TimerPreset stored;
+        stored.uuid = QStringLiteral("stored");
+        stored.name = QString(500, QLatin1Char('n'));
+        stored.category = QString(500, QLatin1Char('c'));
+        stored.workSeconds = 0;
+        stored.shortBreakSeconds = -5;
+        stored.longBreakSeconds = PresetLimits::MaxBreakSeconds + 1;
+        stored.cyclesBeforeLong = 1000;
+        stored.options.insert(PresetOption::AutoStartMode, 9);
+
+        QSignalSpy modified(model.get(), &PresetModel::modified);
+        model->setPresets({stored}, stored.uuid);
+        QCOMPARE(modified.count(), 0); // loading never writes back
+
+        const QVariantMap p = model->get(stored.uuid);
+        QCOMPARE(p.value(QStringLiteral("workSeconds")).toInt(), 1);
+        QCOMPARE(p.value(QStringLiteral("shortBreakSeconds")).toInt(), 0);
+        QCOMPARE(p.value(QStringLiteral("longBreakSeconds")).toInt(), PresetLimits::MaxBreakSeconds);
+        QCOMPARE(p.value(QStringLiteral("cyclesBeforeLong")).toInt(), PresetLimits::MaxCycles);
+        QCOMPARE(p.value(QStringLiteral("name")).toString().size(), PresetModel::maxNameLength());
+        QCOMPARE(p.value(QStringLiteral("category")).toString().size(), PresetModel::maxNameLength());
+        QCOMPARE(model->option(stored.uuid, PresetOption::AutoStartMode).toInt(), 2);
+    }
+
     void duplicateKeepsTheNameWithinTheLimit()
     {
         const QString uuid = model->create({{QStringLiteral("name"), QString(500, QLatin1Char('n'))}});

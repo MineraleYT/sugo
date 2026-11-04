@@ -56,6 +56,26 @@ QString limitedText(const QString &text, int maxLength = PresetLimits::MaxNameLe
     return kept.trimmed();
 }
 
+/// A stored timer (an older version's, a restored backup's, a hand-edited file's) brought within
+/// the limits the editor keeps, so the engine and the editor never see values they would refuse.
+void clampToLimits(TimerPreset &preset)
+{
+    preset.workSeconds = std::clamp(preset.workSeconds, 1, kMaxWorkSeconds);
+    preset.shortBreakSeconds = std::clamp(preset.shortBreakSeconds, 0, kMaxBreakSeconds);
+    preset.longBreakSeconds = std::clamp(preset.longBreakSeconds, 0, kMaxBreakSeconds);
+    preset.cyclesBeforeLong = std::clamp(preset.cyclesBeforeLong, 0, kMaxCycles);
+    const QString name = limitedText(preset.name);
+    if (!name.isEmpty()) {
+        preset.name = name;
+    }
+    preset.category = limitedText(preset.category);
+    for (const auto &desc : PresetSettings::descriptors()) {
+        if (preset.options.contains(desc.key)) {
+            preset.options.insert(desc.key, coercedOption(desc, preset.options.value(desc.key)));
+        }
+    }
+}
+
 } // namespace
 
 PresetModel::PresetModel(QObject *parent)
@@ -273,6 +293,7 @@ void PresetModel::setPresets(const QList<TimerPreset> &presets, const QString &c
         }
         seen.insert(preset.uuid);
         preset.builtin = (preset.uuid == DefaultUuid);
+        clampToLimits(preset);
         clean.append(preset);
     }
     if (!seen.contains(DefaultUuid)) {
