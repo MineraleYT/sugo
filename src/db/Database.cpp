@@ -259,7 +259,13 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
     if (!check.exec(QStringLiteral("PRAGMA quick_check(1)"))) {
         return failed(check.lastError());
     }
-    if (!check.next() || check.value(0).toString() != QLatin1String("ok")) {
+    if (!check.next()) {
+        m_error = QStringLiteral("The integrity check returned no result");
+        return Ownership::Corrupt;
+    }
+    const QString integrity = check.value(0).toString();
+    if (integrity != QLatin1String("ok")) {
+        m_error = QStringLiteral("The integrity check failed: %1").arg(integrity);
         return Ownership::Corrupt;
     }
 

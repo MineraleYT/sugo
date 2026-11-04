@@ -48,6 +48,29 @@ bool execOn(const QString &path, const QStringList &statements)
     return ok;
 }
 
+/// Overwrites every page of a database file but the first (its header and schema) with junk:
+/// the file still reads as the same database, but its tables are damaged.
+bool spoilAllButFirstPage(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadWrite)) {
+        return false;
+    }
+    const QByteArray header = file.read(100);
+    if (header.size() != 100) {
+        return false;
+    }
+    int pageSize = (int(quint8(header.at(16))) << 8) | int(quint8(header.at(17)));
+    if (pageSize == 1) {
+        pageSize = 65536;
+    }
+    if (file.size() <= pageSize || !file.seek(pageSize)) {
+        return false;
+    }
+    const QByteArray junk(qsizetype(file.size() - pageSize), char(0x5a));
+    return file.write(junk) == junk.size();
+}
+
 } // namespace
 
 class DataManagerTest : public QObject
@@ -465,6 +488,42 @@ private Q_SLOTS:
 
         presetModel->remove(newUuid);
         QCOMPARE(manager->presetCount(), 2);
+    }
+
+    void restoringADamagedBackupSaysWhy()
+    {
+        for (int i = 0; i < 50; ++i) {
+            QVERIFY(sessions->insert(sampleRecord(QStringLiteral("Current %1").arg(i))));
+        }
+        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
+        QVERIFY(manager->backupDatabase(QUrl::fromLocalFile(backupPath)));
+
+        // Keep the first page (the header and the schema) and spoil all the others: the backup
+        // still reads as a Sugo database, but its tables are damaged.
+        QVERIFY(spoilAllButFirstPage(backupPath));
+
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QVERIFY(!manager->restoreDatabase(QUrl::fromLocalFile(backupPath)));
+        QCOMPARE(failed.count(), 1);
+        const QString message = failed.first().first().toString();
+        QVERIFY2(message.contains(QStringLiteral("damaged")), qPrintable(message));
+        QCOMPARE(manager->sessionCount(), 50);
+    }
+
+    void damagedDatabaseSaysWhyItWasMovedAside()
+    {
+        // Database::open() moves a file with damaged pages aside; its reason is kept.
+        QVERIFY(sessions->insert(sampleRecord()));
+        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
+        QVERIFY(manager->backupDatabase(QUrl::fromLocalFile(backupPath)));
+        QVERIFY(spoilAllButFirstPage(backupPath));
+
+        Database damaged(backupPath);
+        QVERIFY(damaged.open());
+        QVERIFY(!damaged.movedAsidePath().isEmpty());
+        QVERIFY(damaged.movedAsideWasCorrupt());
+        QVERIFY(!damaged.lastError().isEmpty());
+        QFile::remove(damaged.movedAsidePath());
     }
 };
 

@@ -400,7 +400,14 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
     {
         Database migrated(copyPath);
         if (!migrated.open() || !migrated.movedAsidePath().isEmpty()) {
-            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", migrated.lastError()));
+            // A copy that had to be moved aside was damaged (or, past the checks above, not ours):
+            // say so rather than repeat the low-level reason, if any.
+            QString reason = migrated.lastError();
+            if (!migrated.movedAsidePath().isEmpty()) {
+                reason = migrated.movedAsideWasCorrupt() ? i18n("The backup is damaged.")
+                                                         : i18n("This file is not a Sugo database.");
+            }
+            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", reason));
             return false;
         }
     } // closing the connection folds the WAL back into the file before it is attached
