@@ -128,6 +128,14 @@ QQC2.Page {
         return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
     }
     readonly property var syncDevices: SyncController ? SyncController.devices : []
+    // The device list is otherwise read only when this computer becomes ready and after an
+    // approval: read it again whenever the Sync tab is shown, so a device signed out or
+    // disconnected elsewhere since then disappears from it.
+    onCategoryChanged: {
+        if (category === "sync" && SyncController) {
+            SyncController.refreshDevices();
+        }
+    }
     function syncDate(value: var): string {
         if (!value) {
             return "";
