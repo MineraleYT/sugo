@@ -40,6 +40,8 @@ private Q_SLOTS:
     void testDays();
     void testPreviousPeriodComparesTheSameStretch();
     void testDateCheckKeepsAPeriodUnderWayCurrent();
+    void testPreviousYearComparesTheSameDate();
+    void testPreviousMonthCountsAClampedDayWhole();
 
 private:
     void insertWork(const QDateTime &start, bool completed = true);
@@ -241,6 +243,32 @@ void TestStatsModel::testDateCheckKeepsAPeriodUnderWayCurrent()
     QSignalSpy statsSpy(m_model.get(), &StatsModel::statsChanged);
     m_model->checkDateChange();
     QCOMPARE(statsSpy.count(), 0);
+}
+
+void TestStatsModel::testPreviousYearComparesTheSameDate()
+{
+    // 1 March 2028, after a 29 February: the same point of 2027 is 1 March, not 2 March.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2028, 3, 1), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Year);
+    insertWork(QDateTime(QDate(2027, 3, 1), QTime(9, 0), QTimeZone::utc()));  // before the same point
+    insertWork(QDateTime(QDate(2027, 3, 1), QTime(18, 0), QTimeZone::utc())); // after it
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 1500);
+}
+
+void TestStatsModel::testPreviousMonthCountsAClampedDayWhole()
+{
+    // 31 March, early: February has no 31st, so the whole of 28 February counts.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2026, 3, 31), QTime(0, 30), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Month);
+    insertWork(QDateTime(QDate(2026, 2, 28), QTime(9, 0), QTimeZone::utc()));
+    insertWork(QDateTime(QDate(2026, 2, 28), QTime(22, 0), QTimeZone::utc()));
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 3000);
 }
 
 QList<QDate> TestStatsModel::shownDays() const

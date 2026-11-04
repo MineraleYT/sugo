@@ -124,6 +124,25 @@ QDate shifted(StatsPeriod kind, const QDate &anchor, int steps)
     Q_UNREACHABLE_RETURN(anchor);
 }
 
+qint64 samePointInPreviousPeriod(StatsPeriod kind, const QDate &anchor, Qt::DayOfWeek firstDayOfWeek,
+                                 const QTimeZone &timeZone, const QDateTime &now)
+{
+    const PeriodRange previous = rangeFor(kind, shifted(kind, anchor, -1), firstDayOfWeek, timeZone);
+    const QDateTime local = now.toTimeZone(timeZone);
+    const QDate day = shifted(kind, local.date(), -1);
+    qint64 sameMs = 0;
+    if ((kind == StatsPeriod::Month || kind == StatsPeriod::Year) && day.day() != local.date().day()) {
+        // The day was clamped (31 March to 28 February): that day is over by now, otherwise the
+        // point would go back from 30 March 23:00 (28 February 23:00) to 31 March 00:00.
+        sameMs = day.addDays(1).startOfDay(timeZone).toMSecsSinceEpoch();
+    } else {
+        const QDateTime same(day, local.time(), timeZone);
+        // A time the day before does not have: its start, never more than that day.
+        sameMs = (same.isValid() ? same : day.startOfDay(timeZone)).toMSecsSinceEpoch();
+    }
+    return qBound(previous.startMs, sameMs, previous.endMs);
+}
+
 StatsSummary summarize(const QList<SessionRecord> &records,
                        StatsPeriod kind,
                        const QDate &anchor,
