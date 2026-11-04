@@ -120,9 +120,9 @@ jobs:
           cmake --build build --parallel
           ccache --show-stats
 
-  # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
-  # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
-  # (nor stop the nightly build) while the port settles.
+  # Native arm64 build and tests with Qt from qt.io, extra-cmake-modules and libsodium from source,
+  # at the versions packaging/macos/build.sh and build-libsodium.sh pin. Not blocking yet: a
+  # failure here does not fail CI (nor stop the nightly build) while the port settles.
   build-and-test-macos:
     name: Build and test on macOS
     runs-on: macos-26
@@ -139,12 +139,15 @@ jobs:
             test -n "$value"
             echo "$pin=$value" >> "$GITHUB_OUTPUT"
           done
+          value=$(sed -n "s/^LIBSODIUM_VERSION=//p" packaging/macos/build-libsodium.sh)
+          test -n "$value"
+          echo "LIBSODIUM_VERSION=$value" >> "$GITHUB_OUTPUT"
 
-      - name: Restore Qt and extra-cmake-modules
+      - name: Restore Qt, extra-cmake-modules and libsodium
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/sugo-deps
-          key: macos-deps-${{ runner.arch }}-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}
+          key: macos-deps-${{ runner.arch }}-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}-sodium${{ steps.pins.outputs.LIBSODIUM_VERSION }}
 
       - name: Install build dependencies
         env:
@@ -153,6 +156,7 @@ jobs:
           ECM_TAG: ${{ steps.pins.outputs.ECM_TAG }}
         run: |
           command -v ninja >/dev/null || brew install ninja
+          command -v pkg-config >/dev/null || brew install pkgconf
           # GNU timeout, which the smoke tests use.
           command -v timeout >/dev/null || brew install coreutils
           echo "$(brew --prefix coreutils)/libexec/gnubin" >> "$GITHUB_PATH"
@@ -173,6 +177,10 @@ jobs:
             if [ -d "$qt" ]; then echo "SUGO_QT=$qt" >> "$GITHUB_ENV"; break; fi
           done
           echo "SUGO_ECM=$deps/ecm" >> "$GITHUB_ENV"
+          # libsodium as the release build has it (universal, static), found through pkg-config.
+          bash packaging/macos/build-libsodium.sh "$deps/sodium"
+          echo "PKG_CONFIG_PATH=$deps/sodium/lib/pkgconfig" >> "$GITHUB_ENV"
+          test "$(PKG_CONFIG_PATH="$deps/sodium/lib/pkgconfig" pkg-config --variable=libdir libsodium)" = "$deps/sodium/lib"
 
       - name: Configure
         run: |
