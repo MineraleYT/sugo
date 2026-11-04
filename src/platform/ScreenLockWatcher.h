@@ -15,7 +15,8 @@ class MacSessionEvents;
 class TimerEngine;
 
 /**
- * Listens for system screen lock/unlock signals via FreeDesktop ScreenSaver D-Bus.
+ * Listens for system screen lock/unlock signals on D-Bus: org.freedesktop.ScreenSaver (Plasma)
+ * and org.gnome.ScreenSaver (GNOME).
  * Automatically pauses the active work phase when the screen is locked, and
  * signals when the user returns so they can resume or review their session.
  *
