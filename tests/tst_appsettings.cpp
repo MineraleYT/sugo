@@ -383,6 +383,22 @@ private Q_SLOTS:
         QCOMPARE(state->repairCalls, 1);
     }
 
+    // A test run or a build being tried (SUGO_DATA_DIR) must not point the user's login entry at itself.
+    void anIsolatedRunLeavesTheLoginEntryAlone()
+    {
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        const bool wasSet = qEnvironmentVariableIsSet("SUGO_DATA_DIR");
+        QTemporaryDir dir;
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dir.path()));
+        make();
+        if (wasSet) {
+            qputenv("SUGO_DATA_DIR", saved);
+        } else {
+            qunsetenv("SUGO_DATA_DIR");
+        }
+        QCOMPARE(state->repairCalls, 0);
+    }
+
     void unsupportedPlatformsAreReported()
     {
         state->supported = false;

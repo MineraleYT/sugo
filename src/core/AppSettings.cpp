@@ -180,8 +180,10 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
         Settings::sync(*m_config);
     }
 
-    // The program may have moved since the entry was written (new install prefix).
-    if (m_autostart) {
+    // The program may have moved since the entry was written (new install prefix). Not in an
+    // isolated run (SUGO_DATA_DIR: tests, a build tried out): the login entry is the user's, and
+    // on macOS it would point at the copy being tried.
+    if (m_autostart && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
         m_autostart->repair();
     }
 }
