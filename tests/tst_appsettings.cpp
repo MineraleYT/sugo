@@ -3,7 +3,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
-#include <QStandardPaths>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -86,6 +86,9 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
+        // A developer's exported SUGO_DATA_DIR would turn off the login-entry repair these tests
+        // count; the test that needs the variable sets it itself.
+        qunsetenv("SUGO_DATA_DIR");
     }
 
     void init()
@@ -709,8 +712,13 @@ private Q_SLOTS:
 
     void defaultSettingsAreSharedAndPrivate()
     {
-        QStandardPaths::setTestModeEnabled(true);
-        QFile::remove(Settings::defaultPath());
+        // The default file in a directory of its own: never the user's real settings, and
+        // nothing left behind in ~/.qttest.
+        QTemporaryDir dataDir;
+        QVERIFY(dataDir.isValid());
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dataDir.path()));
+        const auto unset = qScopeGuard([] { qunsetenv("SUGO_DATA_DIR"); });
+        QCOMPARE(Settings::defaultPath(), dataDir.filePath(QStringLiteral("sugo.conf")));
         QVERIFY(QDir().mkpath(QFileInfo(Settings::defaultPath()).absolutePath()));
         {
             const Settings::Ptr settings = Settings::openDefault();
@@ -720,9 +728,6 @@ private Q_SLOTS:
         }
         QCOMPARE(QFile::permissions(Settings::defaultPath()) & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions());
         QCOMPARE(Settings::openDefault()->value(QStringLiteral("SoundVolume")).toInt(), 7);
-
-        QFile::remove(Settings::defaultPath());
-        QStandardPaths::setTestModeEnabled(false);
     }
 
     void syncKeepsANewFilePrivate()

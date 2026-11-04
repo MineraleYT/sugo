@@ -230,8 +230,9 @@ private Q_SLOTS:
     {
         server.failures = 100;
         engine->start();
-        QTest::qWait(4500);
-        QCOMPARE(server.calls.size(), 4); // the request and three retries
+        QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 4, 6000); // the request and three retries
+        QTest::qWait(1200);                                       // longer than a retry's delay: no fourth one
+        QCOMPARE(server.calls.size(), 4);
         QVERIFY(!screenInhibited());
         server.failures = 0;
     }
@@ -243,8 +244,10 @@ private Q_SLOTS:
         QTest::qWait(300); // the first Inhibit failed and a retry is due
         engine->stop();
         engine->start();
-        QTest::qWait(4500);
-        QCOMPARE(server.calls.size(), 5); // one refused call, then the new phase's request and three retries
+        // One refused call, then the new phase's request and three retries.
+        QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), 5, 6000);
+        QTest::qWait(1200); // longer than a retry's delay: no retry left over from the old phase
+        QCOMPARE(server.calls.size(), 5);
         server.failures = 0;
     }
 
