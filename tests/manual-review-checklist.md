@@ -11,6 +11,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
 - [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
+- [ ] Give a timer a category of 100 characters and start it in a narrow window: "Focusing · …" is cut with an ellipsis inside its pill, which is never wider than the cycle track.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
 - [ ] Check automatic phase start in each supported mode, Manual, Breaks only and All phases.
 - [ ] Try the minimum and maximum supported durations, zero-length breaks, and a long-break interval of zero.

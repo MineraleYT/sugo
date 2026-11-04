@@ -239,6 +239,9 @@ QQC2.Page {
                     }
                 }
                 Text {
+                    // A long category is cut: the pill is never wider than the track below.
+                    Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.spaceLg * 2 - Theme.spaceSm - phaseRow.spacing)
+                    elide: Text.ElideRight
                     text: page.phaseText
                     color: page.isIdle ? Theme.muted : Qt.lighter(page.phaseColor, Theme.dark ? 1.3 : 0.8)
                     font.pixelSize: Theme.fontBody
