@@ -56,6 +56,7 @@ sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
 # Sugo Sync: no D-Bus, the same tests on Linux and macOS.
 sugo_add_test(tst_synccrypto Qt6::Core)
 sugo_add_test(tst_presetsyncformat Qt6::Core Qt6::Qml)
+sugo_add_test(tst_syncsecrets Qt6::Core)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
