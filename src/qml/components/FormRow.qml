@@ -43,8 +43,14 @@ Item {
 
         ColumnLayout {
             Layout.fillWidth: true
+            // With variants, as tall as the title and the tallest of them; the text shown sits in
+            // the middle of that room, in line with the control.
+            Layout.minimumHeight: row.descriptionVariants.length > 0
+                                  ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
             spacing: Theme.hairline * 2
+            Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
             Text {
+                id: titleText
                 text: row.title
                 color: row.enabled ? Theme.foreground : Theme.subtle
                 font.pixelSize: Theme.fontBody + 1
@@ -60,7 +66,7 @@ Item {
                 font.pixelSize: Theme.fontCaption + 1
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
-                Layout.minimumHeight: {
+                readonly property real reservedHeight: {
                     let height = 0;
                     for (let i = 0; i < descriptionMeasures.count; ++i) {
                         const measure = descriptionMeasures.itemAt(i);
@@ -70,7 +76,6 @@ Item {
                     }
                     return height;
                 }
-                verticalAlignment: Text.AlignTop
 
                 // The variants, never shown: their heights at this width.
                 Repeater {
@@ -86,6 +91,7 @@ Item {
                     }
                 }
             }
+            Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
         }
         RowLayout {
             id: controlHolder

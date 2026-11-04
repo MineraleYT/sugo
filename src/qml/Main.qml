@@ -353,11 +353,10 @@ QQC2.ApplicationWindow {
                 return;
             }
             // "Install Shortcuts" is there, and off in a smoke run (no installer: the real tools
-            // must never run); "Create them yourself" stays collapsed until asked.
+            // must never run).
             const installButton = findItem(focusCard, item => item.objectName === "installFocusShortcutsButton");
-            const manualToggle = findItem(focusCard, item => item.objectName === "focusManualToggle");
-            if (!installButton || installButton.enabled || !manualToggle || page.focusManualShown) {
-                fail(45, "The Focus card's install button or its collapsed manual way is wrong");
+            if (!installButton || installButton.enabled) {
+                fail(45, "The Focus card's install button is missing, or on in a smoke run");
                 return;
             }
             // Disconnecting the calendar asks first.

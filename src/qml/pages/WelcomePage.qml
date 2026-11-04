@@ -663,23 +663,15 @@ QQC2.Page {
                         id: focusRow
                         visible: DesktopStyle.macos
                         title: i18n("Silence notifications with a Focus")
-                        description: page.focusShortcutsFound
-                                     ? i18n("The shortcuts are installed: a timer can turn on Do Not Disturb while you work.")
-                                     : i18n("Install two shortcuts that turn Do Not Disturb on and off while you work. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. You can also skip this.")
-                        // As tall as the longer text, so the step does not move when it changes.
-                        descriptionVariants: [
-                            i18n("The shortcuts are installed: a timer can turn on Do Not Disturb while you work."),
-                            i18n("Install two shortcuts that turn Do Not Disturb on and off while you work. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. You can also skip this.")
-                        ]
+                        description: focusStatus.description(AppSettings.focusShortcutsSupported)
+                        // Every state's text: the row keeps the height of the tallest.
+                        descriptionVariants: focusStatus.descriptionVariants(AppSettings.focusShortcutsSupported)
                         opacity: setupStep.reveal(7)
                         transform: Translate { y: setupStep.rise(7) }
                         SButton {
                             objectName: "welcomeInstallFocusShortcuts"
                             text: i18n("Install Focus Shortcuts")
-                            enabled: AppSettings.focusShortcutsInstallable && !page.focusShortcutsFound
-                                     && AppSettings.focusShortcutsInstallStatus !== "installing"
-                                     && AppSettings.focusShortcutsInstallStatus !== "waitingOn"
-                                     && AppSettings.focusShortcutsInstallStatus !== "waitingOff"
+                            enabled: AppSettings.focusShortcutsInstallable && !page.focusShortcutsFound && !focusStatus.busy
                             Accessible.description: focusRow.description
                             onClicked: AppSettings.installFocusShortcuts()
                         }
@@ -692,15 +684,15 @@ QQC2.Page {
                 found: page.focusShortcutsFound
             }
 
-            // The login entry's error, or on macOS where installing the Focus shortcuts got: in a
-            // place of its own, so the step does not move when a message comes or goes.
+            // The login entry's error: in a place of its own below the card, so the step does not
+            // move when it comes or goes.
             MessageSlot {
                 objectName: "welcomeSetupMessage"
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spaceMd
-                shown: page.autostartError.length > 0 || (DesktopStyle.macos && focusStatus.active)
-                tone: page.autostartError.length > 0 ? "danger" : focusStatus.tone
-                text: page.autostartError.length > 0 ? page.autostartError : focusStatus.text
+                shown: page.autostartError.length > 0
+                tone: "danger"
+                text: page.autostartError
             }
         }
 

@@ -131,21 +131,6 @@ QQC2.Page {
     }
     readonly property bool focusOnFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
     readonly property bool focusOffFound: focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
-    /// "Create them yourself" in the Focus card: opened by the user, or because installing failed.
-    property bool focusManualExpanded: false
-    readonly property bool focusManualForced: AppSettings.focusShortcutsInstallStatus === "failed"
-    readonly property bool focusInstalling: ["installing", "waitingOn", "waitingOff"].indexOf(AppSettings.focusShortcutsInstallStatus) >= 0
-    readonly property bool focusManualShown: focusManualExpanded || focusManualForced
-
-    /// The entries of a Focus shortcut list: the user's shortcuts, and the chosen one if it is
-    /// not among them (so the box still shows what is set).
-    function focusShortcutModel(chosen: string): var {
-        const list = page.focusShortcutNames.map(name => ({ text: name, value: name }));
-        if (chosen.length > 0 && page.focusShortcutNames.indexOf(chosen) < 0) {
-            list.unshift({ text: i18nc("a shortcut of the Shortcuts app that does not exist", "%1 (not found)", chosen), value: chosen });
-        }
-        return list;
-    }
 
     /// Disconnect forgets the password: asked first.
     function requestDisconnect(): void {
@@ -403,12 +388,19 @@ QQC2.Page {
             rowSpacing: Theme.spaceMd
 
             ColumnLayout {
+                id: textColumn
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 Layout.alignment: Qt.AlignVCenter
+                // With variants, as tall as the title and the tallest of them; the text shown sits
+                // in the middle of that room, in line with the controls.
+                Layout.minimumHeight: row.descriptionVariants.length > 0
+                                      ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
                 spacing: Theme.hairline * 2
                 opacity: row.enabled ? 1 : 0.5
+                Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
                 Text {
+                    id: titleText
                     Layout.fillWidth: true
                     visible: text.length > 0
                     text: row.title
@@ -421,8 +413,7 @@ QQC2.Page {
                     id: descriptionText
                     visible: row.description.length > 0
                     text: row.description
-                    verticalAlignment: Text.AlignTop
-                    Layout.minimumHeight: {
+                    readonly property real reservedHeight: {
                         let height = 0;
                         for (let i = 0; i < descriptionMeasures.count; ++i) {
                             const measure = descriptionMeasures.itemAt(i);
@@ -447,6 +438,7 @@ QQC2.Page {
                         }
                     }
                 }
+                Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
             }
 
             RowLayout {
@@ -827,103 +819,26 @@ QQC2.Page {
                 available: DesktopStyle.macos
                 title: i18n("Focus while working")
                 iconName: "notifications-disabled"
-                SettingRow {
-                    first: true
-                    title: i18n("Silence notifications with a Focus")
-                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. Sugo comes with two shortcuts, \"%1\" and \"%2\", that turn Do Not Disturb on and off. Shortcuts will ask you to add each of them: click Add Shortcut. Then switch on \"Silence notifications while working\" in a timer's options.",
-                                      "Sugo Focus On", "Sugo Focus Off")
-                    SButton {
-                        objectName: "installFocusShortcutsButton"
-                        kind: page.focusOnFound && page.focusOffFound ? "secondary" : "primary"
-                        text: i18n("Install Shortcuts")
-                        enabled: AppSettings.focusShortcutsInstallable && !page.focusInstalling
-                        onClicked: AppSettings.installFocusShortcuts()
-                    }
-                    SButton {
-                        kind: "ghost"
-                        iconOnly: true
-                        iconName: "refresh"
-                        text: i18n("Look for the shortcuts again")
-                        Accessible.name: text
-                        QQC2.ToolTip.text: text
-                        QQC2.ToolTip.visible: hovered
-                        QQC2.ToolTip.delay: Theme.toolTipDelay
-                        onClicked: AppSettings.refreshFocusShortcuts()
-                    }
-                }
+                // One row: what the shortcuts are for, where installing them got, and the button.
+                // Every state's text is in the variants, so the card keeps its height.
                 FocusShortcutsStatus {
                     id: focusInstallStatus
                     found: page.focusOnFound && page.focusOffFound
                 }
-                // The way without "Install Shortcuts": collapsed, open when installing cannot work.
                 SettingRow {
-                    objectName: "focusManualRow"
-                    title: i18n("Create them yourself")
-                    description: page.focusManualShown
-                                 ? i18n("In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on until turned off, one that turns it off. Choose them below.")
-                                 : i18n("Build the two shortcuts in the Shortcuts app instead, for example to use another Focus.")
+                    first: true
+                    objectName: "focusShortcutRow"
+                    title: i18n("Silence notifications with a Focus")
+                    description: focusInstallStatus.description(AppSettings.focusShortcutsSupported)
+                    descriptionVariants: focusInstallStatus.descriptionVariants(AppSettings.focusShortcutsSupported)
                     SButton {
-                        visible: page.focusManualShown
-                        text: i18n("Open Shortcuts")
-                        iconName: "external"
-                        onClicked: Qt.openUrlExternally("shortcuts://")
+                        objectName: "installFocusShortcutsButton"
+                        kind: focusInstallStatus.found ? "secondary" : "primary"
+                        text: i18n("Install Shortcuts")
+                        enabled: AppSettings.focusShortcutsInstallable && !focusInstallStatus.found && !focusInstallStatus.busy
+                        Accessible.description: focusInstallStatus.description(AppSettings.focusShortcutsSupported)
+                        onClicked: AppSettings.installFocusShortcuts()
                     }
-                    SButton {
-                        objectName: "focusManualToggle"
-                        visible: !page.focusManualForced
-                        kind: "ghost"
-                        text: page.focusManualShown ? i18n("Hide") : i18n("Show How")
-                        onClicked: page.focusManualExpanded = !page.focusManualExpanded
-                    }
-                }
-                SettingRow {
-                    title: i18n("Shortcut that turns the Focus on")
-                    description: i18n("Runs when a work phase starts.")
-                    enabled: AppSettings.focusShortcutsSupported
-                    SComboBox {
-                        objectName: "focusOnShortcutBox"
-                        textRole: "text"
-                        valueRole: "value"
-                        model: page.focusShortcutModel(AppSettings.focusOnShortcut)
-                        currentIndex: page.valueIndex(model, AppSettings.focusOnShortcut)
-                        Accessible.name: i18n("Shortcut that turns the Focus on")
-                        onActivated: AppSettings.focusOnShortcut = currentValue
-                    }
-                }
-                SettingRow {
-                    title: i18n("Shortcut that turns the Focus off")
-                    description: i18n("Runs when the work phase ends, is paused or stopped, and when Sugo quits.")
-                    enabled: AppSettings.focusShortcutsSupported
-                    SComboBox {
-                        objectName: "focusOffShortcutBox"
-                        textRole: "text"
-                        valueRole: "value"
-                        model: page.focusShortcutModel(AppSettings.focusOffShortcut)
-                        currentIndex: page.valueIndex(model, AppSettings.focusOffShortcut)
-                        Accessible.name: i18n("Shortcut that turns the Focus off")
-                        onActivated: AppSettings.focusOffShortcut = currentValue
-                    }
-                }
-                // Where installing got while it runs (or why it failed), else whether the shortcuts are
-                // there: always shown, in a place of fixed height.
-                MessageSlot {
-                    objectName: "focusShortcutStatus"
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spaceXs
-                    Layout.bottomMargin: Theme.spaceMd
-                    shown: true
-                    tone: focusInstallStatus.active && AppSettings.focusShortcutsInstallStatus !== "done" ? focusInstallStatus.tone
-                          : AppSettings.focusShortcutsSupported && page.focusOnFound && page.focusOffFound ? "info" : "warning"
-                    text: focusInstallStatus.active && AppSettings.focusShortcutsInstallStatus !== "done" ? focusInstallStatus.text
-                          : !AppSettings.focusShortcutsSupported
-                          ? i18n("The Shortcuts app is not available: silencing notifications needs macOS 12 or later.")
-                          : page.focusOnFound && page.focusOffFound
-                            ? i18n("Both shortcuts were found: timers can silence notifications while you work.")
-                            : !page.focusOnFound && !page.focusOffFound
-                              ? i18n("The shortcuts \"%1\" and \"%2\" were not found. Create them in the Shortcuts app, or choose others.",
-                                     AppSettings.focusOnShortcut, AppSettings.focusOffShortcut)
-                              : i18n("The shortcut \"%1\" was not found. Create it in the Shortcuts app, or choose another.",
-                                     page.focusOnFound ? AppSettings.focusOffShortcut : AppSettings.focusOnShortcut)
                 }
             }
 
