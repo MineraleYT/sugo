@@ -23,6 +23,9 @@ Rectangle {
     /// are here.
     signal moveRequested()
     property bool maximized: false
+    /// The window buttons the desktop puts on the left; off where the sidebar is not part of the
+    /// window's frame (the drawer of a narrow window).
+    property bool showWindowButtons: true
     signal minimizeRequested()
     signal toggleMaximizeRequested()
     signal closeRequested()
@@ -65,7 +68,7 @@ Rectangle {
 
         // The window buttons the desktop puts on the left.
         WindowButtons {
-            visible: DesktopStyle.leftButtons.length > 0
+            visible: sidebar.showWindowButtons && DesktopStyle.leftButtons.length > 0
             Layout.leftMargin: Theme.spaceSm
             Layout.topMargin: Theme.spaceXs
             Layout.bottomMargin: Theme.spaceSm

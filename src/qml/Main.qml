@@ -1013,6 +1013,8 @@ QQC2.ApplicationWindow {
         background: Item {}
         Sidebar {
             anchors.fill: parent
+            // The window buttons stay in the top bar, which is the frame of a narrow window.
+            showWindowButtons: false
             current: root.currentDestination
             openTimer: root.openTimerUuid
             onNavigateRequested: name => {
