@@ -141,6 +141,8 @@ public:
     void setInstallerForTesting(std::unique_ptr<UpdateInstaller> installer);
     void setFeedUrlForTesting(const QUrl &url) { m_feedUrlOverride = url; }
     void setDownloadPrefixForTesting(const QString &prefix) { m_downloadPrefix = prefix; }
+    /// Tests: the automatic checks with other delays (as attach() starts them).
+    void scheduleChecksForTesting(int firstDelayMs, int intervalMs);
 
 Q_SIGNALS:
     void statusChanged();
@@ -149,6 +151,11 @@ Q_SIGNALS:
 private:
     void setStatus(Status s);
     void fail(const QString &message);
+    /// Reads the feed again while an update is offered; a newer one replaces it.
+    void refreshFoundUpdate();
+    /// Fetches the channel's feed; `quiet` for refreshFoundUpdate().
+    void requestFeed(bool quiet);
+    void refreshed(QNetworkReply *reply);
     void handleFeed(const QByteArray &data);
     void finishDownload(QNetworkReply *reply);
     void abortDownload();
@@ -170,6 +177,8 @@ private:
     QUrl m_feedUrlOverride;
     QString m_downloadPrefix;
     QTimer m_scheduleTimer;
+    int m_firstCheckDelayMs;
+    int m_checkIntervalMs;
 
     // The update the last check found, and its download.
     QString m_downloadUrl;

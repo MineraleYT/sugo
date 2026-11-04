@@ -14,6 +14,7 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSignalBlocker>
 
 #include <algorithm>
 
@@ -117,6 +118,8 @@ int naturalCompare(const QString &a, const QString &b)
 UpdateChecker::UpdateChecker(QObject *parent)
     : QObject(parent)
     , m_downloadPrefix(kDownloadPrefix)
+    , m_firstCheckDelayMs(kFirstCheckDelayMs)
+    , m_checkIntervalMs(kCheckIntervalMs)
 {
     const QString bundle = MacBundle::path();
     if (!bundle.isEmpty()) {
@@ -126,10 +129,13 @@ UpdateChecker::UpdateChecker(QObject *parent)
     }
     m_scheduleTimer.setSingleShot(true);
     connect(&m_scheduleTimer, &QTimer::timeout, this, [this]() {
-        m_scheduleTimer.start(kCheckIntervalMs);
-        // A check never interrupts a download or an update waiting for the restart.
+        m_scheduleTimer.start(m_checkIntervalMs);
+        // A check never interrupts a download or an update waiting for the restart. An update
+        // already found is looked at again quietly: a newer one replaces it.
         if (m_status == Status::Idle || m_status == Status::UpToDate || m_status == Status::Error) {
             checkForUpdates();
+        } else if (m_status == Status::UpdateAvailable) {
+            refreshFoundUpdate();
         }
     });
 }
@@ -159,7 +165,7 @@ void UpdateChecker::attach(AppSettings *settings)
         setAutoCheck(settings->autoCheckUpdates());
         if (canInstall() && m_autoCheck) {
             if (!m_scheduleTimer.isActive()) {
-                m_scheduleTimer.start(kFirstCheckDelayMs);
+                m_scheduleTimer.start(m_firstCheckDelayMs);
             }
         } else {
             m_scheduleTimer.stop();
@@ -311,6 +317,13 @@ bool UpdateChecker::isPlausibleVersionTag(const QString &tag)
     return tag.size() <= 64 && pattern.match(tag).hasMatch();
 }
 
+void UpdateChecker::scheduleChecksForTesting(int firstDelayMs, int intervalMs)
+{
+    m_firstCheckDelayMs = firstDelayMs;
+    m_checkIntervalMs = intervalMs;
+    m_scheduleTimer.start(m_firstCheckDelayMs);
+}
+
 void UpdateChecker::checkForUpdates()
 {
     if (m_status == Status::Checking || m_status == Status::Downloading || m_status == Status::ReadyToRestart) {
@@ -322,7 +335,20 @@ void UpdateChecker::checkForUpdates()
     m_errorMessage.clear();
     m_downloadUrl.clear();
     setStatus(Status::Checking);
+    requestFeed(false);
+}
 
+void UpdateChecker::refreshFoundUpdate()
+{
+    if (m_status != Status::UpdateAvailable) {
+        return;
+    }
+    // The update stays offered (and installable) while the feed is read again.
+    requestFeed(true);
+}
+
+void UpdateChecker::requestFeed(bool quiet)
+{
     QNetworkRequest request(m_feedUrlOverride.isEmpty() ? feedUrl(channel()) : m_feedUrlOverride);
     request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Sugo/%1").arg(currentVersion()));
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -332,13 +358,15 @@ void UpdateChecker::checkForUpdates()
 
     QNetworkReply *reply = network()->get(request);
     m_reply = reply;
-    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    connect(reply, &QNetworkReply::finished, this, [this, reply, quiet]() {
         reply->deleteLater();
         if (reply != m_reply) {
-            return; // superseded by reset() or a newer request
+            return; // superseded by reset(), a newer request or the download
         }
         m_reply = nullptr;
-        if (reply->error() == QNetworkReply::ContentNotFoundError) {
+        if (quiet) {
+            refreshed(reply);
+        } else if (reply->error() == QNetworkReply::ContentNotFoundError) {
             fail(i18n("No release has been published on this channel yet."));
         } else if (reply->error() != QNetworkReply::NoError) {
             fail(reply->errorString());
@@ -346,6 +374,36 @@ void UpdateChecker::checkForUpdates()
             handleFeed(reply->read(64 * 1024));
         }
     });
+}
+
+void UpdateChecker::refreshed(QNetworkReply *reply)
+{
+    if (m_status != Status::UpdateAvailable || reply->error() != QNetworkReply::NoError) {
+        return; // a failed refresh keeps the update found before
+    }
+    const QString version = m_latestVersion;
+    const QString releaseUrl = m_releaseUrl;
+    const QString downloadUrl = m_downloadUrl;
+    const QByteArray sha256 = m_expectedSha256;
+    const qint64 size = m_expectedSize;
+    m_downloadUrl.clear();
+    {
+        // Quietly: a feed that cannot be read now must not show an error in passing.
+        const QSignalBlocker silent(this);
+        handleFeed(reply->read(64 * 1024));
+    }
+    if (m_status == Status::Error) {
+        // A feed that cannot be read now does not take back what a good one offered.
+        m_latestVersion = version;
+        m_releaseUrl = releaseUrl;
+        m_downloadUrl = downloadUrl;
+        m_expectedSha256 = sha256;
+        m_expectedSize = size;
+        m_errorMessage.clear();
+        m_status = Status::UpdateAvailable; // as it was: nothing to announce
+        return;
+    }
+    Q_EMIT statusChanged(); // still available (the version and the download may have changed), or up to date
 }
 
 void UpdateChecker::handleFeed(const QByteArray &data)

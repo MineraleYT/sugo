@@ -498,6 +498,46 @@ private Q_SLOTS:
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 
+    void periodicCheckRefreshesAFoundUpdate()
+    {
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.setAutoCheck(true);
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.0"));
+
+        // The update stays offered while the feed is read again, and a newer one replaces it.
+        QList<UpdateChecker::Status> seen;
+        connect(&checker, &UpdateChecker::statusChanged, &checker, [&]() {
+            seen.append(checker.status());
+        });
+        release.announce(QStringLiteral("2.0.1"));
+        checker.scheduleChecksForTesting(50, 50);
+        QTRY_COMPARE(checker.latestVersion(), QStringLiteral("2.0.1"));
+        QCOMPARE(checker.releaseUrl(), QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v2.0.1"));
+        QVERIFY(checker.isInstallable());
+
+        // A feed that cannot be read keeps what was found.
+        writeFile(release.feed, QByteArrayLiteral("not json"));
+        QTest::qWait(300);
+        QCOMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.1"));
+        QVERIFY(checker.isInstallable());
+        QVERIFY(checker.errorMessage().isEmpty());
+        for (const UpdateChecker::Status status : std::as_const(seen)) {
+            QCOMPARE(status, UpdateChecker::Status::UpdateAvailable);
+        }
+        QCOMPARE(readFile(release.appImage), release.oldContent); // never downloaded unasked
+
+        checker.installUpdate();
+        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::ReadyToRestart, 10000);
+        QCOMPARE(readFile(release.appImage), release.newContent);
+        qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
     void damagedDownloadIsNotInstalled_data()
     {
         QTest::addColumn<QJsonObject>("changes");
