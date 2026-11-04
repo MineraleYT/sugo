@@ -18,6 +18,9 @@
  * (`nativeChrome`): the system draws the window buttons, so both lists are empty. `macos` is true
  * for the macOS style, also when SUGO_WINDOW_STYLE=macos previews it on Linux: QML uses it to
  * choose the wording of macOS (menu bar, Finder, System Settings), never to change behaviour.
+ *
+ * When a KWin window rule forces the system title bar on Sugo (Plasma 6.8+), both lists are
+ * empty: the system bar already has the buttons.
  */
 class DesktopStyle : public QObject
 {
@@ -64,6 +67,8 @@ public:
     static Layout parseKWin(const QString &left, const QString &right);
     /// GNOME's "appmenu:minimize,maximize,close" (left of the colon, right of it).
     static Layout parseGnome(const QString &layout);
+    /// Whether a window rule in this kwinrulesrc forces KWin's own title bar on Sugo's window.
+    static bool kwinForcesTitleBar(const QString &rulesPath);
     /// The defaults of each style.
     static Layout defaultLayout(const QString &style);
 

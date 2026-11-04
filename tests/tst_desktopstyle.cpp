@@ -4,6 +4,7 @@
 #include <QFontInfo>
 #include <QKeySequence>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "DesktopStyle.h"
@@ -80,6 +81,19 @@ private Q_SLOTS:
             QCOMPARE(style.leftButtons(), QStringList{QStringLiteral("close")});
             QCOMPARE(style.rightButtons(), QStringList{QStringLiteral("maximize")});
         }
+        // A window rule forcing KWin's title bar on every window (Plasma 6.8): no buttons of ours.
+        const QString rulesrc = configDir + QStringLiteral("/kwinrulesrc");
+        {
+            QFile file(rulesrc);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("[General]\nOrder=r1\n\n[r1]\ndecorationpolicy=server\ndecorationpolicyrule=2\n");
+        }
+        {
+            const DesktopStyle style;
+            QCOMPARE(style.leftButtons(), QStringList());
+            QCOMPARE(style.rightButtons(), QStringList());
+        }
+        QFile::remove(rulesrc);
         QFile::remove(kwinrc);
 
         // GNOME where its setting cannot be read: GNOME's default, close alone.
@@ -101,6 +115,31 @@ private Q_SLOTS:
         }
         qputenv("XDG_CURRENT_DESKTOP", desktop);
         QStandardPaths::setTestModeEnabled(false);
+    }
+
+    void kwinRulesForTheTitleBar()
+    {
+        QTemporaryDir dir;
+        QString path = dir.filePath(QStringLiteral("none"));
+        int n = 0;
+        // A new file each time: QSettings caches a file it read in the same second.
+        const auto rules = [&](const QByteArray &rule) {
+            path = dir.filePath(QString::number(++n));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("[General]\nOrder=a,b\n\n[a]\nwmclass=firefox\nwmclassmatch=1\ndecorationpolicy=server\ndecorationpolicyrule=2\n\n[b]\n" + rule);
+        };
+        QVERIFY(!DesktopStyle::kwinForcesTitleBar(path)); // no file
+        rules("decorationpolicy=server\ndecorationpolicyrule=2\n");
+        QVERIFY(DesktopStyle::kwinForcesTitleBar(path));
+        rules("decorationpolicy=server\ndecorationpolicyrule=1\n"); // "do not affect"
+        QVERIFY(!DesktopStyle::kwinForcesTitleBar(path));
+        rules("decorationpolicy=client\ndecorationpolicyrule=2\n");
+        QVERIFY(!DesktopStyle::kwinForcesTitleBar(path));
+        rules("wmclass=sugo\nwmclassmatch=2\ndecorationpolicy=server\ndecorationpolicyrule=3\n");
+        QVERIFY(DesktopStyle::kwinForcesTitleBar(path));
+        rules("wmclass=^io\\\\.github\\\\..*$\nwmclassmatch=3\ndecorationpolicy=server\ndecorationpolicyrule=2\n");
+        QVERIFY(DesktopStyle::kwinForcesTitleBar(path));
     }
 
     void forcedStyleAlwaysHasClose()
