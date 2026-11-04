@@ -14,11 +14,10 @@ on:
     branches: [testing]
   workflow_dispatch:
 
-# A newer change makes the build of an older one pointless.
-concurrency:
-  group: nightly
-  cancel-in-progress: true
-
+# A newer change makes the build of an older one pointless: the build jobs of an older run are
+# cancelled (their publish job is then skipped). The publish job itself is never cancelled once
+# it runs: "gh release upload --clobber" deletes the old nightly.json before uploading the new
+# one, and a cancel in between would leave the nightly channel without a feed.
 permissions:
   contents: read
 
@@ -55,6 +54,9 @@ jobs:
 
   appimage:
     needs: version
+    concurrency:
+      group: nightly-appimage
+      cancel-in-progress: true
     uses: ./.github/workflows/appimage.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -63,6 +65,9 @@ jobs:
   # Not blocking yet: the nightly build is published without it when it fails.
   macos:
     needs: version
+    concurrency:
+      group: nightly-macos
+      cancel-in-progress: true
     uses: ./.github/workflows/macos.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -71,8 +76,12 @@ jobs:
   publish:
     name: Publish the nightly build
     needs: [version, appimage, macos]
-    # Waits for the macOS build but does not need it.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' }}
+    # Waits for the macOS build but does not need it; a build cancelled by a newer run skips it.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' && needs.macos.result != 'cancelled' }}
+    # One publish at a time, in the order the runs reach it, each running to its end.
+    concurrency:
+      group: nightly-publish
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
       contents: write
