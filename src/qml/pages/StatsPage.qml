@@ -289,6 +289,10 @@ QQC2.Page {
                             readonly property real workHeight: chart.plotHeight * modelData.workSeconds / chart.scaleTop
                             readonly property real breakHeight: chart.plotHeight * modelData.breakSeconds / chart.scaleTop
 
+                            // The tooltip's text, for screen readers too.
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: modelData.tooltip
+
                             HoverHandler {
                                 id: bucketHover
                             }
@@ -478,6 +482,8 @@ QQC2.Page {
                                 opacity: modelData.workSeconds > 0 ? Math.min(1, 0.45 + modelData.workSeconds / 7200) : 1
                                 border.width: modelData.isToday ? Theme.hairline : 0
                                 border.color: Theme.foreground
+                                Accessible.role: Accessible.StaticText
+                                Accessible.name: modelData.tooltip
                                 HoverHandler {
                                     id: dayHover
                                 }
