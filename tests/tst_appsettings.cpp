@@ -99,6 +99,8 @@ private Q_SLOTS:
         QVERIFY(settings->trayAvailable());
         QVERIFY(settings->autostartSupported());
         QCOMPARE(settings->trayBadgeStyle(), 0);
+        QVERIFY(settings->showDockBadge());
+        QVERIFY(!settings->hideDockIcon());
         QCOMPARE(settings->soundTheme(), QStringLiteral("alarm-clock-elapsed"));
         QVERIFY(settings->protectWeekendStreak());
         QCOMPARE(settings->soundVolume(), 80);
@@ -117,6 +119,8 @@ private Q_SLOTS:
             settings->setCloseToTray(false);
             settings->setStartMinimized(false);
             settings->setTrayBadgeStyle(1);
+            settings->setShowDockBadge(false);
+            settings->setHideDockIcon(true);
             settings->setSoundTheme(QStringLiteral("complete"));
             settings->setSoundVolume(12);
             settings->setProtectWeekendStreak(false);
@@ -125,6 +129,8 @@ private Q_SLOTS:
         QCOMPARE(stored("CloseToTray"), QStringLiteral("false"));
         QCOMPARE(stored("StartMinimized"), QStringLiteral("false"));
         QCOMPARE(stored("TrayBadgeStyle"), QStringLiteral("1"));
+        QCOMPARE(stored("ShowDockBadge"), QStringLiteral("false"));
+        QCOMPARE(stored("HideDockIcon"), QStringLiteral("true"));
         QCOMPARE(stored("SoundTheme"), QStringLiteral("complete"));
         QCOMPARE(stored("SoundVolume"), QStringLiteral("12"));
         QCOMPARE(stored("ProtectWeekendStreak"), QStringLiteral("false"));
@@ -134,6 +140,8 @@ private Q_SLOTS:
         QVERIFY(!reloaded->closeToTray());
         QVERIFY(!reloaded->startMinimized());
         QCOMPARE(reloaded->trayBadgeStyle(), 1);
+        QVERIFY(!reloaded->showDockBadge());
+        QVERIFY(reloaded->hideDockIcon());
         QCOMPARE(reloaded->soundTheme(), QStringLiteral("complete"));
         QCOMPARE(reloaded->soundVolume(), 12);
         QVERIFY(!reloaded->protectWeekendStreak());
@@ -485,6 +493,8 @@ private Q_SLOTS:
         settings->setStartAtLogin(true);
         settings->setStartMinimized(false);
         settings->setTrayBadgeStyle(2);
+        settings->setShowDockBadge(false);
+        settings->setHideDockIcon(true);
         settings->setSoundTheme(QStringLiteral("bell"));
         settings->setSoundVolume(10);
         settings->setPreAlarmEnabled(false);
@@ -516,6 +526,8 @@ private Q_SLOTS:
         QVERIFY(settings->allowExternalControl());
         QVERIFY(settings->startMinimized());
         QCOMPARE(settings->trayBadgeStyle(), 0);
+        QVERIFY(settings->showDockBadge());
+        QVERIFY(!settings->hideDockIcon());
         QCOMPARE(settings->soundTheme(), QStringLiteral("alarm-clock-elapsed"));
         QCOMPARE(settings->soundVolume(), 80);
         QVERIFY(settings->preAlarmEnabled());

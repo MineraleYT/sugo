@@ -37,6 +37,7 @@
 #include "SessionRepository.h"
 #include "SilenceController.h"
 #ifdef Q_OS_MACOS
+#include "DockController.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
 #else
@@ -210,6 +211,11 @@ int main(int argc, char *argv[])
     QObject services; // parent of the C++ helpers below; destroyed before the engine
     // i18n() and friends for the QML files.
     engine.rootContext()->setContextObject(new LocalizedContext(&engine));
+#ifdef Q_OS_MACOS
+    // No freedesktop icon theme here: the names Qt's own Apple icons do not cover come from
+    // the Breeze subset bundled in the program.
+    ThemeIcons::installFallbackTheme();
+#endif
     // Icons of the desktop's theme, as image://icon/<name> (the engine owns the provider).
     engine.addImageProvider(QStringLiteral("icon"), new ThemeIconProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("appAboutData"), about);
@@ -318,6 +324,10 @@ int main(int argc, char *argv[])
         stats->setProtectWeekendStreak(settings->protectWeekendStreak());
     });
     auto *tray = new TrayController(timer, presets, settings, &services);
+#ifdef Q_OS_MACOS
+    // The Dock icon: minutes left on its badge, the timer in its menu, hidden on request.
+    auto *dock = new DockController(timer, presets, settings, DockController::platformNative(), &services);
+#endif
     // Desktop notifications; where there is no notification server, messages from the tray icon.
     auto *notifications = createNotifier([tray]() { return tray->icon(); }, &services).release();
     auto *notifier = new PhaseNotifier(timer, presets, inhibitor.get(), notifications, settings, &services);
@@ -353,7 +363,12 @@ int main(int argc, char *argv[])
     }
     if (window) {
         tray->setWindow(window);
+#ifdef Q_OS_MACOS
+        dock->setWindow(window);
+        auto activateWindow = [window, dock](const QString &activationToken = QString()) {
+#else
         auto activateWindow = [window](const QString &activationToken = QString()) {
+#endif
 #ifdef Q_OS_LINUX
             // On Wayland the compositor only gives focus with the token of the launch that asked
             // for it; Qt's Wayland plugin takes it from this variable on requestActivate().
@@ -364,6 +379,8 @@ int main(int argc, char *argv[])
             Q_UNUSED(activationToken)
 #endif
 #ifdef Q_OS_MACOS
+            // A hidden Dock icon comes back first: an accessory application gets no focus or menu bar.
+            dock->prepareToShowWindow();
             // requestActivate() alone would leave the window behind the active application.
             macActivateApp();
 #endif

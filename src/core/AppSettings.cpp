@@ -33,6 +33,8 @@ const char kShowTrayIcon[] = "ShowTrayIcon";
 const char kCloseToTray[] = "CloseToTray";
 const char kAllowExternalControl[] = "AllowExternalControl";
 const char kStartMinimized[] = "StartMinimized";
+const char kShowDockBadge[] = "ShowDockBadge";
+const char kHideDockIcon[] = "HideDockIcon";
 const char kTrayBadgeStyle[] = "TrayBadgeStyle";
 const char kSoundTheme[] = "SoundTheme";
 const char kSoundVolume[] = "SoundVolume";
@@ -142,6 +144,8 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_closeToTray = settings.value(QLatin1String(kCloseToTray), Defaults::closeToTray).toBool();
     m_allowExternalControl = settings.value(QLatin1String(kAllowExternalControl), Defaults::allowExternalControl).toBool();
     m_startMinimized = settings.value(QLatin1String(kStartMinimized), Defaults::startMinimized).toBool();
+    m_showDockBadge = settings.value(QLatin1String(kShowDockBadge), Defaults::showDockBadge).toBool();
+    m_hideDockIcon = settings.value(QLatin1String(kHideDockIcon), Defaults::hideDockIcon).toBool();
     m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), Defaults::trayBadgeStyle).toInt(), 0, 2);
     m_soundTheme = settings.value(QLatin1String(kSoundTheme), QString(Defaults::soundTheme)).toString();
     m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), Defaults::soundVolume).toInt(), 0, 100);
@@ -233,6 +237,26 @@ void AppSettings::setShowTrayIcon(bool show)
     Q_EMIT showTrayIconChanged();
     Q_EMIT keepRunningInTrayChanged();
     Q_EMIT startHiddenChanged();
+}
+
+void AppSettings::setShowDockBadge(bool show)
+{
+    if (m_showDockBadge == show) {
+        return;
+    }
+    m_showDockBadge = show;
+    store(kShowDockBadge, show);
+    Q_EMIT showDockBadgeChanged();
+}
+
+void AppSettings::setHideDockIcon(bool hide)
+{
+    if (m_hideDockIcon == hide) {
+        return;
+    }
+    m_hideDockIcon = hide;
+    store(kHideDockIcon, hide);
+    Q_EMIT hideDockIconChanged();
 }
 
 void AppSettings::setCloseToTray(bool close)
@@ -464,6 +488,8 @@ void AppSettings::resetToDefaults()
     setAllowExternalControl(Defaults::allowExternalControl);
     setStartMinimized(Defaults::startMinimized);
     setTrayBadgeStyle(Defaults::trayBadgeStyle);
+    setShowDockBadge(Defaults::showDockBadge);
+    setHideDockIcon(Defaults::hideDockIcon);
     setSoundTheme(QString(Defaults::soundTheme));
     setSoundVolume(Defaults::soundVolume);
     setPreAlarmEnabled(Defaults::preAlarmEnabled);

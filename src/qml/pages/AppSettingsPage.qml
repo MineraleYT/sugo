@@ -586,6 +586,28 @@ QQC2.Page {
                 }
             }
 
+            // macOS: the Dock icon (see DockController).
+            SettingsCard {
+                category: "general"
+                available: DesktopStyle.macos
+                title: i18n("Dock")
+                iconName: "preferences-desktop"
+                SettingRow {
+                    first: true
+                    title: i18n("Show the minutes left on the Dock icon")
+                    description: i18n("While a timer runs, a badge on the Dock icon shows the minutes left.")
+                    SettingSwitch { setting: "showDockBadge" }
+                }
+                SettingRow {
+                    title: i18n("Hide the Dock icon while the window is hidden")
+                    description: AppSettings.showTrayIcon && AppSettings.trayAvailable
+                                 ? i18n("Sugo stays in the menu bar; the Dock icon comes back when the window is shown.")
+                                 : i18n("Needs the menu bar icon, to bring the window back.")
+                    enabled: AppSettings.showTrayIcon && AppSettings.trayAvailable
+                    SettingSwitch { setting: "hideDockIcon" }
+                }
+            }
+
             SettingsCard {
                 category: "sounds"
                 title: i18n("Sounds")

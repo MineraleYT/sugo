@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QIcon>
 #include <QPainter>
+#include <QStringList>
 #include <QUrlQuery>
 
 ThemeIcons::ThemeIcons(QObject *parent)
@@ -14,6 +15,29 @@ ThemeIcons::ThemeIcons(QObject *parent)
 bool ThemeIcons::exists(const QString &name)
 {
     return !name.isEmpty() && QIcon::hasThemeIcon(name);
+}
+
+QString ThemeIcons::fallbackThemeName()
+{
+    return QStringLiteral("sugo-fallback");
+}
+
+void ThemeIcons::installFallbackTheme()
+{
+    // The theme is looked up in the theme search paths; ":/icons" is among Qt's defaults, but
+    // the platform or a test may have replaced them.
+    const QString resources = QStringLiteral(":/icons");
+    QStringList themePaths = QIcon::themeSearchPaths();
+    if (!themePaths.contains(resources)) {
+        themePaths.append(resources);
+        QIcon::setThemeSearchPaths(themePaths);
+    }
+    QIcon::setFallbackThemeName(fallbackThemeName());
+    QStringList plainPaths = QIcon::fallbackSearchPaths();
+    if (!plainPaths.contains(resources)) {
+        plainPaths.append(resources);
+        QIcon::setFallbackSearchPaths(plainPaths);
+    }
 }
 
 ThemeIconProvider::ThemeIconProvider()

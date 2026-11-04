@@ -25,6 +25,14 @@ public:
 
     /// Whether the icon theme (or its fallbacks) has an icon called `name`.
     Q_INVOKABLE static bool exists(const QString &name);
+
+    /// The name of the icon theme bundled in the program (`:/icons/sugo-fallback`): the Breeze
+    /// icons Sugo's menus use, for desktops without a freedesktop icon theme (macOS).
+    static QString fallbackThemeName();
+    /// Makes the bundled theme the fallback of the icon theme in use, and the bundled icons
+    /// (`:/icons`) the place for names no theme has. main.cpp calls it on macOS before the
+    /// first icon is looked up.
+    static void installFallbackTheme();
 };
 
 class ThemeIconProvider : public QQuickImageProvider

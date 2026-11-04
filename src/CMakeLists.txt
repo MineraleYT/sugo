@@ -307,3 +307,26 @@ qt_add_resources(sugo_core "sugo_macos_menu"
     PREFIX "/qt/qml/io/github/mineraleyt/sugo"
     FILES qml/components/MacMenuBar.qml
 )
+
+# --- macOS port: W2-B Dock integration and fallback icons ---
+target_sources(sugo_core PRIVATE
+    core/TimerMenuActions.h core/TimerMenuActions.cpp
+    core/DockController.h core/DockController.cpp
+)
+# The theme icons the menus use, from Breeze, for platforms without an icon theme (see
+# data/icons/sugo-fallback/README.md and ThemeIcons::installFallbackTheme()).
+set(sugo_fallback_icon_names
+    application-exit chronometer configure media-playback-pause media-playback-start
+    media-playback-stop media-skip-forward office-chart-bar
+)
+set(sugo_fallback_icons "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback/index.theme")
+foreach(size 16 22)
+    foreach(name IN LISTS sugo_fallback_icon_names)
+        list(APPEND sugo_fallback_icons "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback/actions/${size}/${name}.svg")
+    endforeach()
+endforeach()
+qt6_add_resources(sugo_core "fallbackicons"
+    PREFIX "/icons/sugo-fallback"
+    BASE "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback"
+    FILES ${sugo_fallback_icons}
+)

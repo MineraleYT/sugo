@@ -44,6 +44,11 @@ class AppSettings : public QObject
     /// When started at login, start without showing the window.
     Q_PROPERTY(bool startMinimized READ startMinimized WRITE setStartMinimized NOTIFY startMinimizedChanged FINAL)
 
+    /// macOS: the Dock icon shows the minutes left while a phase runs.
+    Q_PROPERTY(bool showDockBadge READ showDockBadge WRITE setShowDockBadge NOTIFY showDockBadgeChanged FINAL)
+    /// macOS: no Dock icon while the window is hidden (needs the menu bar icon; see DockController).
+    Q_PROPERTY(bool hideDockIcon READ hideDockIcon WRITE setHideDockIcon NOTIFY hideDockIconChanged FINAL)
+
     /// Tray badge style: 0 = Minutes, 1 = Pie, 2 = Plain.
     Q_PROPERTY(int trayBadgeStyle READ trayBadgeStyle WRITE setTrayBadgeStyle NOTIFY trayBadgeStyleChanged FINAL)
 
@@ -121,6 +126,11 @@ public:
     void setStartAtLogin(bool enabled);
     bool startMinimized() const { return m_startMinimized; }
     void setStartMinimized(bool minimized);
+
+    bool showDockBadge() const { return m_showDockBadge; }
+    void setShowDockBadge(bool show);
+    bool hideDockIcon() const { return m_hideDockIcon; }
+    void setHideDockIcon(bool hide);
 
     int trayBadgeStyle() const { return m_trayBadgeStyle; }
     void setTrayBadgeStyle(int style);
@@ -215,6 +225,8 @@ Q_SIGNALS:
     void allowExternalControlChanged();
     void startAtLoginChanged();
     void startMinimizedChanged();
+    void showDockBadgeChanged();
+    void hideDockIconChanged();
     void trayBadgeStyleChanged();
     void soundThemeChanged();
     void soundVolumeChanged();
@@ -245,6 +257,8 @@ private:
         static constexpr bool closeToTray = true;
         static constexpr bool allowExternalControl = true;
         static constexpr bool startMinimized = true;
+        static constexpr bool showDockBadge = true;
+        static constexpr bool hideDockIcon = false;
         static constexpr int trayBadgeStyle = 0;
         static constexpr QLatin1String soundTheme{"alarm-clock-elapsed"};
         static constexpr int soundVolume = 80;
@@ -277,6 +291,8 @@ private:
     bool m_closeToTray = Defaults::closeToTray;
     bool m_allowExternalControl = Defaults::allowExternalControl;
     bool m_startMinimized = Defaults::startMinimized;
+    bool m_showDockBadge = Defaults::showDockBadge;
+    bool m_hideDockIcon = Defaults::hideDockIcon;
     int m_trayBadgeStyle = Defaults::trayBadgeStyle;
     QString m_soundTheme = QString(Defaults::soundTheme);
     int m_soundVolume = Defaults::soundVolume;

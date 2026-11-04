@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# The icons Sugo's menus ask for, for desktops without a freedesktop icon theme (macOS).
+# See README.md.
+[Icon Theme]
+Name=Sugo fallback
+Comment=Breeze icons bundled with Sugo
+Directories=actions/16,actions/22
+
+[actions/16]
+Size=16
+Context=Actions
+Type=Fixed
+
+[actions/22]
+Size=22
+Context=Actions
+Type=Fixed

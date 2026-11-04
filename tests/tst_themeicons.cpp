@@ -31,6 +31,8 @@ private Q_SLOTS:
             }
         }
         QVERIFY(half.save(root.filePath(QStringLiteral("sugotest/16x16/apps/sugo-half.png"))));
+        m_platformTheme = QIcon::themeName();
+        m_platformSearchPaths = QIcon::themeSearchPaths();
         QIcon::setThemeSearchPaths({m_dir.path()});
         QIcon::setThemeName(QStringLiteral("sugotest"));
         QIcon::setFallbackThemeName(QString());
@@ -77,8 +79,55 @@ private Q_SLOTS:
         QVERIFY(size.isEmpty());
     }
 
+    void bundledFallbackTheme()
+    {
+        // A theme without the menus' icons, as macOS has none at all: the bundled Breeze subset
+        // fills in once it is the fallback theme.
+        QVERIFY(!ThemeIcons::exists(QStringLiteral("office-chart-bar")));
+        ThemeIcons::installFallbackTheme();
+        QCOMPARE(QIcon::fallbackThemeName(), ThemeIcons::fallbackThemeName());
+        QVERIFY(QIcon::themeSearchPaths().contains(QStringLiteral(":/icons")));
+        // Twice changes nothing.
+        ThemeIcons::installFallbackTheme();
+        QCOMPARE(QIcon::themeSearchPaths().count(QStringLiteral(":/icons")), 1);
+
+        const QStringList names = {
+            QStringLiteral("media-playback-start"), QStringLiteral("media-playback-pause"),
+            QStringLiteral("media-playback-stop"), QStringLiteral("media-skip-forward"),
+            QStringLiteral("chronometer"), QStringLiteral("office-chart-bar"),
+            QStringLiteral("configure"), QStringLiteral("application-exit"),
+        };
+        for (const QString &name : names) {
+            QVERIFY2(ThemeIcons::exists(name), qPrintable(name));
+            QVERIFY2(!QIcon::fromTheme(name).pixmap(22, 22).isNull(), qPrintable(name));
+        }
+        // The theme's own icons still come first.
+        QVERIFY(ThemeIcons::exists(QStringLiteral("sugo-half")));
+        // Drawn: something visible in the middle of the play triangle.
+        ThemeIconProvider provider;
+        QSize size;
+        const QImage play = provider.requestImage(QStringLiteral("media-playback-start"), &size, QSize(16, 16));
+        QVERIFY(play.pixelColor(6, 8).alpha() > 0);
+    }
+
+    void bundledFallbackUnderThePlatformTheme()
+    {
+        // As the program runs: the platform's own theme (none on macOS, where Qt's Apple icons
+        // answer first) with the bundled one behind it.
+        QIcon::setThemeSearchPaths(m_platformSearchPaths);
+        QIcon::setThemeName(m_platformTheme);
+        ThemeIcons::installFallbackTheme();
+        for (const QString &name : {QStringLiteral("chronometer"), QStringLiteral("office-chart-bar"),
+                                    QStringLiteral("configure"), QStringLiteral("media-playback-start")}) {
+            QVERIFY2(ThemeIcons::exists(name), qPrintable(name));
+            QVERIFY2(!QIcon::fromTheme(name).pixmap(16, 16).isNull(), qPrintable(name));
+        }
+    }
+
 private:
     QTemporaryDir m_dir;
+    QString m_platformTheme;
+    QStringList m_platformSearchPaths;
 };
 
 QTEST_MAIN(ThemeIconsTest)
