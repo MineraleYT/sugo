@@ -347,6 +347,37 @@ private Q_SLOTS:
         QVERIFY(uuids(repo->loadAll()).contains(uuid));
     }
 
+    void savesAreAnnounced()
+    {
+        PresetModel model;
+        PresetPersistence persistence(&model, repo.get());
+        QSignalSpy saved(&persistence, &PresetPersistence::saved);
+
+        const QString uuid = model.create({{QStringLiteral("name"), QStringLiteral("Study")}});
+        QCOMPARE(saved.count(), 1);
+        model.setCurrentUuid(uuid); // the selection alone is not a change of the timers
+        QCOMPARE(saved.count(), 1);
+
+        // A merge replaces the list without modified(), then saves with the deletions it received.
+        QList<TimerPreset> merged = model.presets();
+        merged.removeIf([&uuid](const TimerPreset &p) { return p.uuid == uuid; });
+        model.setPresets(merged, uuid);
+        const PresetTombstone gone{uuid, QDateTime::currentMSecsSinceEpoch() - 1000, QStringLiteral("dev_other")};
+        QVERIFY(persistence.save({gone}));
+        QCOMPARE(saved.count(), 2);
+        QVERIFY(!uuids(repo->loadAll()).contains(uuid));
+        QCOMPARE(repo->tombstones(), QList<PresetTombstone>{gone});
+        QCOMPARE(repo->currentUuid(), PresetModel::DefaultUuid);
+
+        // A refused save is not announced.
+        QSqlQuery query(QSqlDatabase::database(db->connectionName()));
+        QVERIFY(query.exec(QStringLiteral("CREATE TEMP TRIGGER refuse BEFORE INSERT ON preset "
+                                          "BEGIN SELECT RAISE(ABORT, 'disk full'); END")));
+        model.create({{QStringLiteral("name"), QStringLiteral("Read")}});
+        QCOMPARE(saved.count(), 2);
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+    }
+
     void deletedPresetsStayDeletedAndSelectionFallsBack()
     {
         QString uuid;

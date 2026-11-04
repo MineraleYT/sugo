@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QList>
 #include <QObject>
 #include <QTimer>
+
+#include "TimerPreset.h"
 
 class PresetModel;
 class PresetRepository;
@@ -13,6 +16,7 @@ class PresetRepository;
  * Saving is synchronous: a handful of rows in a WAL database costs well under a
  * millisecond, and it means a crash can lose at most the edit in progress. A save the database
  * refuses is tried again later (and at the next change); isSaveFailing() says so meanwhile.
+ * Every stored change of the timers is announced by saved() (Sugo Sync uploads them).
  */
 class PresetPersistence : public QObject
 {
@@ -25,8 +29,18 @@ public:
     bool isSaveFailing() const { return m_saveFailing; }
     void setRetryIntervalForTesting(int ms) { m_retryTimer.setInterval(ms); }
 
+    /**
+     * Stores the model's timers now, with the selection: what a merge from another computer
+     * calls after PresetModel::setPresets(), which does not announce itself. `received` are
+     * deletions made on other computers (PresetRepository::saveAll()). False if the database
+     * refused; then it is tried again later, as for any change.
+     */
+    bool save(const QList<PresetTombstone> &received = {});
+
 Q_SIGNALS:
     void saveFailingChanged();
+    /// The timers were stored (not for a change of the selection alone).
+    void saved();
 
 private:
     void savePresets();
