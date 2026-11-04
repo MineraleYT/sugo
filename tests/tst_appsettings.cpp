@@ -689,6 +689,40 @@ private Q_SLOTS:
         QStandardPaths::setTestModeEnabled(false);
     }
 
+    void syncKeepsANewFilePrivate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QFile::Permissions others = QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther;
+
+        // A new file, in a folder that does not exist yet.
+        const QString path = dir.filePath(QStringLiteral("sugo/sugo.conf"));
+        {
+            const Settings::Ptr settings = Settings::open(path);
+            settings->setValue(QStringLiteral("SoundVolume"), 7);
+            Settings::sync(*settings);
+        }
+        QVERIFY(QFileInfo::exists(path));
+        QCOMPARE(QFile::permissions(path) & others, QFile::Permissions());
+        QVERIFY(QFile::permissions(path) & QFile::ReadOwner);
+        QCOMPARE(Settings::open(path)->value(QStringLiteral("SoundVolume")).toInt(), 7);
+
+        // An existing file readable by others is made private.
+        const QString shared = dir.filePath(QStringLiteral("shared.conf"));
+        {
+            QFile file(shared);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        QVERIFY(QFile::setPermissions(shared, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther));
+        {
+            const Settings::Ptr settings = Settings::open(shared);
+            settings->setValue(QStringLiteral("SoundVolume"), 9);
+            Settings::sync(*settings);
+        }
+        QCOMPARE(QFile::permissions(shared) & others, QFile::Permissions());
+        QCOMPARE(Settings::open(shared)->value(QStringLiteral("SoundVolume")).toInt(), 9);
+    }
+
     void dataDirVariableReplacesDefaultLocation()
     {
         const QByteArray saved = qgetenv("SUGO_DATA_DIR");
@@ -731,10 +765,24 @@ private Q_SLOTS:
 
     void canberraGetsTheSoundNameAsOneOptionValue()
     {
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete")), QStringList{QStringLiteral("--id=complete")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 100),
+                 (QStringList{QStringLiteral("--id=complete"), QStringLiteral("--volume=0")}));
         // A name read from the configuration that looks like an option stays a value.
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd")),
-                 QStringList{QStringLiteral("--id=--file=/etc/passwd")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd"), 100).constFirst(),
+                 QStringLiteral("--id=--file=/etc/passwd"));
+    }
+
+    void canberraGetsTheVolumeInDecibels()
+    {
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 50).constLast(), QStringLiteral("--volume=-6"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 10).constLast(), QStringLiteral("--volume=-20"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 1).constLast(), QStringLiteral("--volume=-40"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 150).constLast(), QStringLiteral("--volume=0"));
+        // No decimal separator, which strtod would read by the user's locale.
+        for (int volume = 1; volume <= 100; ++volume) {
+            const QString argument = AppSettings::canberraArguments(QStringLiteral("complete"), volume).constLast();
+            QVERIFY2(!argument.contains(QLatin1Char('.')) && !argument.contains(QLatin1Char(',')), qPrintable(argument));
+        }
     }
 
     void alertSoundsFadeInAndOut()

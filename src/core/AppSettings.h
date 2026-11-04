@@ -231,9 +231,10 @@ public:
     static double alertFadeGain(qint64 positionMs, qint64 durationMs);
     /// Tests: called with the sound name and volume instead of starting a player.
     void setSoundPlayerForTesting(std::function<void(const QString &, int)> player) { m_soundPlayer = std::move(player); }
-    /// canberra-gtk-play arguments for an event sound name. The name is glued to its option, so
-    /// one that starts with '-' can never be read as another option.
-    static QStringList canberraArguments(const QString &soundName);
+    /// canberra-gtk-play arguments for an event sound name at a volume of 1..100 (in whole dB for
+    /// canberra). The name is glued to its option, so one that starts with '-' can never be read
+    /// as another option.
+    static QStringList canberraArguments(const QString &soundName, int volume);
     /// An event sound name ("complete", "alarm-clock-elapsed") or an absolute path to a file.
     /// Anything else from the configuration ("../x", "-x", "a/b") is not looked up or played.
     static bool isUsableSoundName(const QString &soundName);

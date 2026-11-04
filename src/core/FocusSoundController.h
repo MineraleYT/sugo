@@ -102,7 +102,8 @@ private:
     QTimer m_previewTimer;
     QTimer m_stopTimer;          ///< Kills the player once the faded-out audio has been played.
     bool m_stopping = false;     ///< Fading out, to be stopped.
-    int m_soundMode = 0;         ///< The sound being generated; kept through a fade-out to Off.
+    int m_soundMode = 0;         ///< The sound being generated; kept through a fade-out.
+    int m_soundVolume = 0;       ///< Its volume, 0..100; kept through a fade-out too.
     float m_gain = 0.0f;         ///< Fade level, 0..1.
 
     QElapsedTimer m_playClock;   ///< Started when the player started.
