@@ -1226,6 +1226,12 @@ QQC2.ApplicationWindow {
         function onMessage(text) {
             root.showPassiveNotification(text, "long");
         }
+        // Signed out here, but the server was not told: the device keeps its place on the plan.
+        function onSignedOut(remoteDone) {
+            if (!remoteDone) {
+                root.showPassiveNotification(i18n("Signed out on this computer, but Sugo Sync could not be reached. Disconnect this device on sugo.stream to free its place."), "long");
+            }
+        }
     }
 
     ConfirmDialog {

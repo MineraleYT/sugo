@@ -127,6 +127,119 @@ QQC2.Page {
         const date = new Date(d);
         return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
     }
+    readonly property var syncDevices: SyncController ? SyncController.devices : []
+    function syncDate(value: var): string {
+        if (!value) {
+            return "";
+        }
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
+    }
+    function syncPlatformName(platform: string): string {
+        return platform === "macos" ? i18n("macOS") : platform === "linux" ? i18n("Linux") : platform;
+    }
+    /// What the list of devices says under a device's name.
+    function syncDeviceDetails(device: var): string {
+        const platform = syncPlatformName(device.platform || "");
+        const seen = syncDate(device.lastSeen);
+        const state = device.pending ? i18n("Waiting for approval")
+                    : seen.length > 0 ? i18n("Last seen %1", seen)
+                    : i18n("Not synced yet");
+        return platform.length > 0 ? i18nc("platform · last seen", "%1 · %2", platform, state) : state;
+    }
+
+    /// Signing out asks first.
+    function requestSyncSignOut(): void {
+        syncSignOutDialog.open();
+    }
+    readonly property bool syncSignOutConfirming: syncSignOutDialog.visible
+
+    ConfirmDialog {
+        id: syncSignOutDialog
+        title: i18n("Sign out of Sugo Sync?")
+        text: i18n("This computer stops syncing and leaves your list of devices. Your timers stay on this computer.")
+        confirmText: i18n("Sign Out")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncSignOutDialog.close();
+            if (SyncController) {
+                SyncController.signOut();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncDisconnectDialog
+        property string deviceId
+        property string deviceName
+        title: i18n("Disconnect “%1”?", deviceName)
+        text: i18n("That device stops syncing and its place on your plan is free again. Its timers stay on it, and it can sign in again later.")
+        confirmText: i18n("Disconnect")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncDisconnectDialog.close();
+            if (SyncController) {
+                SyncController.disconnectDevice(deviceId);
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncNewRecoveryDialog
+        title: i18n("Create a new recovery code?")
+        text: i18n("The recovery code you have now stops working. Sugo shows you the new one, to keep in a safe place.")
+        confirmText: i18n("Create New Code")
+        onConfirmed: {
+            syncNewRecoveryDialog.close();
+            if (SyncController) {
+                SyncController.regenerateRecoveryCode();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncShowRecoveryDialog
+        property string code
+        title: i18n("Recovery code")
+        text: i18n("With this code a new device opens your timers when none of your other devices is at hand. Keep it somewhere safe, away from this computer.")
+        confirmText: i18n("Copy")
+        cancelText: i18n("Close")
+        onConfirmed: {
+            syncRecoveryText.selectAll();
+            syncRecoveryText.copy();
+            syncRecoveryText.deselect();
+            syncShowRecoveryDialog.close();
+            applicationWindow().showPassiveNotification(i18n("Recovery code copied to the clipboard."));
+        }
+        onClosed: code = ""
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: syncRecoveryText.implicitHeight + Theme.spaceLg * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            TextEdit {
+                id: syncRecoveryText
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                verticalAlignment: TextEdit.AlignVCenter
+                readOnly: true
+                selectByMouse: true
+                text: syncShowRecoveryDialog.code
+                color: Theme.foreground
+                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Accessible.name: i18n("Recovery code")
+            }
+        }
+    }
+
     // A copied sign-in code is shown on the Copy button itself (a check for a few seconds).
     property bool syncCodeCopied: false
     Timer {
@@ -1478,6 +1591,84 @@ QQC2.Page {
                             return i18n("Your account already links as many devices as the plan allows. Disconnect one on sugo.stream to free a place: Sugo goes on by itself.");
                         }
                         return SyncController.statusText;
+                    }
+                }
+            }
+
+            // The devices linked to the account: this one, and the others to disconnect.
+            SettingsCard {
+                objectName: "syncDevicesCard"
+                category: "sync"
+                available: page.syncLinked && page.syncDevices.length > 0
+                title: i18n("Devices")
+                iconName: "computer"
+
+                Repeater {
+                    model: page.syncDevices
+                    delegate: SettingRow {
+                        id: deviceRow
+                        required property var modelData
+                        required property int index
+                        first: index === 0
+                        title: modelData.name
+                        description: page.syncDeviceDetails(modelData)
+                        StatusPill {
+                            visible: deviceRow.modelData.current
+                            text: i18n("This device")
+                            dotColor: Theme.positive
+                        }
+                        SButton {
+                            visible: !deviceRow.modelData.current
+                            text: i18n("Disconnect…")
+                            destructive: true
+                            Accessible.name: i18n("Disconnect %1", deviceRow.modelData.name)
+                            onClicked: {
+                                syncDisconnectDialog.deviceId = deviceRow.modelData.id;
+                                syncDisconnectDialog.deviceName = deviceRow.modelData.name;
+                                syncDisconnectDialog.open();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The recovery code and signing out.
+            SettingsCard {
+                objectName: "syncAccountCard"
+                category: "sync"
+                available: page.syncLinked || page.syncWaiting
+                title: i18n("Account")
+                iconName: "user-identity"
+
+                SettingRow {
+                    first: true
+                    visible: page.syncLinked
+                    title: i18n("Recovery code")
+                    description: i18n("With it, a new device opens your timers when none of your other devices is at hand. Without any device and without the code, the synced timers cannot be opened again.")
+                    SButton {
+                        visible: SyncController !== null && SyncController.recoveryCodeShowable
+                        text: i18n("Show")
+                        Accessible.name: i18n("Show recovery code")
+                        onClicked: {
+                            syncShowRecoveryDialog.code = SyncController.recoveryCode();
+                            syncShowRecoveryDialog.open();
+                        }
+                    }
+                    SButton {
+                        text: i18n("Create a new one…")
+                        Accessible.name: i18n("Create a new recovery code")
+                        onClicked: syncNewRecoveryDialog.open()
+                    }
+                }
+                SettingRow {
+                    first: !page.syncLinked
+                    title: i18n("Sign out")
+                    description: i18n("This computer stops syncing. Your timers stay on it.")
+                    SButton {
+                        objectName: "syncSignOutButton"
+                        text: i18n("Sign out…")
+                        destructive: true
+                        onClicked: page.requestSyncSignOut()
                     }
                 }
             }
