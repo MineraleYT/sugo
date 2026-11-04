@@ -29,6 +29,7 @@
 #include "Localization.h"
 #include "Settings.h"
 #include <algorithm>
+#include <cmath>
 
 
 namespace
@@ -655,9 +656,13 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
     }
     const QString file = findSoundFile(soundName, soundSearchRoots());
     if (file.isEmpty()) {
-        // Not a file we can find: let libcanberra resolve the event sound name.
+        // Not a file we can find: let libcanberra resolve the event sound name. Its volume is in
+        // decibels, and none is low enough for silence: a muted alert is not played at all.
+        if (vol == 0) {
+            return;
+        }
         if (QStandardPaths::findExecutable(QStringLiteral("canberra-gtk-play")).isEmpty()
-            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName))) {
+            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName, vol))) {
             qWarning() << "Sound" << soundName << "not found and canberra-gtk-play is unavailable";
         }
         return;
@@ -737,9 +742,13 @@ bool AppSettings::isUsableSoundName(const QString &soundName)
     return name.match(soundName).hasMatch() && !soundName.contains(QStringLiteral(".."));
 }
 
-QStringList AppSettings::canberraArguments(const QString &soundName)
+QStringList AppSettings::canberraArguments(const QString &soundName, int volume)
 {
-    return {QStringLiteral("--id=") + soundName};
+    // canberra-gtk-play takes the volume as a gain in dB: 100 % is 0 dB, 50 % about -6 dB. It sets
+    // the user's locale and libcanberra reads the value with strtod, which in a locale with a
+    // decimal comma rejects "-6.0" and plays nothing: whole decibels read the same everywhere.
+    const double gainDb = 20.0 * std::log10(std::clamp(volume, 1, 100) / 100.0);
+    return {QStringLiteral("--id=") + soundName, QStringLiteral("--volume=") + QString::number(qRound(gainDb))};
 }
 
 void AppSettings::openShortcutsSettings()

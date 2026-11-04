@@ -765,10 +765,24 @@ private Q_SLOTS:
 
     void canberraGetsTheSoundNameAsOneOptionValue()
     {
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete")), QStringList{QStringLiteral("--id=complete")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 100),
+                 (QStringList{QStringLiteral("--id=complete"), QStringLiteral("--volume=0")}));
         // A name read from the configuration that looks like an option stays a value.
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd")),
-                 QStringList{QStringLiteral("--id=--file=/etc/passwd")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd"), 100).constFirst(),
+                 QStringLiteral("--id=--file=/etc/passwd"));
+    }
+
+    void canberraGetsTheVolumeInDecibels()
+    {
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 50).constLast(), QStringLiteral("--volume=-6"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 10).constLast(), QStringLiteral("--volume=-20"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 1).constLast(), QStringLiteral("--volume=-40"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 150).constLast(), QStringLiteral("--volume=0"));
+        // No decimal separator, which strtod would read by the user's locale.
+        for (int volume = 1; volume <= 100; ++volume) {
+            const QString argument = AppSettings::canberraArguments(QStringLiteral("complete"), volume).constLast();
+            QVERIFY2(!argument.contains(QLatin1Char('.')) && !argument.contains(QLatin1Char(',')), qPrintable(argument));
+        }
     }
 
     void alertSoundsFadeInAndOut()
