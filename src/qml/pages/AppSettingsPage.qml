@@ -1517,7 +1517,9 @@ QQC2.Page {
             id: exportHistoryDialog
             title: i18n("Export session history")
             fileMode: FileDialog.SaveFile
-            defaultSuffix: "csv"
+            // The ending of the chosen type: "history" with JSON chosen becomes history.json.
+            defaultSuffix: selectedNameFilter && selectedNameFilter.extensions.length > 0
+                           ? selectedNameFilter.extensions[0] : "csv"
             nameFilters: [i18n("CSV spreadsheet (*.csv)"), i18n("JSON (*.json)")]
             onAccepted: DataManager.exportHistory(selectedFile)
         }
