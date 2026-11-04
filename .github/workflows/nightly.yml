@@ -45,9 +45,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           base=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" >/dev/null 2>&1; then
+          # Only a 404 means "not released": any other failure (rate limit, server error) would
+          # give a version below the release, which no nightly user would update to.
+          if error=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" 2>&1 >/dev/null); then
             IFS=. read -r major minor patch <<< "$base"
             base="$major.$minor.$((patch + 1))"
+          elif ! grep -q '(HTTP 404)' <<< "$error"; then
+            echo "::error::Cannot tell whether v$base is released: $error"
+            exit 1
           fi
           date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d)
           echo "version=$base-nightly.$date.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
