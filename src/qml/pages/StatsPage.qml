@@ -163,11 +163,17 @@ QQC2.Page {
                     text: i18n("Previous")
                     onClicked: StatsModel.previousPeriod()
                 }
+                // Its own width at most (the spacer takes the rest), cut short when the row is
+                // too narrow for it and the period buttons.
                 Text {
                     text: StatsModel.title
                     color: Theme.foreground
                     font.pixelSize: Theme.fontTitle + 1
                     font.weight: Font.Medium
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    Layout.maximumWidth: implicitWidth
                     Layout.leftMargin: Theme.spaceXs
                     Layout.rightMargin: Theme.spaceXs
                 }
@@ -238,8 +244,8 @@ QQC2.Page {
                     value: StatsModel.formatDuration(StatsModel.breakSeconds)
                     label: i18n("Breaks")
                 }
+                // Always there ("—" until there is a best one), so the figures beside it stay put.
                 Figure {
-                    visible: StatsModel.period !== StatsModel.Period.Day || page.bestBucket.length > 0
                     value: page.bestBucket.length > 0 ? page.bestBucket : "—"
                     label: page.bestLabel
                 }
@@ -286,6 +292,10 @@ QQC2.Page {
                             readonly property real workHeight: chart.plotHeight * modelData.workSeconds / chart.scaleTop
                             readonly property real breakHeight: chart.plotHeight * modelData.breakSeconds / chart.scaleTop
 
+                            // The tooltip's text, for screen readers too.
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: modelData.tooltip
+
                             HoverHandler {
                                 id: bucketHover
                             }
@@ -309,9 +319,10 @@ QQC2.Page {
                                 }
                                 Behavior on height { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
 
-                                // Breaks: a green cap on top of the bar.
+                                // Breaks: a green cap on top of the bar, or on the empty stub when
+                                // there were only breaks (the chart then has data to show).
                                 Rectangle {
-                                    visible: bucket.modelData.breakSeconds > 0 && bucket.modelData.workSeconds > 0
+                                    visible: bucket.modelData.breakSeconds > 0
                                     anchors.bottom: parent.top
                                     anchors.bottomMargin: Theme.hairline * 2
                                     width: parent.width
@@ -474,6 +485,8 @@ QQC2.Page {
                                 opacity: modelData.workSeconds > 0 ? Math.min(1, 0.45 + modelData.workSeconds / 7200) : 1
                                 border.width: modelData.isToday ? Theme.hairline : 0
                                 border.color: Theme.foreground
+                                Accessible.role: Accessible.StaticText
+                                Accessible.name: modelData.tooltip
                                 HoverHandler {
                                     id: dayHover
                                 }

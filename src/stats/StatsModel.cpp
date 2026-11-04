@@ -156,7 +156,7 @@ void StatsModel::setBreakdownMode(BreakdownMode mode)
     }
     m_breakdownMode = mode;
     Q_EMIT breakdownModeChanged();
-    Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 QString StatsModel::title() const
@@ -231,9 +231,7 @@ bool StatsModel::canGoNext() const
 
 void StatsModel::previousPeriod()
 {
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, -1);
-    recompute();
-    Q_EMIT periodChanged();
+    moveAnchor(-1);
 }
 
 void StatsModel::nextPeriod()
@@ -241,7 +239,20 @@ void StatsModel::nextPeriod()
     if (!canGoNext()) {
         return;
     }
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, 1);
+    moveAnchor(1);
+}
+
+void StatsModel::moveAnchor(int steps)
+{
+    const StatsPeriod sp = toStatsPeriod(m_period);
+    m_anchorDate = Stats::shifted(sp, m_anchorDate, steps);
+    // Months and years clamp the day (31 March - 1 month = 28 February), so coming back would
+    // land on 28 March: the period under way is anchored on today, as it was before.
+    const QDate current = todayDate();
+    const PeriodRange range = Stats::rangeFor(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone);
+    if (current >= range.firstDay && current <= range.lastDay) {
+        m_anchorDate = current;
+    }
     recompute();
     Q_EMIT periodChanged();
 }
@@ -313,6 +324,7 @@ void StatsModel::recompute()
         m_bucketsVariant.clear();
         m_daysVariant.clear();
         Q_EMIT statsChanged();
+        Q_EMIT breakdownChanged();
         return;
     }
 
@@ -401,7 +413,8 @@ void StatsModel::recompute()
             map[QStringLiteral("name")] = m_env.locale.standaloneDayName(b.date.dayOfWeek(), QLocale::LongFormat);
             break;
         case Period::Month:
-            map[QStringLiteral("name")] = m_env.locale.toString(b.date, QStringLiteral("d MMMM"));
+            map[QStringLiteral("name")] = m_env.locale.toString(
+                b.date, i18nc("QDate::toString() format of a day of the month, e.g. \"30 October\"", "d MMMM"));
             break;
         case Period::Year:
             map[QStringLiteral("name")] = m_env.locale.standaloneMonthName(b.date.month(), QLocale::LongFormat);
@@ -438,6 +451,7 @@ void StatsModel::recompute()
         m_daysVariant.append(map);
     }
     Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 void StatsModel::recomputeStreaks()
@@ -446,7 +460,6 @@ void StatsModel::recomputeStreaks()
         m_currentStreak = 0;
         m_bestStreak = 0;
         Q_EMIT streaksChanged();
-        Q_EMIT statsChanged();
         return;
     }
 
@@ -463,8 +476,8 @@ void StatsModel::recomputeStreaks()
     m_currentStreak = Stats::currentStreak(days, today, m_protectWeekendStreak);
     m_bestStreak = Stats::bestStreak(days, m_protectWeekendStreak);
 
+    // Only the streaks: every statsChanged property comes from recompute().
     Q_EMIT streaksChanged();
-    Q_EMIT statsChanged();
 }
 
 void StatsModel::setProtectWeekendStreak(bool protect)
