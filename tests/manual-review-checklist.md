@@ -53,3 +53,4 @@ Run these checks in a fresh user profile where practical. Record the application
 ## Window and dialogs
 
 - [ ] Start a work phase with "Pause timer when screen is locked" on, lock and unlock the screen: "Screen Unlocked" asks to resume. Resume from the tray menu (or the global shortcut, or KRunner): the dialog closes by itself. With a task note being asked for when the screen is unlocked, the resume question comes only after the note dialog is closed.
+- [ ] Make the window narrow, open the menu (the sidebar slides in), then maximise or widen the window: the drawer closes and only the sidebar is shown, with the page not dimmed.

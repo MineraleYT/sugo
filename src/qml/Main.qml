@@ -1012,6 +1012,9 @@ QQC2.ApplicationWindow {
         width: Theme.sidebarWidth
         height: root.height
         interactive: !root.wideScreen && !root.isWelcomeActive
+        // Turning `interactive` off leaves an open drawer open: close it when the window is
+        // widened (the sidebar shows) or the welcome tour takes the window.
+        onInteractiveChanged: if (!interactive) close()
         background: Item {}
         Sidebar {
             anchors.fill: parent
