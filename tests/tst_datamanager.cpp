@@ -242,6 +242,26 @@ private Q_SLOTS:
         QCOMPARE(manager->lastWorkSessionId(), -1);
     }
 
+    void noteForAMissingSessionChangesNothing()
+    {
+        SessionRecord record;
+        record.startedAtMs = 1000;
+        record.endedAtMs = 1600;
+        record.durationSec = 600;
+        record.plannedSec = 1500;
+        record.completed = true;
+        qint64 id = 0;
+        QVERIFY(sessions->insert(record, &id));
+        QVERIFY(manager->clearHistory());
+
+        QSignalSpy changed(manager.get(), &DataManager::dataChanged);
+        QSignalSpy noteChanged(manager.get(), &DataManager::sessionNoteChanged);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("there is no session")));
+        QVERIFY(!manager->updateSessionNote(id, QStringLiteral("Lost")));
+        QCOMPARE(changed.count(), 0);
+        QCOMPARE(noteChanged.count(), 0);
+    }
+
     void saveFailuresAreReportedUntilTheyAreStored()
     {
         FakeClock clock;
