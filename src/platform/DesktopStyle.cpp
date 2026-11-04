@@ -2,6 +2,7 @@
 #include "DesktopStyle.h"
 
 #include <QFontDatabase>
+#include <QFontInfo>
 #include <QKeySequence>
 #include <QProcess>
 #include <QSettings>
@@ -108,7 +109,21 @@ DesktopStyle::Layout DesktopStyle::defaultLayout(const QString &style)
 
 QString DesktopStyle::monoFamily() const
 {
-    return QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
+    const QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    if (QFontInfo(font).fixedPitch()) {
+        return font.family();
+    }
+    // A generic name the font system does not resolve ("Monospace" without fontconfig, e.g. the
+    // offscreen platform on macOS): the first well-known fixed-pitch family that is installed.
+    static const QStringList known = {QStringLiteral("SF Mono"), QStringLiteral("Menlo"), QStringLiteral("Monaco"),
+                                      QStringLiteral("DejaVu Sans Mono"), QStringLiteral("Liberation Mono"),
+                                      QStringLiteral("Noto Sans Mono"), QStringLiteral("Courier New")};
+    for (const QString &family : known) {
+        if (QFontDatabase::hasFamily(family) && QFontDatabase::isFixedPitch(family)) {
+            return family;
+        }
+    }
+    return font.family();
 }
 
 QString DesktopStyle::shortcutText(const QString &sequence)

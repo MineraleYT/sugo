@@ -241,8 +241,9 @@ target_sources(sugo_core PRIVATE
     platform/LocalSingleInstance.h
     platform/LocalSingleInstance.cpp
 )
-# The menu bar icon while idle, a template image for macOS (see TrayController).
-qt6_add_resources(sugo "trayicon"
+# The menu bar icon while idle, a template image for macOS (see TrayController, which the tests
+# use too: so in the library, not the program).
+qt6_add_resources(sugo_core "trayicon"
     PREFIX "/icons"
     BASE "${PROJECT_SOURCE_DIR}/data/icons/tray"
     FILES "${PROJECT_SOURCE_DIR}/data/icons/tray/sugo-tray-template.svg"

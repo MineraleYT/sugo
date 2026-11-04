@@ -26,7 +26,7 @@ int displaySleepAssertionsOfThisProcess()
     if (assertions && CFGetTypeID(assertions) == CFArrayGetTypeID()) {
         for (CFIndex i = 0; i < CFArrayGetCount(assertions); ++i) {
             const auto assertion = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(assertions, i));
-            const auto type = static_cast<CFStringRef>(CFDictionaryGetValue(assertion, CFSTR(kIOPMAssertionTypeKey)));
+            const auto type = static_cast<CFStringRef>(CFDictionaryGetValue(assertion, kIOPMAssertionTypeKey));
             if (type && CFStringCompare(type, kIOPMAssertPreventUserIdleDisplaySleep, 0) == kCFCompareEqualTo) {
                 ++count;
             }

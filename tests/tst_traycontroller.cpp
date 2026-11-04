@@ -206,7 +206,14 @@ private Q_SLOTS:
         // No window yet: "Show Window", and clicking the icon asks for it.
         QAction *window = actionNamed(menu(), QStringLiteral("Show Window"));
         QVERIFY(window);
+#ifdef Q_OS_MACOS
+        // The macOS menu bar opens the menu on a click: the click itself leaves the window alone.
         Q_EMIT tray->icon()->activated(QSystemTrayIcon::Trigger);
+        QCOMPARE(show.count(), 0);
+        window->trigger();
+#else
+        Q_EMIT tray->icon()->activated(QSystemTrayIcon::Trigger);
+#endif
         QCOMPARE(show.count(), 1);
 
         // A window on screen: the click hides it, and the menu offers to hide it.
@@ -217,14 +224,20 @@ private Q_SLOTS:
         tray->setWindow(&shown);
         openMenu();
         QCOMPARE(window->text(), QStringLiteral("Hide Window"));
+#ifdef Q_OS_MACOS
+        window->trigger();
+#else
         Q_EMIT tray->icon()->activated(QSystemTrayIcon::Trigger);
+#endif
         QVERIFY(!shown.isVisible());
         QCOMPARE(show.count(), 1);
+#ifndef Q_OS_MACOS
         // Hidden: the click asks for it again; other clicks do nothing.
         Q_EMIT tray->icon()->activated(QSystemTrayIcon::Context);
         QCOMPARE(show.count(), 1);
         Q_EMIT tray->icon()->activated(QSystemTrayIcon::Trigger);
         QCOMPARE(show.count(), 2);
+#endif
         tray->setWindow(nullptr);
     }
 };
