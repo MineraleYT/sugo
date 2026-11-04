@@ -22,6 +22,7 @@ private Q_SLOTS:
     void testMatchesOfferOnlyRelevantActions();
     void testCustomMinutesDoNotChangeThePreset();
     void testPresetByName();
+    void testStartingTheCurrentPresetResumesIt();
     void testControlCanBeTurnedOff();
 };
 
@@ -256,6 +257,26 @@ void TestKRunnerService::testPresetByName()
     service.Run(QStringLiteral("preset:") + uuid, QString());
     QCOMPARE(presets.currentUuid(), uuid);
     QVERIFY(timer.isRunning());
+}
+
+void TestKRunnerService::testStartingTheCurrentPresetResumesIt()
+{
+    TimerEngine timer;
+    timer.setWorkSeconds(1500);
+    PresetModel presets;
+    KRunnerService service(&timer, &presets);
+    const QString uuid = presets.currentUuid();
+    QVERIFY(!uuid.isEmpty());
+
+    timer.start();
+    timer.pause();
+    QVERIFY(timer.isPaused());
+
+    // KRunner offers "Start preset" for the current preset while it is paused too.
+    service.Run(QStringLiteral("preset:") + uuid, QString());
+    QCOMPARE(presets.currentUuid(), uuid);
+    QVERIFY(timer.isRunning());
+    QVERIFY(!timer.isPaused());
 }
 
 void TestKRunnerService::testControlCanBeTurnedOff()

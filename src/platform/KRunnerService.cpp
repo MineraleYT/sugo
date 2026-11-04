@@ -244,8 +244,15 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
     } else if (id.startsWith(QStringLiteral("preset:"))) {
         const QString uuid = id.mid(7);
         if (m_presets && m_presets->indexOf(uuid) >= 0) {
+            // Choosing the current preset changes nothing, so a paused phase of it would stay
+            // paused: "Start preset" resumes it. Another preset resets the timer, which starts.
+            const bool alreadyCurrent = uuid == m_presets->currentUuid();
             m_presets->setCurrentUuid(uuid);
-            m_timer->start();
+            if (alreadyCurrent && m_timer->isPaused()) {
+                m_timer->resume();
+            } else {
+                m_timer->start();
+            }
         }
     } else {
         runCommand(id);
