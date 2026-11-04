@@ -90,7 +90,9 @@ endif()
 add_test(NAME tst_app_startup
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo>
 )
-set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 15)
+# smoke_app.sh stops the app itself after 8 s (and kills it 2 s later); the rest is the first start
+# of a freshly built binary, which a macOS runner checks for several seconds (13.7 s in all once).
+set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 30)
 
 add_test(NAME tst_stats_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> stats
