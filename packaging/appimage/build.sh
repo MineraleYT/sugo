@@ -29,7 +29,7 @@ LINUXDEPLOY_QT_SHA256=15106be885c1c48a021198e7e1e9a48ce9d02a86dd0a1848f00bdbf3c1
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-    ca-certificates wget git file xz-utils python3-pip g++ cmake ninja-build \
+    ca-certificates wget git file xz-utils python3-pip g++ cmake ninja-build pkg-config libsodium-dev \
     libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev libxkbcommon-dev libxkbcommon-x11-0 \
     libfontconfig1 libfreetype6 libdbus-1-3 libglib2.0-0 \
     libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
@@ -109,4 +109,6 @@ rm -f "$OUTPUT"
 # styles of other systems, and our own QML module (compiled into the program).
 grep -E 'ERROR|WARNING' linuxdeploy.log \
     | grep -vE 'Could not find copyright files|Not calling strip|Missing qml module: +(QtQuick\.Controls\.(Windows|macOS|iOS)|io\.github\.mineraleyt\.sugo) *$' || true
+# Sugo Sync's encryption: not part of the systems the AppImage runs on, so it must travel with it.
+compgen -G "AppDir/usr/lib/libsodium.so.*" >/dev/null || { echo "libsodium is missing from the AppImage" >&2; exit 1; }
 echo "Built $OUTPUT ($VERSION)"
