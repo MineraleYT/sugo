@@ -781,6 +781,16 @@ void SyncController::writeSetting(const char *name, const QVariant &value)
 // Account, for QML
 // ---------------------------------------------------------------------------------------------
 
+bool SyncController::linked() const
+{
+    return m_account->isLinked();
+}
+
+bool SyncController::usesDefaultServer() const
+{
+    return SyncApi::isDefaultBaseUrl(m_api->baseUrl());
+}
+
 QString SyncController::userCode() const
 {
     return m_account->userCode();

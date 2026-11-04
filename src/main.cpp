@@ -387,6 +387,10 @@ int main(int argc, char *argv[])
             }
         });
     }
+    // The diagnostics report says how Sugo Sync is doing (never who, or with what keys).
+    if (diagnostics && presetSync) {
+        diagnostics->attachSync(presetSync);
+    }
     auto *focusSound = new FocusSoundController(&services);
     focusSound->attach(timer, settings);
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), focusSound);

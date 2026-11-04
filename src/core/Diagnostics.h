@@ -3,12 +3,14 @@
 
 #include <QMetaObject>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
 class AppSettings;
 class DataManager;
+class SyncController;
 
 /**
  * Provides system diagnostics and redacted log export for issue reporting.
@@ -28,6 +30,9 @@ public:
     ~Diagnostics() override;
 
     void attach(AppSettings *settings, DataManager *dataManager);
+    /// Adds the "Sync" section: state, error, keyring, linked, last sync, number of devices and
+    /// whether the server is the default one. Never an id, a name, a code, a token or an etag.
+    void attachSync(SyncController *sync);
 
     /// Formats the complete markdown diagnostics report (system + config + logs).
     Q_INVOKABLE QString generateReport() const;
@@ -81,6 +86,7 @@ public:
 private:
     AppSettings *m_settings = nullptr;
     DataManager *m_dataManager = nullptr;
+    QPointer<SyncController> m_sync;
     mutable QString m_lastExportError;
     QMetaObject::Connection m_verboseConnection;
 };

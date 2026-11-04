@@ -27,7 +27,7 @@ sugo_add_test(tst_statsaggregator Qt6::Core Qt6::Sql)
 sugo_add_test(tst_statsmodel Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_updatechecker Qt6::Core Qt6::Qml Qt6::Network)
 sugo_add_test(tst_screenlockwatcher Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
-sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql ${SUGO_DBUS})
+sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::Sql ${SUGO_DBUS})
 # The test builds a QGuiApplication (clipboard access): run it without a display, e.g. on CI.
 set_tests_properties(tst_diagnostics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 

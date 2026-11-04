@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Localization.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -9,10 +12,16 @@
 #include "DataManager.h"
 #include "Database.h"
 #include "Diagnostics.h"
+#include "FakeSecretStore.h"
+#include "FakeSyncServer.h"
 #include "PresetModel.h"
+#include "PresetPersistence.h"
 #include "PresetRepository.h"
 #include "SessionRepository.h"
+#include "Settings.h"
 #include "StatsModel.h"
+#include "SyncAccount.h"
+#include "SyncController.h"
 
 class DiagnosticsTest : public QObject
 {
@@ -310,6 +319,78 @@ private Q_SLOTS:
         const QString report = diag.generateReport();
         QVERIFY(report.contains(QStringLiteral("Total Recorded Sessions: 0")));
         QVERIFY(report.contains(QStringLiteral("Sound Theme: ")));
+        QVERIFY(report.contains(QStringLiteral("- Sync: (Not attached)")));
+    }
+
+    // The Sync section says how things stand, never who or with what: no account or device id,
+    // device name, sign-in, verification or recovery code, token or etag.
+    void syncSectionHasNoPersonalData()
+    {
+        FakeSyncServer server;
+        server.interval = 1;
+        server.deviceLimit = 3;
+        QTemporaryDir dir;
+        Database db(dir.filePath(QStringLiteral("sugo.db")));
+        QVERIFY(db.open());
+        PresetRepository repo(db.connectionName());
+        PresetModel model;
+        PresetPersistence persistence(&model, &repo);
+        FakeSecretStore storeA;
+        FakeSecretStore storeB;
+        SyncController a(Settings::open(dir.filePath(QStringLiteral("a.conf"))), &storeA, QUrl(server.base()));
+        SyncController b(Settings::open(dir.filePath(QStringLiteral("b.conf"))), &storeB, QUrl(server.base()));
+        a.setTimeUnitMs(10);
+        b.setTimeUnitMs(10);
+        a.attach(&model, &persistence, &repo);
+
+        Diagnostics diag;
+        diag.attachSync(&a);
+        QString report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("## Sync\n- State: Off\n- Error: NoError\n- Keyring Available: Yes\n- Linked: No\n"
+                                               "- Last Sync: Never\n- Devices: 0\n- Server: custom\n")));
+
+        // A linked first device, a second one waiting with its codes, a recovery code.
+        QSignalSpy recovery(&a, &SyncController::recoveryCodeToConfirm);
+        a.signIn(QStringLiteral("Marios Secret Laptop"));
+        QTRY_VERIFY(!a.userCode().isEmpty());
+        const QString userCodeA = a.userCode();
+        QVERIFY(server.approve(userCodeA, QStringLiteral("usr_private_42")).startsWith(QLatin1String("dev_")));
+        QTRY_COMPARE_WITH_TIMEOUT(a.state(), SyncController::Idle, 5000);
+        QTRY_VERIFY(a.lastSync().isValid());
+        b.signIn(QStringLiteral("Marios Other Desktop"));
+        QTRY_VERIFY(!b.userCode().isEmpty());
+        const QString userCodeB = b.userCode();
+        QVERIFY(server.approve(userCodeB, QStringLiteral("usr_private_42")).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.verificationCode().isEmpty());
+        a.refreshDevices();
+        QTRY_COMPARE(a.devices().size(), 2);
+        QCOMPARE(recovery.size(), 1);
+
+        report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("- State: Idle\n")));
+        QVERIFY(report.contains(QStringLiteral("- Linked: Yes\n")));
+        QVERIFY(report.contains(QStringLiteral("- Devices: 2\n")));
+        QVERIFY(report.contains(QStringLiteral("- Last Sync: ") + a.lastSync().toUTC().toString(Qt::ISODate)));
+
+        QStringList secrets{QStringLiteral("Marios"), QStringLiteral("usr_private_42"), a.account()->deviceId(),
+                            b.account()->deviceId(), userCodeA, userCodeB, b.verificationCode(),
+                            recovery.first().first().toString(), a.recoveryCode()};
+        for (const QString &secret : storeA.secrets->values()) {
+            const QJsonObject values = QJsonDocument::fromJson(secret.toUtf8()).object();
+            for (auto it = values.begin(); it != values.end(); ++it) {
+                if (it.value().isString() && it.value().toString().size() > 6) {
+                    secrets << it.value().toString(); // refresh token, keys
+                }
+            }
+        }
+        const QString etag = QString::fromLatin1(server.accounts.value(QStringLiteral("usr_private_42")).etag);
+        QVERIFY(!etag.isEmpty());
+        secrets << etag;
+        for (const QString &secret : std::as_const(secrets)) {
+            QVERIFY2(!secret.isEmpty(), "a value to look for is empty");
+            QVERIFY2(!report.contains(secret, Qt::CaseInsensitive), qPrintable(QStringLiteral("The report shows ") + secret));
+        }
+        QVERIFY(!report.contains(QStringLiteral("dev_")));
     }
 };
 

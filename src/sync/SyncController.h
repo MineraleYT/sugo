@@ -145,6 +145,10 @@ public:
     QVariantMap pendingApproval() const;
 
     SyncAccount *account() const { return m_account; }
+    /// This computer is linked to an account (the settings say so; the keyring is not read).
+    bool linked() const;
+    /// Whether the server is https://api.sugo.stream (not one set with SUGO_SYNC_URL).
+    bool usesDefaultServer() const;
 
     // --- Sign-in ------------------------------------------------------------------------------
     Q_INVOKABLE void signIn(const QString &deviceName);
