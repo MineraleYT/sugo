@@ -133,3 +133,8 @@ endif()
 # --- macOS port: B3 sounds ---
 # The sounds bundled for macOS (data/sounds), checked against the names the settings page offers.
 target_compile_definitions(tst_appsettings PRIVATE SUGO_BUNDLED_SOUNDS_ROOT="${PROJECT_SOURCE_DIR}/data")
+
+# --- macOS port: W2-A (Focus through Shortcuts, sugo:// links) ---
+# Both run on Linux too: the Focus with a fake `shortcuts` script (tests/FakeShortcuts.h).
+sugo_add_test(tst_shortcutsfocusinhibitor Qt6::Core)
+sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)

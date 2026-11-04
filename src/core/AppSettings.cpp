@@ -3,6 +3,7 @@
 
 #include "Autostart.h"
 #include "FocusSoundController.h"
+#include "ShortcutsFocusInhibitor.h"
 #include "SystemTray.h"
 
 #include <QAudioOutput>
@@ -49,6 +50,8 @@ const char kColorScheme[] = "ColorScheme";
 const char kUpdateChannel[] = "UpdateChannel";
 const char kAutoCheckUpdates[] = "AutoCheckUpdates";
 const char kVerboseLogging[] = "VerboseLogging";
+const char kFocusOnShortcut[] = "FocusOnShortcut";
+const char kFocusOffShortcut[] = "FocusOffShortcut";
 
 QString validColorScheme(const QString &scheme)
 {
@@ -159,6 +162,8 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
     m_verboseLogging = settings.value(QLatin1String(kVerboseLogging), Defaults::verboseLogging).toBool();
+    m_focusOnShortcut = settings.value(QLatin1String(kFocusOnShortcut), QString(Defaults::focusOnShortcut)).toString().trimmed();
+    m_focusOffShortcut = settings.value(QLatin1String(kFocusOffShortcut), QString(Defaults::focusOffShortcut)).toString().trimmed();
 
     // Left behind by versions that had a daily goal.
     if (m_config->contains(QStringLiteral("DailyGoal"))) {
@@ -456,6 +461,61 @@ void AppSettings::setVerboseLogging(bool verbose)
     Q_EMIT verboseLoggingChanged();
 }
 
+void AppSettings::setFocusOnShortcut(const QString &name)
+{
+    const QString trimmed = name.trimmed();
+    if (m_focusOnShortcut == trimmed) {
+        return;
+    }
+    m_focusOnShortcut = trimmed;
+    storeString(kFocusOnShortcut, trimmed);
+    Q_EMIT focusOnShortcutChanged();
+}
+
+void AppSettings::setFocusOffShortcut(const QString &name)
+{
+    const QString trimmed = name.trimmed();
+    if (m_focusOffShortcut == trimmed) {
+        return;
+    }
+    m_focusOffShortcut = trimmed;
+    storeString(kFocusOffShortcut, trimmed);
+    Q_EMIT focusOffShortcutChanged();
+}
+
+bool AppSettings::focusShortcutsSupported() const
+{
+    return m_focusInhibitor && m_focusInhibitor->toolFound();
+}
+
+QStringList AppSettings::focusShortcutNames() const
+{
+    return m_focusInhibitor ? m_focusInhibitor->shortcutList() : QStringList();
+}
+
+void AppSettings::refreshFocusShortcuts()
+{
+    if (m_focusInhibitor) {
+        m_focusInhibitor->refreshShortcutList();
+    }
+}
+
+void AppSettings::attachFocusShortcuts(ShortcutsFocusInhibitor *inhibitor)
+{
+    Q_ASSERT_X(!m_focusInhibitor, "AppSettings::attachFocusShortcuts", "attach once");
+    m_focusInhibitor = inhibitor;
+    const auto pushNames = [this]() {
+        if (m_focusInhibitor) {
+            m_focusInhibitor->setShortcutNames(m_focusOnShortcut, m_focusOffShortcut);
+        }
+    };
+    connect(this, &AppSettings::focusOnShortcutChanged, inhibitor, pushNames);
+    connect(this, &AppSettings::focusOffShortcutChanged, inhibitor, pushNames);
+    connect(inhibitor, &ShortcutsFocusInhibitor::shortcutListChanged, this, &AppSettings::focusShortcutNamesChanged);
+    pushNames(); // also reads the list of shortcuts
+    Q_EMIT focusShortcutNamesChanged();
+}
+
 void AppSettings::resetToDefaults()
 {
     // Through the setters: they skip what is already right, store the rest and tell the views.
@@ -478,6 +538,8 @@ void AppSettings::resetToDefaults()
     setUpdateChannel(QString(Defaults::updateChannel));
     setAutoCheckUpdates(Defaults::autoCheckUpdates);
     setVerboseLogging(Defaults::verboseLogging);
+    setFocusOnShortcut(QString(Defaults::focusOnShortcut));
+    setFocusOffShortcut(QString(Defaults::focusOffShortcut));
 }
 
 void AppSettings::applyColorScheme()

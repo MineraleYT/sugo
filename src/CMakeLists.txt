@@ -307,3 +307,10 @@ qt_add_resources(sugo_core "sugo_macos_menu"
     PREFIX "/qt/qml/io/github/mineraleyt/sugo"
     FILES qml/components/MacMenuBar.qml
 )
+
+# --- macOS port: W2-A (Focus through Shortcuts, sugo:// links) ---
+# Plain Qt, compiled everywhere: the Linux tests drive them with a fake `shortcuts` program.
+target_sources(sugo_core PRIVATE
+    core/TimerCommands.cpp core/TimerCommands.h
+    platform/ShortcutsFocusInhibitor.cpp platform/ShortcutsFocusInhibitor.h
+)

@@ -38,6 +38,18 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- sugo://toggle and friends: scripts and the Shortcuts app control the timer (main.cpp). -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.github.mineraleyt.sugo</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>sugo</string>
+            </array>
+        </dict>
+    </array>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Sugo contributors. GPL-3.0-or-later.</string>
 </dict>

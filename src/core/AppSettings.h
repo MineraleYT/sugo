@@ -5,13 +5,16 @@
 
 #include <QLatin1String>
 #include <QObject>
+#include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
 #include <functional>
 #include <memory>
 
 class Autostart;
+class ShortcutsFocusInhibitor;
 
 /**
  * Settings of the program itself (as opposed to the per-timer options in PresetSettings):
@@ -32,13 +35,15 @@ class AppSettings : public QObject
     Q_PROPERTY(bool trayAvailable READ trayAvailable NOTIFY trayAvailableChanged FINAL)
     /// This platform can manage a login entry from inside the application.
     Q_PROPERTY(bool autostartSupported READ autostartSupported CONSTANT FINAL)
-    /// Other programs can drive the timer: D-Bus, KRunner, global shortcuts (not on macOS).
+    /// Other programs can drive the timer: D-Bus, KRunner and global shortcuts on Linux, sugo://
+    /// links (scripts, the Shortcuts app) on macOS.
     Q_PROPERTY(bool externalControlSupported READ externalControlSupported CONSTANT FINAL)
 
     Q_PROPERTY(bool showTrayIcon READ showTrayIcon WRITE setShowTrayIcon NOTIFY showTrayIconChanged FINAL)
     /// Closing the window hides it instead of quitting (needs the tray icon).
     Q_PROPERTY(bool closeToTray READ closeToTray WRITE setCloseToTray NOTIFY closeToTrayChanged FINAL)
-    /// Other programs (global shortcuts, scripts over D-Bus, KRunner) may start, pause, skip and stop the timer.
+    /// Other programs (global shortcuts, scripts over D-Bus, KRunner; sugo:// links on macOS) may
+    /// start, pause, skip and stop the timer.
     Q_PROPERTY(bool allowExternalControl READ allowExternalControl WRITE setAllowExternalControl NOTIFY allowExternalControlChanged FINAL)
     Q_PROPERTY(bool startAtLogin READ startAtLogin WRITE setStartAtLogin NOTIFY startAtLoginChanged FINAL)
     /// When started at login, start without showing the window.
@@ -85,6 +90,13 @@ class AppSettings : public QObject
     /// Sugo's debug messages are recorded (in the diagnostic report). Applied by Diagnostics.
     Q_PROPERTY(bool verboseLogging READ verboseLogging WRITE setVerboseLogging NOTIFY verboseLoggingChanged FINAL)
 
+    /// macOS: the shortcuts (Shortcuts app) that turn the Focus on and off while working,
+    /// run by ShortcutsFocusInhibitor.
+    Q_PROPERTY(QString focusOnShortcut READ focusOnShortcut WRITE setFocusOnShortcut NOTIFY focusOnShortcutChanged FINAL)
+    Q_PROPERTY(QString focusOffShortcut READ focusOffShortcut WRITE setFocusOffShortcut NOTIFY focusOffShortcutChanged FINAL)
+    /// macOS: the `shortcuts` program is there (macOS 12 or later).
+    Q_PROPERTY(bool focusShortcutsSupported READ focusShortcutsSupported NOTIFY focusShortcutNamesChanged FINAL)
+
 
     /// The close button really keeps the program running: tray icon on, tray present, option set.
     Q_PROPERTY(bool keepRunningInTray READ keepRunningInTray NOTIFY keepRunningInTrayChanged FINAL)
@@ -102,14 +114,7 @@ public:
     /// Normally driven by the D-Bus watcher of the tray host; public for tests.
     void setTrayAvailable(bool available);
     bool autostartSupported() const;
-    static constexpr bool externalControlSupported()
-    {
-#ifdef Q_OS_MACOS
-        return false;
-#else
-        return true;
-#endif
-    }
+    static constexpr bool externalControlSupported() { return true; }
 
     bool showTrayIcon() const { return m_showTrayIcon; }
     void setShowTrayIcon(bool show);
@@ -168,6 +173,19 @@ public:
     void setAutoCheckUpdates(bool enabled);
     bool verboseLogging() const { return m_verboseLogging; }
     void setVerboseLogging(bool verbose);
+
+    QString focusOnShortcut() const { return m_focusOnShortcut; }
+    void setFocusOnShortcut(const QString &name);
+    QString focusOffShortcut() const { return m_focusOffShortcut; }
+    void setFocusOffShortcut(const QString &name);
+    bool focusShortcutsSupported() const;
+    /// The names of the user's shortcuts, as last read (empty without the Focus inhibitor).
+    Q_INVOKABLE QStringList focusShortcutNames() const;
+    /// Reads the user's shortcuts again; focusShortcutNamesChanged() when done.
+    Q_INVOKABLE void refreshFocusShortcuts();
+    /// Gives the Focus inhibitor its shortcut names (now and on every change) and reads its list
+    /// of shortcuts. Called once at startup on macOS; tests call it on Linux.
+    void attachFocusShortcuts(ShortcutsFocusInhibitor *inhibitor);
     /// Puts every preference back to its default, through the setters (so views are told and the
     /// file is updated). Kept: whether the welcome tour was seen, the login entry (it lives on
     /// disk, outside the settings file) and everything that is not a preference of this class
@@ -231,6 +249,10 @@ Q_SIGNALS:
     void updateChannelChanged();
     void autoCheckUpdatesChanged();
     void verboseLoggingChanged();
+    void focusOnShortcutChanged();
+    void focusOffShortcutChanged();
+    /// The list of shortcuts was read again.
+    void focusShortcutNamesChanged();
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
@@ -261,6 +283,8 @@ private:
         static constexpr QLatin1String updateChannel{"stable"};
         static constexpr bool autoCheckUpdates = true;
         static constexpr bool verboseLogging = false;
+        static constexpr QLatin1String focusOnShortcut{"Sugo Focus On"};
+        static constexpr QLatin1String focusOffShortcut{"Sugo Focus Off"};
     };
 
     void store(const char *key, bool value);
@@ -293,5 +317,8 @@ private:
     QString m_updateChannel = QString(Defaults::updateChannel);
     bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
     bool m_verboseLogging = Defaults::verboseLogging;
+    QString m_focusOnShortcut = QString(Defaults::focusOnShortcut);
+    QString m_focusOffShortcut = QString(Defaults::focusOffShortcut);
+    QPointer<ShortcutsFocusInhibitor> m_focusInhibitor;
     bool m_launchedInBackground = false;
 };

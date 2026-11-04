@@ -13,6 +13,8 @@
 
 #include "AppSettings.h"
 #include "Autostart.h"
+#include "FakeShortcuts.h"
+#include "ShortcutsFocusInhibitor.h"
 
 namespace
 {
@@ -500,6 +502,8 @@ private Q_SLOTS:
         settings->setUpdateChannel(QStringLiteral("nightly"));
         settings->setAutoCheckUpdates(false);
         settings->setVerboseLogging(true);
+        settings->setFocusOnShortcut(QStringLiteral("Mine On"));
+        settings->setFocusOffShortcut(QStringLiteral("Mine Off"));
 
         QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
         QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
