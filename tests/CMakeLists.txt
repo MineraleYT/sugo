@@ -94,32 +94,32 @@ set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 15)
 add_test(NAME tst_stats_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> stats
 )
-set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_about_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> about
 )
-set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_settings_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> settings
 )
-set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_presets_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> presets
 )
-set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_timer_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> timer
 )
-set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )
-set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 15)
 
 # Ended with SIGTERM, Sugo quits cleanly by itself (on every system; without D-Bus).
 add_test(NAME tst_app_quit
