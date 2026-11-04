@@ -51,6 +51,7 @@ sugo_add_test(tst_themeicons Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
+sugo_add_test(tst_unixsignals Qt6::Core)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version

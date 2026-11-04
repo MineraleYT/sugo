@@ -23,14 +23,6 @@ constexpr int kQuitSignals[] = {SIGINT, SIGTERM, SIGHUP};
 void onSignal(int)
 {
     const int savedErrno = errno; // the interrupted code may be about to read errno
-    // Back to the default action: if the graceful shutdown hangs, a second Ctrl+C or
-    // SIGTERM ends the process for real.
-    struct sigaction defaultAction {};
-    defaultAction.sa_handler = SIG_DFL;
-    sigemptyset(&defaultAction.sa_mask);
-    for (const int signal : kQuitSignals) {
-        ::sigaction(signal, &defaultAction, nullptr);
-    }
     const char byte = 1;
     const ssize_t ignored = ::write(signalSocket[0], &byte, sizeof(byte)); // non-blocking
     Q_UNUSED(ignored)
@@ -67,7 +59,11 @@ void installQuitSignalHandlers(QObject *parent)
     struct sigaction action {};
     action.sa_handler = onSignal;
     sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_RESTART;
+    // SA_RESETHAND: a signal, once received, gets its default action back, so if the graceful
+    // shutdown hangs a second Ctrl+C or SIGTERM ends the process for real. Only that signal:
+    // systemd stops a session with SIGTERM and then SIGHUP, which must not kill us before
+    // aboutToQuit has recorded the running phase.
+    action.sa_flags = SA_RESTART | SA_RESETHAND;
     for (const int signal : kQuitSignals) {
         ::sigaction(signal, &action, nullptr);
     }
