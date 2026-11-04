@@ -39,6 +39,7 @@ private Q_SLOTS:
     void testStreakUpdatesOnRecord();
     void testDays();
     void testPreviousPeriodComparesTheSameStretch();
+    void testDateCheckKeepsAPeriodUnderWayCurrent();
 
 private:
     void insertWork(const QDateTime &start, bool completed = true);
@@ -209,6 +210,37 @@ void TestStatsModel::testPreviousPeriodComparesTheSameStretch()
     m_model->previousPeriod();
     QCOMPARE(m_model->workSeconds(), 6600);
     QCOMPARE(m_model->previousWorkSeconds(), 0);
+}
+
+void TestStatsModel::testDateCheckKeepsAPeriodUnderWayCurrent()
+{
+    // Nothing recomputes the model during the day but the periodic check: it must still move
+    // the comparison and the bar of "now" along with the clock.
+    auto now = std::make_shared<QDateTime>(QDate(2026, 10, 3), QTime(9, 0), QTimeZone::utc());
+    StatsModel::Environment env = m_env;
+    env.now = [now]() { return *now; };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Day);
+    insertWork(QDateTime(QDate(2026, 10, 2), QTime(14, 0), QTimeZone::utc()));
+    m_model->refresh();
+    QCOMPARE(m_model->previousWorkSeconds(), 0); // yesterday at 14:00 is after 9:00
+    QVERIFY(m_model->buckets().at(9).toMap().value(QStringLiteral("isCurrent")).toBool());
+
+    QSignalSpy periodSpy(m_model.get(), &StatsModel::periodChanged);
+    *now = QDateTime(QDate(2026, 10, 3), QTime(16, 0), QTimeZone::utc());
+    m_model->checkDateChange();
+    QCOMPARE(m_model->previousWorkSeconds(), 1500);
+    const QVariantList buckets = m_model->buckets();
+    QCOMPARE(buckets.size(), 24);
+    QVERIFY(!buckets.at(9).toMap().value(QStringLiteral("isCurrent")).toBool());
+    QVERIFY(buckets.at(16).toMap().value(QStringLiteral("isCurrent")).toBool());
+    QCOMPARE(periodSpy.count(), 0); // still the same day
+
+    // A past period has nothing to catch up with.
+    m_model->previousPeriod();
+    QSignalSpy statsSpy(m_model.get(), &StatsModel::statsChanged);
+    m_model->checkDateChange();
+    QCOMPARE(statsSpy.count(), 0);
 }
 
 QList<QDate> TestStatsModel::shownDays() const

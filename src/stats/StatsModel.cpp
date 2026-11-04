@@ -110,6 +110,11 @@ void StatsModel::checkDateChange()
     const QDate newToday = todayDate();
     armMidnightTimer();
     if (newToday == m_today && !zoneChanged && !localeChanged) {
+        // Same day, but a period under way still moves on: the bar of "now" and the point of the
+        // period before that it is compared with.
+        if (isCurrent()) {
+            recompute();
+        }
         return;
     }
 
