@@ -33,6 +33,7 @@ set_tests_properties(tst_diagnostics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=off
 
 sugo_add_test(tst_calendarsync Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network ${SUGO_DBUS})
 set_tests_properties(tst_calendarsync PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+sugo_add_test(tst_askoncesecretstore Qt6::Core ${SUGO_DBUS})
 
 sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 # A GUI application (AppSettings); no display on CI.
@@ -93,7 +94,9 @@ endif()
 add_test(NAME tst_app_startup
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo>
 )
-set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 15)
+# smoke_app.sh stops the app itself after 8 s (and kills it 2 s later); the rest is the first start
+# of a freshly built binary, which a macOS runner checks for several seconds (13.7 s in all once).
+set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 30)
 
 add_test(NAME tst_stats_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> stats

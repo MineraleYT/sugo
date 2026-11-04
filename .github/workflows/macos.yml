@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Builds the macOS app (universal, signed ad hoc) in a disk image, starts it without a display,
+# Builds the macOS app (universal, signed ad hoc, with libsodium linked statically) in a disk image, starts it without a display,
 # and keeps the image as the artifact "sugo-macos". Used by release.yml (stable releases) and
 # nightly.yml, which still publish the Linux packages when this fails.
 name: macOS
@@ -37,15 +37,20 @@ jobs:
             test -n "$value"
             echo "$pin=$value" >> "$GITHUB_OUTPUT"
           done
+          value=$(sed -n "s/^LIBSODIUM_VERSION=//p" packaging/macos/build-libsodium.sh)
+          test -n "$value"
+          echo "LIBSODIUM_VERSION=$value" >> "$GITHUB_OUTPUT"
 
-      # Qt (universal) and extra-cmake-modules, where build.sh looks for them before downloading.
-      - name: Restore Qt and extra-cmake-modules
+      # Qt (universal), extra-cmake-modules and libsodium (universal, static), where build.sh looks
+      # for them before downloading and building.
+      - name: Restore Qt, extra-cmake-modules and libsodium
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/sugo-macos/qt
             ~/sugo-macos/ecm
-          key: macos-package-deps-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}
+            ~/sugo-macos/sodium
+          key: macos-package-deps-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}-sodium${{ steps.pins.outputs.LIBSODIUM_VERSION }}
 
       - name: Build
         env:

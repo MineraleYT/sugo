@@ -65,11 +65,18 @@ sudo zypper install cmake ninja gcc-c++ \
 With the Xcode command line tools (`xcode-select --install`) and [Homebrew](https://brew.sh):
 
 ```sh
-brew install qt cmake ninja extra-cmake-modules
+brew install qt cmake ninja extra-cmake-modules libsodium pkgconf
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
     -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
 open build/bin/Sugo.app
+```
+
+libsodium (the sync's encryption) is found through pkg-config, so `pkgconf` is needed too. Without Homebrew, or to build with the same library as the release (universal and static), build it from source and point pkg-config at it:
+
+```sh
+bash packaging/macos/build-libsodium.sh "$HOME/sugo-deps/sodium"
+export PKG_CONFIG_PATH="$HOME/sugo-deps/sodium/lib/pkgconfig"
 ```
 
 The program is the app bundle `build/bin/Sugo.app` (its binary is `Sugo.app/Contents/MacOS/Sugo`); there is nothing to install. The Linux files (desktop entry, KRunner plugin, D-Bus service, metainfo) are not installed on macOS. Homebrew's Qt is enough to develop; the app published in the releases is built with Qt from qt.io, see [Building the macOS app](#building-the-macos-app).
@@ -106,13 +113,15 @@ The first argument is the version the program shows and compares when it looks f
 
 ## Building the macOS app
 
-The release disk image is built on a Mac by `packaging/macos/build.sh` with Qt 6.10 from qt.io (installed with aqtinstall) and extra-cmake-modules from source, at the same versions as the AppImage. It needs the Xcode command line tools, CMake, Python 3 and git (Ninja is installed with Homebrew if missing):
+The release disk image is built on a Mac by `packaging/macos/build.sh` with Qt 6.10 from qt.io (installed with aqtinstall) and extra-cmake-modules from source, at the same versions as the AppImage, and libsodium from source. It needs the Xcode command line tools, CMake, Python 3 and git (Ninja and pkg-config are installed with Homebrew if missing):
 
 ```sh
 bash packaging/macos/build.sh 1.0.1-dev out
 ```
 
 The arguments are the version, as for the AppImage, and the folder that receives `Sugo-macOS-universal.dmg`. The script builds one universal app (`arm64` and `x86_64`, macOS 13 or later), copies Qt into it with `macdeployqt` (SQLite is the only SQL driver kept; the `offscreen` platform plugin is added for the smoke tests), and fails if the bundle is incomplete: a missing platform, SQL, SVG, multimedia (FFmpeg) or TLS plugin or QML module, a library loaded from outside the bundle (other than macOS's own), or a file without both architectures. It then signs the app ad hoc (`codesign --sign -`, required on Apple Silicon), checks the signature and `--version`, and makes the disk image with a link to `/Applications`. The downloads and the build are kept in `WORK` (`/tmp/sugo-macos` by default) and reused by the next run.
+
+**libsodium.** Homebrew's libsodium is a dylib for one architecture, so `packaging/macos/build-libsodium.sh` builds the release pinned in it (`LIBSODIUM_VERSION`, with the tarball's `LIBSODIUM_SHA256`) once for `arm64` and once for `x86_64` (macOS 13 or later), joins the two static libraries with `lipo`, and installs them with a `libsodium.pc` in `WORK/sodium`. `build.sh` puts that folder first in `PKG_CONFIG_PATH`, so CMake's `pkg_check_modules` finds it before any other copy, and fails if the program links a libsodium dylib or, once the sources include `sodium.h`, lacks its code in either architecture: linked statically, it adds nothing to the bundle. To move to a newer libsodium, check the tarball's minisign signature against libsodium's key (`RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3`, on [libsodium's site](https://doc.libsodium.org/installation)), then change the version and the SHA-256 in the script; the CI caches follow the version.
 
 The app is not signed with a Developer ID nor notarized, so Gatekeeper asks users to confirm the first launch (see the README). `SIGN_IDENTITY="Developer ID Application: …"` signs with that identity and the hardened runtime instead; notarization is not done by the script.
 
@@ -124,7 +133,7 @@ On macOS Sugo silences notifications by running two shortcuts of the Shortcuts a
 2. Select each and choose File → Export, then "Anyone" (not "People Who Know Me"), and save it as `Sugo Focus On.shortcut` / `Sugo Focus Off.shortcut`. Such a file starts with `AEA1` (an Apple Encrypted Archive carrying Apple's signature); `tst_shortcutsfocusinstaller` checks that.
 3. Replace the files in `data/shortcuts/` (keep their `.license` files), and check on a Mac without iCloud, or another user account, that opening each shows the "Add Shortcut" sheet.
 
-To try the result, open the disk image, or run `tests/smoke_app.sh` on `Sugo.app/Contents/MacOS/Sugo` (it needs GNU `timeout`: `brew install coreutils` and put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`). In CI, `macos.yml` builds it and starts it without a display; `nightly.yml` and `release.yml` publish it when that succeeds, and publish the Linux packages without it when it fails.
+To try the result, open the disk image, or run `tests/smoke_app.sh` on `Sugo.app/Contents/MacOS/Sugo` (it needs GNU `timeout`: `brew install coreutils` and put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`). In CI, `macos.yml` builds it (keeping Qt, extra-cmake-modules and libsodium in its cache) and starts it without a display; `nightly.yml` and `release.yml` publish it when that succeeds, and publish the Linux packages without it when it fails.
 
 ---
 
@@ -149,7 +158,7 @@ CI builds on Linux with GCC (and runs the suite), with Clang and warnings as err
 
 CI runs only what a change can affect: its first job, Changes, reads the changed files and `.github/scripts/ci-changes.sh` decides which builds they need. Documentation runs nothing, a macOS-only file (`packaging/macos/`, the `.mm` sources, the `Mac*` sources built under `if(APPLE)`) only the macOS job, a Linux-only one (the D-Bus services, the desktop entry and the metainfo) only the Linux jobs, and the test scripts skip the Clang build; anything else, or a change it cannot read, runs everything. A file added for one platform only goes in that script's lists. The Linux jobs run in a container with every build dependency already installed (`.github/ci-image/Dockerfile`, on ghcr.io as `sugo-ci`, tagged with a hash of the Dockerfile): the CI image job builds it only when the Dockerfile changes, so a new dependency goes in the Dockerfile. The jobs keep the compiler cache (ccache) between runs, and a newer push cancels the run of the older one.
 
-**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage self-update is not used on macOS either.
+**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage self-update is not used on macOS either. `tst_mackeychainstore` writes to the real login Keychain, so it runs only with `SUGO_TEST_KEYCHAIN=1` from a terminal of the logged-in desktop session; over SSH there is no login session (every Keychain call fails with OSStatus -25308) and it skips. What happens to the Keychain items across updates of an ad hoc signed app is checked by hand (`tests/manual-review-checklist.md`, "macOS: Keychain").
 
 ### Linux and macOS parity
 
