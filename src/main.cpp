@@ -8,12 +8,15 @@
 #include <QQuickWindow>
 #include <QTimer>
 #include <QDebug>
+#include <QEvent>
+#include <QPointer>
 #include <QUrl>
 #include <QQmlContext>
 #include <QQmlExtensionPlugin>
 
 #include <QLocale>
 
+#include <functional>
 #include <memory>
 
 #include "Localization.h"
@@ -33,7 +36,12 @@
 #include "SessionRecorder.h"
 #include "SessionRepository.h"
 #include "SilenceController.h"
+#ifdef Q_OS_MACOS
+#include "LocalSingleInstance.h"
+#include "MacApp.h"
+#else
 #include "SingleInstance.h"
+#endif
 #include "StatsModel.h"
 #include "TimerBinding.h"
 #include "TimerEngine.h"
@@ -48,6 +56,61 @@
 
 // The QML module is a static library (sugo_core); its plugin registers the types.
 Q_IMPORT_QML_PLUGIN(SugoQmlPlugin)
+
+#ifdef Q_OS_MACOS
+namespace
+{
+/**
+ * What macOS tells the application as a whole, seen on the application object.
+ *
+ * - A click on the Dock icon while the window is hidden shows it. Cocoa reports it as
+ *   applicationShouldHandleReopen:, which Qt turns into an ApplicationActivate event (forced
+ *   even when the application is already active). Activation by other means (Cmd+Tab, a click
+ *   on a notification) also shows a hidden window. After a `--background` launch the
+ *   activation macOS may give a newly launched application is ignored: the filter is armed a
+ *   moment after the event loop starts.
+ * - Cmd+Q, Quit in the Dock menu, logging out or shutting down: Cocoa asks
+ *   applicationShouldTerminate:, Qt sends QEvent::Quit to the application, which closes every
+ *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
+ *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
+ *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
+ *   so this also covers the menu bar icon's Quit. The running phase is then saved as
+ *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
+ */
+class MacApplicationEvents : public QObject
+{
+public:
+    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, bool armed, QObject *parent)
+        : QObject(parent)
+        , m_window(window)
+        , m_showWindow(std::move(showWindow))
+        , m_armed(armed)
+    {
+    }
+
+    void arm() { m_armed = true; }
+
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == QCoreApplication::instance() && m_window) {
+            if (event->type() == QEvent::ApplicationActivate) {
+                if (m_armed && !m_window->isVisible()) {
+                    m_showWindow();
+                }
+            } else if (event->type() == QEvent::Quit) {
+                m_window->setProperty("platformQuitting", true);
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QPointer<QQuickWindow> m_window;
+    std::function<void()> m_showWindow;
+    bool m_armed;
+};
+} // namespace
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -84,8 +147,13 @@ int main(int argc, char *argv[])
     parser.setApplicationDescription(about.value(QStringLiteral("shortDescription")).toString());
     parser.addHelpOption();
     parser.addVersionOption();
+#ifdef Q_OS_MACOS
+    const QCommandLineOption backgroundOption(QStringLiteral("background"),
+                                              i18n("Start hidden in the menu bar (used by the login item)"));
+#else
     const QCommandLineOption backgroundOption(QStringLiteral("background"),
                                               i18n("Start hidden in the system tray (used by the login entry)"));
+#endif
     parser.addOption(backgroundOption);
     parser.process(app);
     const bool background = parser.isSet(backgroundOption);
@@ -96,7 +164,14 @@ int main(int argc, char *argv[])
     // One instance only. A second launch (login entry plus menu, say) shows the first one's
     // window and exits, so two programs never share the database. A second `--background`
     // launch (the login entry while already running) exits without popping the window up.
+#ifdef Q_OS_MACOS
+    // No session bus here: a lock file and a local socket, private to the user.
+    LocalSingleInstance singleInstance(LocalSingleInstance::defaultName(QStringLiteral("sugo")));
+    using AppSingleInstance = LocalSingleInstance;
+#else
     SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
+    using AppSingleInstance = SingleInstance;
+#endif
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
     }
@@ -184,10 +259,14 @@ int main(int argc, char *argv[])
     auto *timerDBusObject = new TimerDBusObject(timer);
     auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
+#ifdef Q_OS_LINUX
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
+#endif
     auto *krunner = new KRunnerService(timer, presets, &services);
     krunner->setControlAllowed(externalControlAllowed);
+#ifdef Q_OS_LINUX
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
+#endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
     auto *stats = engine.singletonInstance<StatsModel *>("io.github.mineraleyt.sugo", "StatsModel");
@@ -275,11 +354,19 @@ int main(int argc, char *argv[])
     if (window) {
         tray->setWindow(window);
         auto activateWindow = [window](const QString &activationToken = QString()) {
+#ifdef Q_OS_LINUX
             // On Wayland the compositor only gives focus with the token of the launch that asked
             // for it; Qt's Wayland plugin takes it from this variable on requestActivate().
             if (!activationToken.isEmpty()) {
                 qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
             }
+#else
+            Q_UNUSED(activationToken)
+#endif
+#ifdef Q_OS_MACOS
+            // requestActivate() alone would leave the window behind the active application.
+            macActivateApp();
+#endif
             window->show();
             if (window->windowStates() & Qt::WindowMinimized) {
                 window->showNormal();
@@ -292,7 +379,16 @@ int main(int argc, char *argv[])
         QObject::connect(tray, &TrayController::showWindowRequested, window, [activateWindow]() { activateWindow(); });
 
         // A second launch asks this instance to come to the front.
-        QObject::connect(&singleInstance, &SingleInstance::activateRequested, window, activateWindow);
+        QObject::connect(&singleInstance, &AppSingleInstance::activateRequested, window, activateWindow);
+
+#ifdef Q_OS_MACOS
+        // The Dock icon, and quitting from the system (see MacApplicationEvents).
+        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, !background, &services);
+        app.installEventFilter(macEvents);
+        if (background) {
+            QTimer::singleShot(1000, macEvents, [macEvents]() { macEvents->arm(); });
+        }
+#endif
 
         // KRunner runner action to open window
         QObject::connect(krunner, &KRunnerService::openRequested, window, [activateWindow]() { activateWindow(); });
@@ -320,8 +416,10 @@ int main(int argc, char *argv[])
     // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
     // is an engine singleton, the runner a child of `services`), then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
+#ifdef Q_OS_LINUX
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
+#endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
     if (smokeTest && status == EXIT_SUCCESS && smokeWarnings > 0) {

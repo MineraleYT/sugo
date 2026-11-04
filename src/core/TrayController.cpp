@@ -81,11 +81,26 @@ void strokeProgress(QPainter &p, const QPainterPath &path, const QColor &color, 
 QIcon trayIcon(int minutes, int badgeStyle, double progressRatio, bool isWork, bool isPaused)
 {
     if (minutes < 0) {
+#ifdef Q_OS_MACOS
+        // The menu bar shows idle items in one colour, which macOS picks to suit the bar
+        // (light, dark, tinted): a template image, made from the icon's alpha alone.
+        QIcon idle(QStringLiteral(":/icons/sugo-tray-template.svg"));
+        if (!idle.isNull()) {
+            idle.setIsMask(true);
+            return idle;
+        }
+#endif
         return QGuiApplication::windowIcon();
     }
 
     QIcon result;
-    for (const int size : {22, 32, 48, 64}) {
+#ifdef Q_OS_MACOS
+    // The menu bar is 22 pt high and its icons 18 pt: 18 px, and 36 px on Retina screens.
+    constexpr int sizes[] = {18, 36, 22, 32, 48, 64};
+#else
+    constexpr int sizes[] = {22, 32, 48, 64};
+#endif
+    for (const int size : sizes) {
         QPixmap pixmap(size, size);
         pixmap.fill(Qt::transparent);
 
@@ -136,7 +151,9 @@ QIcon trayIcon(int minutes, int badgeStyle, double progressRatio, bool isWork, b
             const QString text = QString::number(minutes);
             QFont font = p.font();
             font.setBold(true);
-            if (size <= 24) {
+            if (size <= 18) {
+                font.setPixelSize(text.length() >= 2 ? 9 : 10);
+            } else if (size <= 24) {
                 font.setPixelSize(text.length() >= 2 ? 10 : 11);
             } else if (size <= 32) {
                 font.setPixelSize(text.length() >= 2 ? 13 : 15);
@@ -252,11 +269,15 @@ void TrayController::createItem()
         }
     });
     m_item->setContextMenu(menu);
+#ifndef Q_OS_MACOS
+    // In the macOS menu bar a click opens the menu and also reports a Trigger: the window is
+    // shown and hidden from the menu (and the Dock) there.
     connect(m_item.get(), &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::Trigger) {
             toggleWindow();
         }
     });
+#endif
 
     updateTexts();
     m_item->show();

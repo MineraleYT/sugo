@@ -201,3 +201,27 @@ target_link_libraries(sugo PRIVATE
 )
 
 install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+
+# --- macOS port: B1 menu bar icon, notifications, single instance, Dock ---
+target_sources(sugo_core PRIVATE
+    platform/MacNotificationMapping.h
+    platform/MacNotificationMapping.cpp
+    platform/LocalSingleInstance.h
+    platform/LocalSingleInstance.cpp
+)
+# The menu bar icon while idle, a template image for macOS (see TrayController).
+qt6_add_resources(sugo "trayicon"
+    PREFIX "/icons"
+    BASE "${PROJECT_SOURCE_DIR}/data/icons/tray"
+    FILES "${PROJECT_SOURCE_DIR}/data/icons/tray/sugo-tray-template.svg"
+)
+if(APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/MacNotifier.h
+        platform/MacNotifier.mm
+        platform/MacApp.h
+        platform/MacApp.mm
+    )
+    set_source_files_properties(platform/MacNotifier.mm platform/MacApp.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(sugo_core PRIVATE "-framework Foundation" "-framework AppKit" "-framework UserNotifications")
+endif()
