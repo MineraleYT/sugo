@@ -161,6 +161,14 @@ QQC2.ApplicationWindow {
         if (!(id > 0)) {
             return;
         }
+        // One at a time: a note being typed stays with its own session, and this one is asked
+        // for once the dialog closes.
+        if (taskNoteDialog.visible) {
+            if (id !== taskNoteDialog.sessionId) {
+                root.pendingTaskNote = { presetName: presetName || "", sessionId: id };
+            }
+            return;
+        }
         taskNoteDialog.presetName = presetName || "";
         taskNoteDialog.sessionId = id;
         taskNoteDialog.open();
@@ -207,7 +215,8 @@ QQC2.ApplicationWindow {
     }
 
     // A work session that ends while the window is hidden: its note prompt waits for the window,
-    // unless the timer's end notification is on (it asks for the note itself).
+    // unless the timer's end notification is on (it asks for the note itself). Also one that ends
+    // while the note of another is being asked for: it waits for that dialog to close.
     property var pendingTaskNote: null
 
     function offerTaskNote(presetName: string, sessionId: var): void {
@@ -1254,6 +1263,8 @@ QQC2.ApplicationWindow {
             recentRepeater.model = DataManager.recentTaskNotes(5);
             taskNoteField.forceActiveFocus();
         }
+        // A session that ended while this one's note was asked for.
+        onClosed: Qt.callLater(root.showPendingTaskNote)
     }
 
     // The resume prompt waits while the window is hidden (e.g. in the tray) and appears once the
