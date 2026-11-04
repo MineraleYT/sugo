@@ -110,6 +110,11 @@ void StatsModel::checkDateChange()
     const QDate newToday = todayDate();
     armMidnightTimer();
     if (newToday == m_today && !zoneChanged && !localeChanged) {
+        // Same day, but a period under way still moves on: the bar of "now" and the point of the
+        // period before that it is compared with.
+        if (isCurrent()) {
+            recompute();
+        }
         return;
     }
 
@@ -322,10 +327,11 @@ void StatsModel::recompute()
     {
         const QDate previousAnchor = Stats::shifted(sp, m_anchorDate, -1);
         const PeriodRange previous = Stats::rangeFor(sp, previousAnchor, m_env.firstDayOfWeek, m_env.timeZone);
-        const qint64 nowMs = m_env.now().toMSecsSinceEpoch();
+        const QDateTime now = m_env.now();
+        const qint64 nowMs = now.toMSecsSinceEpoch();
         qint64 endMs = previous.endMs;
         if (range.startMs <= nowMs && nowMs < range.endMs) {
-            endMs = std::min(endMs, previous.startMs + (nowMs - range.startMs));
+            endMs = Stats::samePointInPreviousPeriod(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone, now);
         }
         m_previousWorkSeconds = 0;
         const QList<SessionRecord> records = m_repository->between(previous.startMs, endMs);

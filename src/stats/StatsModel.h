@@ -31,7 +31,8 @@ class SessionRecorder;
  * By default it follows the system: the time zone, the default QLocale and the first day of
  * the week are re-read by checkDateChange()
  * and when the date changes. "Today" is kept current by a timer armed for the next local
- * midnight, backed by a coarse periodic check that also catches suspend and clock changes.
+ * midnight, backed by a coarse periodic check that also catches suspend and clock changes
+ * and moves a period under way along with the time of day.
  * Tests inject a fixed Environment with setEnvironment().
  */
 class StatsModel : public QObject
@@ -100,9 +101,10 @@ public:
     void setEnvironment(const Environment &env);
 
     /// Re-checks the current date: on a new day it updates "today" and the
-    /// streaks, and moves the shown period along if it was showing the old today. Called by the
-    /// timers; public for tests.
-    void checkDateChange();
+    /// streaks, and moves the shown period along if it was showing the old today. On the same day
+    /// it brings a period under way up to "now" (its current bar, the comparison with the period
+    /// before). Called by the timers and when the page opens.
+    Q_INVOKABLE void checkDateChange();
 
     Period period() const { return m_period; }
     void setPeriod(Period period);

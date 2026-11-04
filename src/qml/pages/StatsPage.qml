@@ -15,6 +15,9 @@ QQC2.Page {
     /// Laid out with real sizes (read by the smoke test).
     readonly property bool contentLaidOut: column.width > 0 && chart.width > 0
 
+    // The model last caught up with the clock up to a few minutes ago: show "now" as it is.
+    Component.onCompleted: StatsModel.checkDateChange()
+
     readonly property var periods: [
         { id: "day", text: i18n("Day"), value: StatsModel.Period.Day },
         { id: "week", text: i18n("Week"), value: StatsModel.Period.Week },
