@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "DesktopStyle.h"
 
+#include <algorithm>
+
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -92,6 +95,47 @@ DesktopStyle::Layout DesktopStyle::parseGnome(const QString &value)
     return layout;
 }
 
+bool DesktopStyle::kwinForcesTitleBar(const QString &rulesPath)
+{
+    QSettings rules(rulesPath, QSettings::IniFormat);
+    // QSettings reads the [General] group as the top level.
+    const QStringList order = rules.value(QStringLiteral("Order")).toStringList();
+    const QStringList ourClasses = {QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("sugo")};
+    for (const QString &id : order) {
+        rules.beginGroup(id);
+        // KWin's rule kinds: 2 force, 3 apply, 4 remember (the others are temporary or unused).
+        const int kind = rules.value(QStringLiteral("decorationpolicyrule")).toInt();
+        bool applies = rules.value(QStringLiteral("decorationpolicy")).toString() == QLatin1String("server") && kind >= 2 && kind <= 4;
+        if (applies) {
+            // shortcut: only the window class is matched, not title, role or type; extend if such rules turn up.
+            const QString wmclass = rules.value(QStringLiteral("wmclass")).toString();
+            switch (rules.value(QStringLiteral("wmclassmatch")).toInt()) {
+            case 0: // any window
+                break;
+            case 1:
+                applies = ourClasses.contains(wmclass, Qt::CaseInsensitive);
+                break;
+            case 2:
+                applies = std::any_of(ourClasses.cbegin(), ourClasses.cend(), [&](const QString &c) {
+                    return c.contains(wmclass, Qt::CaseInsensitive);
+                });
+                break;
+            default: {
+                const QRegularExpression re(wmclass, QRegularExpression::CaseInsensitiveOption);
+                applies = std::any_of(ourClasses.cbegin(), ourClasses.cend(), [&](const QString &c) {
+                    return re.match(c).hasMatch();
+                });
+            }
+            }
+        }
+        rules.endGroup();
+        if (applies) {
+            return true;
+        }
+    }
+    return false;
+}
+
 DesktopStyle::Layout DesktopStyle::defaultLayout(const QString &style)
 {
     const QStringList all = {QStringLiteral("minimize"), QStringLiteral("maximize"), QStringLiteral("close")};
@@ -126,6 +170,10 @@ DesktopStyle::DesktopStyle(QObject *parent)
                 layout = read;
             }
         }
+    }
+    if (m_style == QLatin1String("kde")
+        && kwinForcesTitleBar(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/kwinrulesrc"))) {
+        return;
     }
     // Close must be reachable even with an odd setting.
     if (!layout.left.contains(QStringLiteral("close")) && !layout.right.contains(QStringLiteral("close"))) {
