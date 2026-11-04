@@ -689,6 +689,40 @@ private Q_SLOTS:
         QStandardPaths::setTestModeEnabled(false);
     }
 
+    void syncKeepsANewFilePrivate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QFile::Permissions others = QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther;
+
+        // A new file, in a folder that does not exist yet.
+        const QString path = dir.filePath(QStringLiteral("sugo/sugo.conf"));
+        {
+            const Settings::Ptr settings = Settings::open(path);
+            settings->setValue(QStringLiteral("SoundVolume"), 7);
+            Settings::sync(*settings);
+        }
+        QVERIFY(QFileInfo::exists(path));
+        QCOMPARE(QFile::permissions(path) & others, QFile::Permissions());
+        QVERIFY(QFile::permissions(path) & QFile::ReadOwner);
+        QCOMPARE(Settings::open(path)->value(QStringLiteral("SoundVolume")).toInt(), 7);
+
+        // An existing file readable by others is made private.
+        const QString shared = dir.filePath(QStringLiteral("shared.conf"));
+        {
+            QFile file(shared);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        QVERIFY(QFile::setPermissions(shared, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther));
+        {
+            const Settings::Ptr settings = Settings::open(shared);
+            settings->setValue(QStringLiteral("SoundVolume"), 9);
+            Settings::sync(*settings);
+        }
+        QCOMPARE(QFile::permissions(shared) & others, QFile::Permissions());
+        QCOMPARE(Settings::open(shared)->value(QStringLiteral("SoundVolume")).toInt(), 9);
+    }
+
     void dataDirVariableReplacesDefaultLocation()
     {
         const QByteArray saved = qgetenv("SUGO_DATA_DIR");

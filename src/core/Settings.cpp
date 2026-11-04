@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Settings.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -42,9 +43,23 @@ Ptr openDefault()
 
 void sync(QSettings &settings)
 {
+    const QString path = settings.fileName();
+    const QFile::Permissions ownerOnly = QFile::ReadOwner | QFile::WriteOwner;
+    // QSettings writes through QSaveFile, which keeps the mode of an existing file but gives a new
+    // one the default mode (0644 under the usual umask) until we could change it. Create the file
+    // private and empty first, so its contents are never readable by others, not even briefly.
+    if (!QFileInfo::exists(path)) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly | QIODevice::NewOnly, ownerOnly)) {
+            file.close();
+        }
+    } else {
+        QFile::setPermissions(path, ownerOnly);
+    }
     settings.sync();
-    if (QFileInfo::exists(settings.fileName())) {
-        QFile::setPermissions(settings.fileName(), QFile::ReadOwner | QFile::WriteOwner);
+    if (QFileInfo::exists(path)) {
+        QFile::setPermissions(path, ownerOnly);
     }
 }
 
