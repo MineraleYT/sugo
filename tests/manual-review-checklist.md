@@ -57,3 +57,4 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] With a timer running, open Statistics and double-click the status pill in the top bar: the timer page opens and the window is neither maximised nor restored. A double-click on an empty part of the top bar still maximises and restores it.
 - [ ] With eight or more timers and an update found (AppImage, or the macOS app), make the window as short as it goes: the timer list shrinks and scrolls, and Settings and About stay inside the window, in the sidebar and in the menu of a narrow window.
 - [ ] On a timer's page and in Settings, Tab into a number field (e.g. "Work") and press Shift+Tab: the focus goes back to the control before it and is not kept in the field.
+- [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.

@@ -58,6 +58,7 @@
 #include "ScreenLockWatcher.h"
 #include "Diagnostics.h"
 #include "CalendarSync.h"
+#include "DesktopStyle.h"
 #include "ThemeIcons.h"
 #include "UpdateChecker.h"
 
@@ -444,10 +445,8 @@ int main(int argc, char *argv[])
             // requestActivate() alone would leave the window behind the active application.
             macActivateApp();
 #endif
-            window->show();
-            if (window->windowStates() & Qt::WindowMinimized) {
-                window->showNormal();
-            }
+            // Back from the taskbar or the Dock as it was: a maximised window stays maximised.
+            DesktopStyle::showRestored(window);
             window->raise();
             window->requestActivate();
         };
