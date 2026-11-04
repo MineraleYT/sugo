@@ -985,6 +985,8 @@ QQC2.ApplicationWindow {
         sequences: [StandardKey.Preferences, "Ctrl+,"]
         enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.navigate("settings")
+        // A platform theme whose Preferences key is Ctrl+, too lists it twice: still settings.
+        onActivatedAmbiguously: root.navigate("settings")
     }
 
     RowLayout {
