@@ -417,6 +417,7 @@ int main(int argc, char *argv[])
     if (window) {
         tray->setWindow(window);
 #ifdef Q_OS_MACOS
+        macHideWindowTitle(window);
         dock->setWindow(window);
         auto activateWindow = [window, dock](const QString &activationToken = QString()) {
 #else

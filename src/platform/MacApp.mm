@@ -3,6 +3,9 @@
 
 #import <AppKit/AppKit.h>
 
+#include <QGuiApplication>
+#include <QWindow>
+
 void macActivateApp()
 {
     if (@available(macOS 14.0, *)) {
@@ -29,4 +32,14 @@ void macSetDockIconHidden(bool hidden)
     if (NSApp && NSApp.activationPolicy != policy) {
         [NSApp setActivationPolicy:policy];
     }
+}
+
+void macHideWindowTitle(QWindow *window)
+{
+    if (!window || QGuiApplication::platformName() != QLatin1String("cocoa")) {
+        return;
+    }
+    // With the cocoa platform the native handle is the window's NSView.
+    auto *view = (__bridge NSView *)reinterpret_cast<void *>(window->winId());
+    view.window.titleVisibility = NSWindowTitleHidden;
 }

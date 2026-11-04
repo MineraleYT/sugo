@@ -17,4 +17,10 @@ void macSetDockBadge(const QString &label);
 /// Hides the Dock icon (an accessory application: no Dock icon, no menu bar of its own) or shows
 /// it again (a regular application). Showing it again does not activate the application.
 void macSetDockIconHidden(bool hidden);
+
+class QWindow;
+/// Hides the title text the system draws in the window's title bar (the traffic lights stay):
+/// the sidebar already shows the name. The title still names the window in the Window menu and
+/// Mission Control. Does nothing without the cocoa platform (offscreen runs).
+void macHideWindowTitle(QWindow *window);
 #endif

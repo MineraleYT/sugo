@@ -18,8 +18,9 @@ Rectangle {
     signal searchRequested()
     /// "Restart to update": an update has been installed and waits for the restart.
     signal restartRequested()
-    /// The top of the sidebar moves the window, which has no system title bar; on desktops that
-    /// put window buttons on the left, they are here.
+    /// The top of the sidebar moves the window (on Linux it has no system title bar; on macOS the
+    /// title bar is drawn over the window); on desktops that put window buttons on the left, they
+    /// are here.
     signal moveRequested()
     property bool maximized: false
     signal minimizeRequested()
@@ -36,9 +37,28 @@ Rectangle {
         color: Theme.border
     }
 
+    // macOS: the strip of the system's title bar, with the traffic lights. The sidebar starts
+    // below it; dragging it moves the window, a double click zooms it, as in a title bar.
+    Item {
+        id: titleStrip
+        visible: DesktopStyle.nativeChrome
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: Theme.topBarHeight
+        DragHandler {
+            target: null
+            onActiveChanged: if (active) sidebar.moveRequested()
+        }
+        TapHandler {
+            onDoubleTapped: sidebar.toggleMaximizeRequested()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.spaceMd
+        anchors.topMargin: DesktopStyle.nativeChrome ? titleStrip.height : Theme.spaceMd
         anchors.rightMargin: Theme.spaceMd + Theme.hairline
         spacing: Theme.hairline * 2
 
@@ -59,8 +79,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: Theme.topBarHeight - Theme.spaceMd * 2
-            // On macOS the system's window buttons sit in the corner, left of the logo.
-            Layout.leftMargin: Theme.spaceSm + (DesktopStyle.nativeChrome ? Theme.trafficLightsWidth : 0)
+            Layout.leftMargin: Theme.spaceSm
             Layout.bottomMargin: Theme.spaceSm
             spacing: Theme.spaceMd + Theme.hairline * 2
             DragHandler {
