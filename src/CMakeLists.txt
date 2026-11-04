@@ -152,6 +152,7 @@ target_link_libraries(sugo_core PRIVATE
     ${SUGO_DBUS}
     Qt6::Network
     Qt6::Multimedia
+    PkgConfig::sodium
 )
 
 set(sugo_app_sources main.cpp)
