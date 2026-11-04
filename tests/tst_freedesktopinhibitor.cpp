@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "FreedesktopInhibitor.h"
+#include "PrivateDBus.h"
 
 namespace
 {
@@ -311,6 +312,43 @@ private Q_SLOTS:
         inhibitor->release();
         QTRY_VERIFY(!inhibitor->isInhibited());
         QVERIFY(!server->active.contains(2));
+    }
+
+    void theCookieOfAServerStartedByTheInhibitCallIsKept()
+    {
+        // Sugo started before the notification server; the first Inhibit starts it (D-Bus
+        // activation). The bus announces the new owner before the server's reply.
+        PrivateDBus bus;
+        if (!bus.start({kService})) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-client"));
+        QDBusConnection serverConnection = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-server"));
+        QVERIFY(client.isConnected());
+        QVERIFY(serverConnection.isConnected());
+        FakeNotificationServer started;
+        {
+            FreedesktopInhibitor lateInhibitor(client, QStringLiteral("io.github.mineraleyt.sugo"));
+            lateInhibitor.inhibit(QStringLiteral("focus"));
+            QTest::qWait(200); // the call waits on the bus for the server it asked to start
+            QVERIFY(started.calls.isEmpty());
+
+            QVERIFY(serverConnection.registerObject(kPath, &started, QDBusConnection::ExportAllSlots));
+            QVERIFY(serverConnection.registerService(kService));
+            QTRY_COMPARE_WITH_TIMEOUT(started.active.size(), 1, 3000);
+            QTest::qWait(300);
+            // Its reply was kept: no second Inhibit, so no cookie left behind.
+            QCOMPARE(started.calls, (QStringList{QStringLiteral("Inhibit")}));
+            QVERIFY(lateInhibitor.isInhibited());
+
+            lateInhibitor.release();
+            QTRY_VERIFY(!lateInhibitor.isInhibited());
+            QVERIFY(started.active.isEmpty());
+        }
+        serverConnection.unregisterService(kService);
+        serverConnection.unregisterObject(kPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-client"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-server"));
     }
 
     void aServiceRestartAfterReleaseDoesNotInhibitAgain()

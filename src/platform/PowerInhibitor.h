@@ -61,7 +61,7 @@ private:
 #else
     void sendInhibit();
     void sendUnInhibit(uint cookie);
-    void onOwnerChanged(const QString &newOwner);
+    void onOwnerChanged(const QString &oldOwner, const QString &newOwner);
 
     QDBusConnection m_bus;
     QDBusServiceWatcher *m_watcher = nullptr;

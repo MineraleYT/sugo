@@ -40,7 +40,9 @@ PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
     if (m_bus.isConnected()) {
         m_watcher = new QDBusServiceWatcher(kService, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
         connect(m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
-                [this](const QString &, const QString &, const QString &newOwner) { onOwnerChanged(newOwner); });
+                [this](const QString &, const QString &oldOwner, const QString &newOwner) {
+                    onOwnerChanged(oldOwner, newOwner);
+                });
     }
 }
 #endif
@@ -179,12 +181,16 @@ void PowerInhibitor::sendUnInhibit(uint cookie)
     qCDebug(lcPowerInhibit) << "Screen sleep inhibition released for cookie" << cookie;
 }
 
-void PowerInhibitor::onOwnerChanged(const QString &newOwner)
+void PowerInhibitor::onOwnerChanged(const QString &oldOwner, const QString &newOwner)
 {
-    // A cookie belongs to the process that issued it; the new owner does not know it.
-    ++m_generation;
-    m_pending = false;
-    m_hasCookie = false;
+    // A cookie belongs to the process that issued it; the new owner does not know it. A service
+    // that has only just appeared took nothing with it, and an Inhibit in flight may be the very
+    // call that started it (D-Bus activation): its reply, a cookie of the new owner, is kept.
+    if (!oldOwner.isEmpty()) {
+        ++m_generation;
+        m_pending = false;
+        m_hasCookie = false;
+    }
     if (!newOwner.isEmpty()) {
         sync();
     }

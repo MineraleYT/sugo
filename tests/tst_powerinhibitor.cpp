@@ -14,6 +14,7 @@
 #include "Autostart.h"
 #include "FakeClock.h"
 #include "PowerInhibitor.h"
+#include "PrivateDBus.h"
 #include "TimerEngine.h"
 
 namespace
@@ -221,6 +222,42 @@ private Q_SLOTS:
         QTest::qWait(100);
         QCOMPARE(server.calls.size(), 3);
         QVERIFY(!screenInhibited());
+    }
+
+    void theCookieOfAScreenSaverStartedByTheInhibitCallIsKept()
+    {
+        // The first Inhibit starts the screen saver (D-Bus activation). The bus announces the new
+        // owner before its reply.
+        PrivateDBus bus;
+        if (!bus.start({kService})) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-client"));
+        QDBusConnection serverConnection = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-server"));
+        QVERIFY(client.isConnected());
+        QVERIFY(serverConnection.isConnected());
+        FakeScreenSaver started;
+        {
+            PowerInhibitor lateInhibitor(client);
+            lateInhibitor.inhibit();
+            QTest::qWait(200); // the call waits on the bus for the screen saver it asked to start
+            QVERIFY(started.calls.isEmpty());
+
+            QVERIFY(serverConnection.registerObject(kPath, &started, QDBusConnection::ExportAllSlots));
+            QVERIFY(serverConnection.registerService(kService));
+            QTRY_COMPARE_WITH_TIMEOUT(started.held.size(), 1, 3000);
+            QTest::qWait(300);
+            // Its reply was kept: no second Inhibit, so no cookie left behind.
+            QCOMPARE(started.calls, (QStringList{QStringLiteral("Inhibit:Sugo")}));
+
+            lateInhibitor.release();
+            QTRY_VERIFY(started.held.isEmpty());
+            QCOMPARE(started.calls.last(), QStringLiteral("UnInhibit:0"));
+        }
+        serverConnection.unregisterService(kService);
+        serverConnection.unregisterObject(kPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-client"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-server"));
     }
 
     void aFailedInhibitIsRetriedWhileStillWanted()
