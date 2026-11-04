@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QFile>
+#include <QAudioDevice>
 #include <QMediaDevices>
 #include <QDir>
 #include <QFileInfo>

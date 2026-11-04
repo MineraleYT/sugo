@@ -53,7 +53,9 @@ QString categoryIdentifier(const QList<ActionSpec> &actions)
         for (const QString &field : {spec.identifier, spec.title, spec.textInput ? QStringLiteral("1") : QStringLiteral("0"),
                                      spec.submitTitle, spec.placeholder}) {
             const QByteArray bytes = field.toUtf8();
-            hash.addData(QByteArray::number(bytes.size()) + ':');
+            QByteArray length = QByteArray::number(bytes.size());
+            length.append(':');
+            hash.addData(length);
             hash.addData(bytes);
         }
     }

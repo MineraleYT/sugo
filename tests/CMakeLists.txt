@@ -124,7 +124,7 @@ sugo_add_test(tst_localsingleinstance Qt6::Core Qt6::Network)
 sugo_add_test(tst_macnotificationmapping Qt6::Core)
 
 # --- macOS port: B2 (keep-awake, screen lock and sleep, Keychain, login item) ---
-sugo_add_test(tst_launchagentautostart Qt6::Core)
+sugo_add_test(tst_launchagentautostart Qt6::Core Qt6::DBus)
 if(APPLE)
     sugo_add_test(tst_macpowerassertion Qt6::Core Qt6::DBus "-framework CoreFoundation" "-framework IOKit")
     sugo_add_test(tst_mackeychainstore Qt6::Core Qt6::DBus "-framework Security")
