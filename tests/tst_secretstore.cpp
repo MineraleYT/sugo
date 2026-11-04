@@ -38,6 +38,8 @@ struct KeyringState {
     QSet<QString> sessions; ///< Open sessions; a restarted keyring forgets them.
     int sessionsOpened = 0;
     QString connectionName;
+    bool answerPrompts = true; ///< false: a prompt stays open until it is dismissed.
+    int dismissals = 0;        ///< Prompt.Dismiss calls.
 };
 
 class PromptObject : public QObject
@@ -59,6 +61,9 @@ public Q_SLOTS:
         {
             QMutexLocker lock(&m_state->mutex);
             ++m_state->prompts;
+            if (!m_state->answerPrompts) {
+                return; // the user is away: the dialog stays open
+            }
             dismissed = m_state->dismissPrompt;
             if (!dismissed) {
                 m_state->locked = false;
@@ -70,6 +75,17 @@ public Q_SLOTS:
             signal << dismissed << QVariant::fromValue(QDBusVariant(QVariant::fromValue(QList<QDBusObjectPath>())));
             QDBusConnection(m_state->connectionName).send(signal);
         });
+    }
+
+    void Dismiss()
+    {
+        {
+            QMutexLocker lock(&m_state->mutex);
+            ++m_state->dismissals;
+        }
+        QDBusMessage signal = QDBusMessage::createSignal(m_path, QStringLiteral("org.freedesktop.Secret.Prompt"), QStringLiteral("Completed"));
+        signal << true << QVariant::fromValue(QDBusVariant(QVariant::fromValue(QList<QDBusObjectPath>())));
+        QDBusConnection(m_state->connectionName).send(signal);
     }
 
 private:
@@ -396,6 +412,20 @@ private Q_SLOTS:
         QVERIFY(m_keyring->registered());
         QTRY_VERIFY(store.read(QStringLiteral("calendar-caldav")).has_value());
         QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QString()));
+    }
+
+    void anUnansweredPromptIsClosedWhenItTimesOut()
+    {
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        store.setPromptTimeoutForTesting(200);
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        m_keyring->state.locked = true;
+        m_keyring->state.answerPrompts = false;
+
+        QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
+        QCOMPARE(m_keyring->state.prompts, 1);
+        // The dialog does not stay on screen after we stopped waiting for it.
+        QCOMPARE(m_keyring->state.dismissals, 1);
     }
 };
 

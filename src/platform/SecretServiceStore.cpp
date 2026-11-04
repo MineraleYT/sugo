@@ -148,12 +148,23 @@ bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
     QDBusMessage call = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Prompt"));
     call << QString(); // no parent window id
     const QDBusMessage reply = m_bus.call(call, QDBus::Block, kCallTimeoutMs);
+    bool timedOut = false;
     if (reply.type() == QDBusMessage::ReplyMessage && !waiter.completed) {
         QTimer::singleShot(m_promptTimeoutMs, &loop, &QEventLoop::quit);
         loop.exec();
+        timedOut = !waiter.completed;
     }
     m_bus.disconnect(kService, prompt.path(), kPromptInterface, QStringLiteral("Completed"), &waiter,
                      SLOT(onCompleted(bool, QDBusVariant)));
+    if (timedOut) {
+        // Not answered in time: the dialog is closed, or it would stay on screen and the next
+        // unlock would open a second one on top of it.
+        const QDBusMessage dismiss = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Dismiss"));
+        const QDBusMessage dismissed = m_bus.call(dismiss, QDBus::Block, kCallTimeoutMs);
+        if (dismissed.type() != QDBusMessage::ReplyMessage) {
+            qCWarning(lcSecretStore) << "Closing the keyring prompt failed:" << dismissed.errorMessage();
+        }
+    }
     if (!waiter.completed || waiter.dismissed) {
         qCWarning(lcSecretStore) << "The keyring prompt was dismissed or not answered";
         return false;

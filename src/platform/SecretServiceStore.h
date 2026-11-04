@@ -51,6 +51,7 @@ public:
     bool write(const QString &key, const QString &secret) override;
 
     void setRetryIntervalForTesting(int ms) { m_retryIntervalMs = ms; }
+    void setPromptTimeoutForTesting(int ms) { m_promptTimeoutMs = ms; }
 
 private:
     bool ensureSession();
