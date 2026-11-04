@@ -26,6 +26,7 @@ private Q_SLOTS:
     void cleanup();
 
     void testNavigation();
+    void testNavigationBackToTodayKeepsTheDay();
     void testReactiveUpdateOnRecord();
     void testFormatters();
     void testBreakdownModes();
@@ -96,6 +97,32 @@ void TestStatsModel::testNavigation()
     QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 1)});
     m_model->today();
     QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 10, 3)});
+}
+
+void TestStatsModel::testNavigationBackToTodayKeepsTheDay()
+{
+    // 31 March: the month before has no 31st, so going back clamps to 28 February. Coming back
+    // must show today again, not 28 March.
+    StatsModel::Environment env = m_env;
+    env.now = []() { return QDateTime(QDate(2026, 3, 31), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Month);
+    m_model->previousPeriod();
+    QVERIFY(!m_model->isCurrent());
+    m_model->nextPeriod();
+    QVERIFY(m_model->isCurrent());
+    m_model->setPeriod(StatsModel::Period::Day);
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2026, 3, 31)});
+    QVERIFY(m_model->isCurrent());
+
+    // The same with years on 29 February.
+    env.now = []() { return QDateTime(QDate(2028, 2, 29), QTime(12, 0), QTimeZone::utc()); };
+    m_model->setEnvironment(env);
+    m_model->setPeriod(StatsModel::Period::Year);
+    m_model->previousPeriod();
+    m_model->nextPeriod();
+    m_model->setPeriod(StatsModel::Period::Day);
+    QCOMPARE(shownDays(), QList<QDate>{QDate(2028, 2, 29)});
 }
 
 void TestStatsModel::testReactiveUpdateOnRecord()

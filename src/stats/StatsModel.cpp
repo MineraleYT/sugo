@@ -226,9 +226,7 @@ bool StatsModel::canGoNext() const
 
 void StatsModel::previousPeriod()
 {
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, -1);
-    recompute();
-    Q_EMIT periodChanged();
+    moveAnchor(-1);
 }
 
 void StatsModel::nextPeriod()
@@ -236,7 +234,20 @@ void StatsModel::nextPeriod()
     if (!canGoNext()) {
         return;
     }
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, 1);
+    moveAnchor(1);
+}
+
+void StatsModel::moveAnchor(int steps)
+{
+    const StatsPeriod sp = toStatsPeriod(m_period);
+    m_anchorDate = Stats::shifted(sp, m_anchorDate, steps);
+    // Months and years clamp the day (31 March - 1 month = 28 February), so coming back would
+    // land on 28 March: the period under way is anchored on today, as it was before.
+    const QDate current = todayDate();
+    const PeriodRange range = Stats::rangeFor(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone);
+    if (current >= range.firstDay && current <= range.lastDay) {
+        m_anchorDate = current;
+    }
     recompute();
     Q_EMIT periodChanged();
 }

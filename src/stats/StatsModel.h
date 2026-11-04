@@ -147,6 +147,8 @@ Q_SIGNALS:
     void protectWeekendStreakChanged();
 
 private:
+    /// Moves the shown period by `steps` periods.
+    void moveAnchor(int steps);
     void recompute();
     void recomputeStreaks();
     void reloadCompletedStarts();
