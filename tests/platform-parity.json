@@ -226,6 +226,23 @@
         "switch: Include the task note in the event description"
       ]
     },
+    "settings/sync": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Sign in",
+        "button: Sounds",
+        "button: Sync",
+        "field: Device name",
+        "row: Device name",
+        "row: Session history and statistics",
+        "row: Sign in",
+        "row: Task notes",
+        "row: Your timers on all your computers"
+      ]
+    },
     "settings/advanced": {
       "common": [
         "button: Advanced",

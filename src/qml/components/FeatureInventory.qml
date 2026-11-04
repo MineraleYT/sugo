@@ -31,7 +31,7 @@ QtObject {
             { name: "stats", open: () => app.navigate("stats") },
             { name: "about", open: () => app.navigate("about") }
         ];
-        for (const category of ["general", "sounds", "focus", "calendar", "advanced"]) {
+        for (const category of ["general", "sounds", "focus", "calendar", "sync", "advanced"]) {
             list.push({ name: "settings/" + category, open: () => {
                 app.navigate("settings");
                 app.pageStack.currentItem.category = category;
