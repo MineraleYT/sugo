@@ -346,9 +346,9 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
     bool valid = false;
     {
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);
+        // `path` is the private copy: opening it read-write lets SQLite read its write-ahead log
+        // (and create the -shm file it needs for that), wherever the user's backup lies.
         db.setDatabaseName(path);
-        // Read-only: never create the file, or -wal/-shm files, next to the user's backup.
-        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
         if (!db.open()) {
             *error = db.lastError().text();
         } else {
@@ -383,20 +383,31 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         return false;
     }
     QString error;
-    if (!validateBackup(path, &error)) {
-        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
+    if (!QFileInfo(path).isFile()) {
+        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", i18n("This file is not a Sugo database.")));
         return false;
     }
 
-    // Work on a private copy: the Database class brings an older schema up to date there,
-    // and the user's file is never written to.
+    // Work on a private copy: it is checked there, the Database class brings an older schema up
+    // to date there, and the user's files are never written to. The write-ahead log goes with
+    // the file: a database in WAL mode (as Sugo's is) keeps its latest changes there until a checkpoint.
     QTemporaryDir workDir;
     const QString copyPath = workDir.filePath(QStringLiteral("restore.db"));
-    if (!workDir.isValid() || !QFile::copy(path, copyPath)) {
+    const QString walSuffix = QStringLiteral("-wal");
+    const bool hasWal = QFileInfo(path + walSuffix).isFile();
+    if (!workDir.isValid() || !QFile::copy(path, copyPath)
+        || (hasWal && !QFile::copy(path + walSuffix, copyPath + walSuffix))) {
         Q_EMIT operationFailed(i18n("Could not read the backup file."));
         return false;
     }
     QFile::setPermissions(copyPath, QFile::ReadOwner | QFile::WriteOwner);
+    if (hasWal) {
+        QFile::setPermissions(copyPath + walSuffix, QFile::ReadOwner | QFile::WriteOwner);
+    }
+    if (!validateBackup(copyPath, &error)) {
+        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
+        return false;
+    }
     {
         Database migrated(copyPath);
         if (!migrated.open() || !migrated.movedAsidePath().isEmpty()) {

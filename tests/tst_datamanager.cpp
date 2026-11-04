@@ -136,6 +136,41 @@ private Q_SLOTS:
                  QStringLiteral("Persisted preset"));
     }
 
+    void restoreTakesTheWriteAheadLogAlong()
+    {
+        // A copy of a database in use, as Sugo leaves it: the newest sessions are only in its -wal file.
+        QTemporaryDir elsewhere;
+        QVERIFY(elsewhere.isValid());
+        const QString sourcePath = elsewhere.filePath(QStringLiteral("source.db"));
+        const QString copiedPath = elsewhere.filePath(QStringLiteral("copied.db"));
+        const QString wal = QStringLiteral("-wal");
+        {
+            Database source(sourcePath);
+            QVERIFY(source.open());
+        } // closing it folds the schema into the file
+        {
+            Database source(sourcePath);
+            QVERIFY(source.open());
+            SessionRepository sourceSessions(source.connectionName());
+            for (int i = 0; i < 3; ++i) {
+                QVERIFY(sourceSessions.insert(sampleRecord(QStringLiteral("In the log %1").arg(i))));
+            }
+            QVERIFY(QFileInfo(sourcePath + wal).size() > 0);
+            QVERIFY(QFile::copy(sourcePath, copiedPath));
+            QVERIFY(QFile::copy(sourcePath + wal, copiedPath + wal));
+        }
+        QVERIFY(sessions->insert(sampleRecord(QStringLiteral("Current"))));
+
+        QSignalSpy succeeded(manager.get(), &DataManager::operationSucceeded);
+        QVERIFY(manager->restoreDatabase(QUrl::fromLocalFile(copiedPath)));
+        QCOMPARE(succeeded.count(), 1);
+        QCOMPARE(manager->sessionCount(), 3);
+        QCOMPARE(sessions->between(0, 2000).first().presetName, QStringLiteral("In the log 0"));
+        // The user's files are left as they were.
+        QVERIFY(QFile::exists(copiedPath + wal));
+        QVERIFY(!QFile::exists(copiedPath + QStringLiteral("-shm")));
+    }
+
     void invalidBackupAndActiveDatabaseAreRejectedWithoutDataLoss()
     {
         SessionRecord record;
