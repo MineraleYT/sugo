@@ -36,7 +36,35 @@ permissions:
   contents: read
 
 jobs:
+  # Skips the jobs a change cannot affect: documentation runs nothing, a macOS-only change only the
+  # macOS job, a Linux-only one (D-Bus services, metadata) only the Linux jobs. The file lists are
+  # in .github/scripts/ci-changes.sh; when the changed files cannot be known, everything runs.
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      linux: ${{ steps.detect.outputs.linux }}
+      clang: ${{ steps.detect.outputs.clang }}
+      macos: ${{ steps.detect.outputs.macos }}
+    steps:
+      - name: Check out the script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Detect the jobs to run
+        id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash .github/scripts/ci-changes.sh "$BASE" "$HEAD"
+
   build-and-test:
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
     runs-on: ubuntu-26.04
     steps:
       - name: Check out source
@@ -91,6 +119,8 @@ jobs:
   # Clang's warnings are close to those of Apple's compiler: they show up here before the macOS job.
   build-clang:
     name: Build with Clang
+    needs: changes
+    if: needs.changes.outputs.clang == 'true'
     runs-on: ubuntu-26.04
     steps:
       - name: Check out source
@@ -133,6 +163,8 @@ jobs:
   # (nor stop the nightly build) while the port settles.
   build-and-test-macos:
     name: Build and test on macOS
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
     runs-on: macos-26
     continue-on-error: true
     steps:
