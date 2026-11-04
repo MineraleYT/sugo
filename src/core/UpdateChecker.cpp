@@ -104,7 +104,13 @@ int naturalCompare(const QString &a, const QString &b)
             j = ej;
         } else {
             if (a.at(i) != b.at(j)) {
-                return a.at(i).toLower() < b.at(j).toLower() ? -1 : 1;
+                // Letters regardless of case first, then by code unit ("A" < "a"): never both ways.
+                const QChar la = a.at(i).toLower();
+                const QChar lb = b.at(j).toLower();
+                if (la != lb) {
+                    return la < lb ? -1 : 1;
+                }
+                return a.at(i) < b.at(j) ? -1 : 1;
             }
             ++i;
             ++j;

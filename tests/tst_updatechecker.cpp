@@ -327,6 +327,17 @@ private Q_SLOTS:
         QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.1.0+build5"), QStringLiteral("1.1.0")), 0);
     }
 
+    void preReleasesDifferingInCaseCompareOneWay()
+    {
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rcA"), QStringLiteral("1.0.0-rca")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rca"), QStringLiteral("1.0.0-rcA")), 1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-RC.1"), QStringLiteral("1.0.0-rc.1")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rc.1"), QStringLiteral("1.0.0-RC.1")), 1);
+        // Otherwise letters still compare regardless of case.
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-Beta"), QStringLiteral("1.0.0-rc1")), -1);
+        QCOMPARE(UpdateChecker::compareVersions(QStringLiteral("1.0.0-rc1"), QStringLiteral("1.0.0-Beta")), 1);
+    }
+
     void releaseUrlMustPointIntoTheProjectOnGitHub()
     {
         const QString fallback = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
