@@ -49,6 +49,13 @@ public:
 
     /// Asked before every command; without one, commands are always allowed.
     void setControlAllowed(std::function<bool()> allowed) { m_allowed = std::move(allowed); }
+    /// For commands set up before the timer exists (D-Bus objects registered early): until
+    /// then every command is Unavailable.
+    void attach(TimerEngine *engine, PresetModel *presets)
+    {
+        m_engine = engine;
+        m_presets = presets;
+    }
 
     Result toggle();
     Result start();

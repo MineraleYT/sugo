@@ -80,6 +80,9 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         return matches;
     }
     const QString subCommand = keywordMatch.captured(1).trimmed().toLower();
+    if (!m_timer) {
+        return matches; // not attached yet
+    }
 
     if (!controlAllowed()) {
         RemoteMatch info = commandMatch(kControlDisabledId, i18n("Sugo: control from other programs is turned off"),
@@ -223,8 +226,8 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
         Q_EMIT openRequested();
         return;
     }
-    if (!controlAllowed()) {
-        return; // a match, or a button, from before the setting changed
+    if (!m_timer || !controlAllowed()) {
+        return; // not attached yet, or a match (or a button) from before the setting changed
     }
     // A button on a match runs that button's command, not the match's own one.
     if (!actionId.isEmpty()) {

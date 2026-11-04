@@ -135,6 +135,18 @@ private Q_SLOTS:
         QVERIFY(commands.presets().isEmpty());
     }
 
+    void anEngineCanBeAttachedLater()
+    {
+        // The D-Bus objects are set up before the timer exists (main.cpp).
+        Fixture f;
+        TimerCommands commands(nullptr, nullptr);
+        QCOMPARE(commands.startPreset(f.deep).error, Error::Unavailable);
+        commands.attach(&f.engine, &f.presets);
+        QVERIFY(commands.startPreset(f.deep).ok());
+        QCOMPARE(f.presets.currentUuid(), f.deep);
+        QVERIFY(f.engine.isRunning());
+    }
+
     void statusAndPresets()
     {
         Fixture f;

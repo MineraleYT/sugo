@@ -207,6 +207,19 @@ int main(int argc, char *argv[])
 #else
     SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
     using AppSingleInstance = SingleInstance;
+
+    // The D-Bus objects of global shortcuts, scripts and KRunner are registered before the name is
+    // taken: a call that starts Sugo by D-Bus activation is delivered as soon as the name is ours,
+    // and must find its object (else: UnknownObject). It waits in the event queue until
+    // app.exec(); by then the objects are attached to the timer (below). Declared here, they
+    // outlive the engine: they are unregistered and detached right after app.exec(). (A second
+    // launch registers them too, on its own connection, which nobody calls, then exits.)
+    TimerDBusObject timerDBusObject;
+    auto *dbusTimer = new DBusTimerService(nullptr, nullptr, &timerDBusObject);
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), &timerDBusObject, QDBusConnection::ExportAdaptors);
+    KRunnerService krunnerService(nullptr, nullptr);
+    auto *krunner = &krunnerService;
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
 #endif
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
@@ -315,13 +328,10 @@ int main(int argc, char *argv[])
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
 #ifndef Q_OS_MACOS
-    auto *timerDBusObject = new TimerDBusObject(timer);
-    auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
-    auto *krunner = new KRunnerService(timer, presets, &services);
+    dbusTimer->attach(timer, presets);
     krunner->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
+    krunner->attach(timer, presets);
 #endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
@@ -510,12 +520,15 @@ int main(int argc, char *argv[])
 
     const int status = app.exec();
 
-    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
-    // is an engine singleton, the runner a child of `services`), then the context properties
+    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects, which
+    // outlive the timer (an engine singleton) and so let go of it too, in case a call already
+    // queued for them is still delivered; then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
 #ifndef Q_OS_MACOS
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
+    krunner->attach(nullptr, nullptr);
+    dbusTimer->attach(nullptr, nullptr);
 #endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
