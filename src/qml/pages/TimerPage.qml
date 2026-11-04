@@ -194,6 +194,9 @@ QQC2.Page {
                     }
                 }
                 Text {
+                    // A long category is cut: the pill is never wider than the track below.
+                    Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.spaceLg * 2 - Theme.spaceSm - phaseRow.spacing)
+                    elide: Text.ElideRight
                     text: page.phaseText
                     color: page.isIdle ? Theme.muted : Qt.lighter(page.phaseColor, Theme.dark ? 1.3 : 0.8)
                     font.pixelSize: Theme.fontBody
@@ -256,14 +259,32 @@ QQC2.Page {
 
             Item {
                 id: track
+                objectName: "cycleTrack"
                 Layout.fillWidth: true
                 implicitHeight: Theme.spaceSm
+                // A long set (up to 99 work phases) still fits: the gaps take at most half the
+                // track, the segments' minimum width shrinks to their share of the rest, and the
+                // track clips what rounding leaves over.
+                clip: true
+                readonly property int count: page.segments.length
                 readonly property real total: page.segments.reduce((sum, s) => sum + s.seconds, 0)
-                readonly property real gaps: Theme.spaceXs * (page.segments.length - 1)
+                readonly property real gap: count > 1 ? Math.min(Theme.spaceXs, width / 2 / (count - 1)) : 0
+                readonly property real available: Math.max(0, width - gap * (count - 1))
+                readonly property real minSegment: Math.min(Theme.spaceSm, available / Math.max(1, count))
+                // Each segment as long as its phase, at least minSegment; when those minimums would
+                // push the row past the track, each gets the minimum plus its share of what is left
+                // (the hairline only absorbs floating-point error in a sum that fits).
+                readonly property bool crowded: page.segments.reduce(
+                    (sum, s) => sum + Math.max(minSegment, available * s.seconds / Math.max(1, total)), 0) > available + Theme.hairline
+                function segmentWidth(seconds: real): real {
+                    return crowded ? minSegment + (available - minSegment * count) * seconds / Math.max(1, total)
+                                   : Math.max(minSegment, available * seconds / Math.max(1, total));
+                }
 
                 Row {
+                    objectName: "cycleSegments"
                     anchors.fill: parent
-                    spacing: Theme.spaceXs
+                    spacing: track.gap
 
                     Repeater {
                         model: page.segments
@@ -272,9 +293,13 @@ QQC2.Page {
                             id: segment
                             required property var modelData
                             required property int index
-                            readonly property bool done: index < page.currentSegment && !page.isIdle
+                            objectName: "cycleSegment-" + index
+                            // Also while the next phase waits for Start (Manual mode): the work
+                            // done in this set stays done. Stop and the end of the set reset the
+                            // count, so nothing shows done then, nor before any work is counted.
+                            readonly property bool done: index < page.currentSegment && TimerEngine.completedCycles > 0
                             readonly property bool current: index === page.currentSegment
-                            width: Math.max(Theme.spaceSm, (track.width - track.gaps) * modelData.seconds / Math.max(1, track.total))
+                            width: track.segmentWidth(modelData.seconds)
                             height: track.height
                             radius: height / 2
                             color: Theme.track

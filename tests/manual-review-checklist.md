@@ -9,7 +9,9 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Create a timer with a name, category, icon, work duration, break durations, and long-break interval. Save it and confirm the displayed values.
 - [ ] Edit a user timer, duplicate it, select each resulting timer, and delete the duplicate.
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
+- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
+- [ ] Give a timer a category of 100 characters and start it in a narrow window: "Focusing · …" is cut with an ellipsis inside its pill, which is never wider than the cycle track.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
 - [ ] Check automatic phase start in each supported mode, Manual, Breaks only and All phases.
 - [ ] Try the minimum and maximum supported durations, zero-length breaks, and a long-break interval of zero.
@@ -50,3 +52,4 @@ Run these checks in a fresh user profile where practical. Record the application
 ## No layout shift
 
 - [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
+- [ ] On a timer's page, make silencing notifications available or unavailable while the page is open (macOS: install or remove the Focus shortcuts; Linux: start or stop the notification inhibitor service): the "Silence notifications while working" row and those below do not move.
