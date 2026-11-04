@@ -45,6 +45,8 @@ Q_SIGNALS:
     void openPageRequested(const QString &page);
     /// A click on the icon (or "Show") while the window is hidden or minimized.
     void showWindowRequested();
+    /// "Quit" in the menu. The window decides: it asks first while a phase runs (main.cpp).
+    void quitRequested();
 
 private:
     void sync();
