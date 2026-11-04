@@ -88,7 +88,7 @@ class AppSettings : public QObject
 
     /// Window colours: "dark", "light" or "system" (the default: the desktop's light or dark mode).
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged FINAL)
-    /// "stable" (releases) or "nightly" (a build of every change), for the AppImage's updates.
+    /// "stable" (releases) or "nightly" (a build of every change), for the updates of the AppImage and the macOS app.
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
     /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
     Q_PROPERTY(bool autoCheckUpdates READ autoCheckUpdates WRITE setAutoCheckUpdates NOTIFY autoCheckUpdatesChanged FINAL)

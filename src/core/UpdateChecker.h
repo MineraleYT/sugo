@@ -12,12 +12,13 @@
 #include <memory>
 
 class AppSettings;
+class UpdateInstaller;
 class QNetworkAccessManager;
 class QNetworkReply;
 class QSaveFile;
 
 /**
- * Looks for a newer Sugo and, when it runs as an AppImage, installs it.
+ * Looks for a newer Sugo and, when it runs as an AppImage or a macOS app bundle, installs it.
  *
  * Each release channel has a feed on GitHub, a small JSON file published next to the builds:
  * "stable" with the newest release, "nightly" with the newest build of the branch testing
@@ -30,8 +31,17 @@ class QSaveFile;
  * release's pre-releases, so they sit between two releases). When asked to install it
  * (installUpdate(); never by itself), an AppImage downloads the file next to itself, checks its
  * size and SHA-256, and only then puts it in its own place; the new version starts with
- * launchUpdated() after the program quits. Other packages (Flatpak, a distribution's,
- * a build from source) only say that an update exists, with a link to it, and only check when asked.
+ * launchUpdated() after the program quits.
+ *
+ * On macOS the feed's "macos" object ({ "url", "sha256", "size" }) describes the disk image
+ * instead. An app bundle in a folder the user can write to (/Applications for an administrator)
+ * downloads it next to itself, checks it the same way, then opens it and copies its Sugo.app,
+ * once its identifier and signature are right, next to itself as "Sugo.app.new", which takes the
+ * bundle's place when the program quits (MacBundleInstaller). A feed without "macos" is only
+ * reported, as for the other packages.
+ *
+ * Other packages (Flatpak, a distribution's, a build from source) only say that an update
+ * exists, with a link to it, and only check when asked.
  */
 class UpdateChecker : public QObject
 {
@@ -46,8 +56,12 @@ class UpdateChecker : public QObject
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY statusChanged)
     Q_PROPERTY(QString releaseUrl READ releaseUrl NOTIFY statusChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY statusChanged)
-    /// True when this copy can replace itself: an AppImage in a folder the user can write to.
+    /// True when this copy can replace itself: an AppImage or a macOS app bundle in a folder the
+    /// user can write to.
     Q_PROPERTY(bool canInstall READ canInstall CONSTANT)
+    /// True when the update found can be installed from here (installUpdate()); false when it is
+    /// only reported (a feed without a download for this package).
+    Q_PROPERTY(bool installable READ isInstallable NOTIFY statusChanged)
     /// The part of the download received, 0..1, while Downloading.
     Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged)
 
@@ -57,8 +71,8 @@ public:
         Checking,
         UpToDate,
         UpdateAvailable,
-        Downloading,
-        ReadyToRestart, ///< The new version is in place; it starts with the next launch.
+        Downloading, ///< Also while a macOS update is checked and copied, at 100%.
+        ReadyToRestart, ///< The new version is in place (on macOS: when the program quits); it starts with the next launch.
         Error
     };
     Q_ENUM(Status)
@@ -78,12 +92,15 @@ public:
     QString releaseUrl() const { return m_releaseUrl; }
     QString errorMessage() const { return m_errorMessage; }
     bool canInstall() const;
+    bool isInstallable() const { return m_status == Status::UpdateAvailable && canInstall() && !m_downloadUrl.isEmpty(); }
     qreal progress() const { return m_progress; }
 
-    /// "stable" or "nightly"; anything else reads as "stable". Only an AppImage follows nightly.
+    /// "stable" or "nightly"; anything else reads as "stable". Only a copy that installs updates
+    /// follows nightly.
     QString channel() const;
     void setChannel(const QString &channel);
-    /// Look for updates by itself (AppImage only); what it finds is installed only when asked.
+    /// Look for updates by itself (only a copy that installs them); what it finds is installed
+    /// only when asked.
     void setAutoCheck(bool enabled) { m_autoCheck = enabled; }
 
     Q_INVOKABLE void checkForUpdates();
@@ -94,7 +111,9 @@ public:
     /// no longer must (the quit was cancelled).
     Q_INVOKABLE void setRestartOnQuit(bool restart) { m_restartOnQuit = restart; }
     bool restartOnQuit() const { return m_restartOnQuit && m_status == Status::ReadyToRestart; }
-    /// Starts the AppImage again once this process has ended. Call at the very end of main().
+    /// Finishes an installed update (on macOS the new bundle takes the old one's place) and, when
+    /// asked to restart, starts the new version once this process has ended. Call at the very end
+    /// of main(). True when the new version was started.
     bool launchUpdated() const;
 
     /// Compare two version strings ("v1.2.3", "1.2.3-rc1", ...), semver style: a release is
@@ -115,9 +134,11 @@ public:
     /// The feed of `channel` (see the class description).
     static QUrl feedUrl(const QString &channel);
 
-    // Tests: the AppImage to replace (instead of AppImage::path()), the feed to read (instead of the
-    // channel's), and where downloads may come from (instead of this project's GitHub releases).
-    void setAppImagePathForTesting(const QString &path) { m_appImagePath = path; }
+    // Tests: the AppImage to replace (instead of AppImage::path()), or any installer, the feed to
+    // read (instead of the channel's), and where downloads may come from (instead of this
+    // project's GitHub releases).
+    void setAppImagePathForTesting(const QString &path);
+    void setInstallerForTesting(std::unique_ptr<UpdateInstaller> installer);
     void setFeedUrlForTesting(const QUrl &url) { m_feedUrlOverride = url; }
     void setDownloadPrefixForTesting(const QString &prefix) { m_downloadPrefix = prefix; }
 
@@ -145,7 +166,7 @@ private:
     QString m_channel = QStringLiteral("stable");
     bool m_autoCheck = false;
     bool m_restartOnQuit = false;
-    QString m_appImagePath;
+    std::unique_ptr<UpdateInstaller> m_installer;
     QUrl m_feedUrlOverride;
     QString m_downloadPrefix;
     QTimer m_scheduleTimer;

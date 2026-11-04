@@ -4,16 +4,14 @@
 #include "AppImage.h"
 #include "AppSettings.h"
 #include "Localization.h"
+#include "MacBundle.h"
+#include "UpdateInstaller.h"
 #include <QCoreApplication>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 
@@ -23,7 +21,8 @@ namespace
 {
 const QString kReleasesPage = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
 const QString kDownloadPrefix = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/");
-/// An AppImage of Sugo is about 50 MB; a feed announcing more than this is not believed.
+/// An AppImage of Sugo is about 50 MB, the macOS disk image about twice that; a feed announcing
+/// more than this is not believed.
 constexpr qint64 kMaxDownloadSize = 512 * 1024 * 1024;
 constexpr int kFirstCheckDelayMs = 60 * 1000;
 constexpr int kCheckIntervalMs = 6 * 60 * 60 * 1000;
@@ -117,9 +116,14 @@ int naturalCompare(const QString &a, const QString &b)
 
 UpdateChecker::UpdateChecker(QObject *parent)
     : QObject(parent)
-    , m_appImagePath(AppImage::path())
     , m_downloadPrefix(kDownloadPrefix)
 {
+    const QString bundle = MacBundle::path();
+    if (!bundle.isEmpty()) {
+        m_installer = std::make_unique<MacBundleInstaller>(bundle);
+    } else {
+        m_installer = std::make_unique<AppImageInstaller>(AppImage::path());
+    }
     m_scheduleTimer.setSingleShot(true);
     connect(&m_scheduleTimer, &QTimer::timeout, this, [this]() {
         m_scheduleTimer.start(kCheckIntervalMs);
@@ -133,6 +137,19 @@ UpdateChecker::UpdateChecker(QObject *parent)
 UpdateChecker::~UpdateChecker()
 {
     abortDownload();
+    if (m_installer) {
+        m_installer->cancel();
+    }
+}
+
+void UpdateChecker::setAppImagePathForTesting(const QString &path)
+{
+    setInstallerForTesting(std::make_unique<AppImageInstaller>(path));
+}
+
+void UpdateChecker::setInstallerForTesting(std::unique_ptr<UpdateInstaller> installer)
+{
+    m_installer = std::move(installer);
 }
 
 void UpdateChecker::attach(AppSettings *settings)
@@ -175,11 +192,7 @@ QString UpdateChecker::currentVersion() const
 
 bool UpdateChecker::canInstall() const
 {
-    if (m_appImagePath.isEmpty()) {
-        return false;
-    }
-    const QFileInfo file(m_appImagePath);
-    return file.isFile() && QFileInfo(file.absolutePath()).isWritable();
+    return m_installer && m_installer->canInstall();
 }
 
 QString UpdateChecker::channel() const
@@ -359,10 +372,22 @@ void UpdateChecker::handleFeed(const QByteArray &data)
     }
 
     if (canInstall()) {
+        // The AppImage reads the top-level keys, the macOS app its own object; a feed without
+        // that object (a release whose disk image failed to build) is only reported.
+        QJsonObject download = feed;
+        const QString key = m_installer->feedKey();
+        if (!key.isEmpty()) {
+            const QJsonValue entry = feed.value(key);
+            if (entry.isUndefined() || entry.isNull()) {
+                setStatus(Status::UpdateAvailable);
+                return;
+            }
+            download = entry.toObject();
+        }
         static const QRegularExpression sha256(QStringLiteral("^[0-9a-f]{64}$"));
-        const QString hash = feed.value(QStringLiteral("sha256")).toString().toLower();
-        const qint64 size = feed.value(QStringLiteral("size")).toInteger();
-        m_downloadUrl = trustedDownloadUrl(feed.value(QStringLiteral("url")).toString());
+        const QString hash = download.value(QStringLiteral("sha256")).toString().toLower();
+        const qint64 size = download.value(QStringLiteral("size")).toInteger();
+        m_downloadUrl = trustedDownloadUrl(download.value(QStringLiteral("url")).toString());
         if (m_downloadUrl.isEmpty() || !sha256.match(hash).hasMatch() || size <= 0 || size > kMaxDownloadSize) {
             fail(i18n("The update information is incomplete."));
             return;
@@ -380,13 +405,13 @@ void UpdateChecker::installUpdate()
         return;
     }
 
-    // Written next to the AppImage and moved over it only once complete and verified: a
-    // failure leaves the running copy as it was.
-    m_saveFile = std::make_unique<QSaveFile>(m_appImagePath);
+    // Written next to the AppImage (or the app bundle) and put in place only once complete and
+    // verified: a failure leaves the running copy as it was.
+    m_saveFile = std::make_unique<QSaveFile>(m_installer->downloadPath());
     if (!m_saveFile->open(QIODevice::WriteOnly)) {
         const QString reason = m_saveFile->errorString();
         m_saveFile.reset();
-        fail(i18n("Cannot write the update next to %1: %2", m_appImagePath, reason));
+        fail(i18n("Cannot write the update next to %1: %2", m_installer->target(), reason));
         return;
     }
     m_hash = std::make_unique<QCryptographicHash>(QCryptographicHash::Sha256);
@@ -449,18 +474,16 @@ void UpdateChecker::finishDownload(QNetworkReply *reply)
         return;
     }
 
-    const QFileDevice::Permissions permissions = QFile::permissions(m_appImagePath);
-    if (!m_saveFile->commit()) {
-        const QString reason = m_saveFile->errorString();
-        m_saveFile.reset();
-        m_hash.reset();
-        fail(i18n("Cannot install the update: %1", reason));
-        return;
-    }
-    m_saveFile.reset();
     m_hash.reset();
-    QFile::setPermissions(m_appImagePath, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-    setStatus(Status::ReadyToRestart);
+    const std::unique_ptr<QSaveFile> download = std::move(m_saveFile);
+    // Still Downloading until the installer is done (at once for the AppImage).
+    m_installer->install(*download, [this](const QString &error) {
+        if (error.isEmpty()) {
+            setStatus(Status::ReadyToRestart);
+        } else {
+            fail(error);
+        }
+    });
 }
 
 void UpdateChecker::abortDownload()
@@ -478,13 +501,8 @@ void UpdateChecker::abortDownload()
 
 bool UpdateChecker::launchUpdated() const
 {
-    if (!restartOnQuit()) {
+    if (m_status != Status::ReadyToRestart || !m_installer) {
         return false;
     }
-    // The new copy starts once this process is gone: it would otherwise find this one still
-    // holding the D-Bus name and hand itself over to it.
-    return QProcess::startDetached(QStringLiteral("/bin/sh"),
-                                   {QStringLiteral("-c"),
-                                    QStringLiteral("while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; exec \"$0\""),
-                                    m_appImagePath, QString::number(QCoreApplication::applicationPid())});
+    return m_installer->finish(restartOnQuit(), QCoreApplication::applicationPid());
 }

@@ -337,3 +337,12 @@ target_sources(sugo_core PRIVATE
     core/TimerCommands.cpp core/TimerCommands.h
     platform/ShortcutsFocusInhibitor.cpp platform/ShortcutsFocusInhibitor.h
 )
+
+# --- macOS port: W2-C self-update from the disk image ---
+# Built everywhere: the macOS install steps are QProcess calls, tested on Linux with stand-ins.
+target_sources(sugo_core PRIVATE
+    core/UpdateInstaller.h
+    core/UpdateInstaller.cpp
+    platform/MacBundle.h
+    platform/MacBundle.cpp
+)
