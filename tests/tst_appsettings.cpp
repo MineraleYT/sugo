@@ -2,6 +2,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -525,6 +527,56 @@ private Q_SLOTS:
         QCOMPARE(reloaded->trayBadgeStyle(), 0);
         QCOMPARE(reloaded->focusSoundMode(), 0);
         QCOMPARE(reloaded->soundVolume(), 0);
+    }
+
+    void emptyOrNonNumericValuesUseTheDefaults()
+    {
+        // A hand-edited or half-written file: such a value must not read as 0 (muting the alerts).
+        // A file of its own: QSettings keeps the parse of a path it has seen before when the
+        // file's size and time stamp have not changed, which a test writing the same path at
+        // once can hit (seen on macOS).
+        const QString path = dir.filePath(QStringLiteral("hand-edited.conf"));
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write("[General]\nSoundVolume=\nFocusSoundVolume=loud\nTrayBadgeStyle=two\nFocusSoundMode=\n");
+        }
+        const auto settings = std::make_unique<AppSettings>(Settings::open(path), std::make_unique<FakeAutostart>(state), true);
+        QCOMPARE(settings->soundVolume(), 80);
+        QCOMPARE(settings->focusSoundVolume(), 30);
+        QCOMPARE(settings->trayBadgeStyle(), 0);
+        QCOMPARE(settings->focusSoundMode(), 0);
+    }
+
+    void aFailedSaveIsLoggedOnce()
+    {
+        QTemporaryDir parent;
+        QVERIFY(parent.isValid());
+        const QString folder = parent.filePath(QStringLiteral("read-only"));
+        QVERIFY(QDir().mkpath(folder));
+        QVERIFY(QFile::setPermissions(folder, QFile::ReadOwner | QFile::ExeOwner));
+        const auto restore = qScopeGuard([&folder]() {
+            QFile::setPermissions(folder, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        });
+        {
+            // Root (some containers) writes anywhere: nothing to test there.
+            QFile probe(folder + QStringLiteral("/probe"));
+            if (probe.open(QIODevice::WriteOnly)) {
+                probe.remove();
+                QSKIP("The read-only folder can be written to (running as root?)");
+            }
+        }
+
+        const Settings::Ptr settings = Settings::open(folder + QStringLiteral("/sugo.conf"));
+        settings->setValue(QStringLiteral("SoundVolume"), 7);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot save the settings to .*sugo\\.conf")));
+        Settings::sync(*settings);
+        QVERIFY(settings->status() != QSettings::NoError);
+
+        // The next change fails the same way, without a second message.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("^Cannot save the settings")));
+        settings->setValue(QStringLiteral("SoundVolume"), 8);
+        Settings::sync(*settings);
     }
 
     void colorSchemeDefaultsToSystemAndPersists()

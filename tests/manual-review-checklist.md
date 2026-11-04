@@ -34,6 +34,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Back up the database, change presets and history, restore the backup, and confirm both are restored.
 - [ ] Try restoring an invalid or newer-schema backup; confirm it is rejected without replacing current data.
 - [ ] Clear session history and confirm presets remain intact.
+- [ ] Quit, overwrite `sugo.db` with junk, start again: a warning names the `sugo.db.corrupt-*` file it kept, "Open folder" shows it, the close button hides the warning, and the page under it does not move.
 
 ## Packaging and first run
 

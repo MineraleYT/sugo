@@ -25,6 +25,10 @@ class DataManager : public QObject
     Q_PROPERTY(bool usingTemporaryDatabase READ usingTemporaryDatabase CONSTANT FINAL)
     /// True while finished sessions or timer changes could not be stored (they are retried).
     Q_PROPERTY(bool saveFailing READ saveFailing NOTIFY saveFailingChanged FINAL)
+    /// Where a damaged or foreign database found at startup was moved to (a new one was started); empty if none was.
+    Q_PROPERTY(QString movedAsideDatabasePath READ movedAsideDatabasePath CONSTANT FINAL)
+    /// True if that file was damaged, false if it belonged to another program.
+    Q_PROPERTY(bool movedAsideDatabaseWasCorrupt READ movedAsideDatabaseWasCorrupt CONSTANT FINAL)
 
 public:
     DataManager(Database *database, SessionRepository *sessions, PresetRepository *presetsRepository,
@@ -34,6 +38,11 @@ public:
     int presetCount() const;
     bool usingTemporaryDatabase() const;
     bool saveFailing() const;
+    QString movedAsideDatabasePath() const { return m_movedAsidePath; }
+    bool movedAsideDatabaseWasCorrupt() const { return m_movedAsideCorrupt; }
+    /// Taken from the database at construction; main() sets it when that database was replaced
+    /// by a temporary one after the move. Call before the interface reads it.
+    void setMovedAsideDatabase(const QString &path, bool corrupt);
 
     /// Replaces the clock (local time) used for "older than" cut-offs; for tests.
     void setNowProvider(std::function<QDateTime()> provider);
@@ -74,6 +83,8 @@ private:
     PresetRepository *m_presetsRepository;
     PresetModel *m_presets;
     StatsModel *m_stats;
+    QString m_movedAsidePath;
+    bool m_movedAsideCorrupt = false;
     SessionRecorder *m_recorder = nullptr;
     PresetPersistence *m_presetPersistence = nullptr;
     std::function<QDateTime()> m_now;

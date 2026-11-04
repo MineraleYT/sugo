@@ -99,6 +99,16 @@ DataManager::DataManager(Database *database, SessionRepository *sessions, Preset
     : QObject(parent), m_database(database), m_sessions(sessions), m_presetsRepository(presetsRepository),
       m_presets(presets), m_stats(stats)
 {
+    if (m_database) {
+        m_movedAsidePath = m_database->movedAsidePath();
+        m_movedAsideCorrupt = m_database->movedAsideWasCorrupt();
+    }
+}
+
+void DataManager::setMovedAsideDatabase(const QString &path, bool corrupt)
+{
+    m_movedAsidePath = path;
+    m_movedAsideCorrupt = corrupt;
 }
 
 QString DataManager::databasePath() const
@@ -226,8 +236,14 @@ bool DataManager::exportHistory(const QUrl &fileUrl)
         return false;
     }
 
+    // A history that cannot be read is not an empty one: an existing file is left as it was.
+    bool readOk = false;
     const QList<SessionRecord> records =
-        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max());
+        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max(), &readOk);
+    if (!readOk) {
+        Q_EMIT operationFailed(i18n("Could not read the session history."));
+        return false;
+    }
     QByteArray data;
     if (csv) {
         QString out = QStringLiteral("id,kind,started_at,ended_at,duration_sec,planned_sec,completed,preset_name,category,note\r\n");
@@ -422,7 +438,14 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
     {
         Database migrated(copyPath);
         if (!migrated.open() || !migrated.movedAsidePath().isEmpty()) {
-            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", migrated.lastError()));
+            // A copy that had to be moved aside was damaged (or, past the checks above, not ours):
+            // say so rather than repeat the low-level reason, if any.
+            QString reason = migrated.lastError();
+            if (!migrated.movedAsidePath().isEmpty()) {
+                reason = migrated.movedAsideWasCorrupt() ? i18n("The backup is damaged.")
+                                                         : i18n("This file is not a Sugo database.");
+            }
+            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", reason));
             return false;
         }
     } // closing the connection folds the WAL back into the file before it is attached

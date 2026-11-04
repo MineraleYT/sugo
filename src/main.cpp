@@ -235,7 +235,11 @@ int main(int argc, char *argv[])
     // Storage. If the file cannot be used, run with a throw-away in-memory database so the
     // timer still works; nothing is saved in that case (the UI shows a warning).
     auto database = std::make_unique<Database>(Database::defaultPath());
-    if (!database->open()) {
+    const bool databaseOpened = database->open();
+    // Kept apart: a file can be moved aside and the new one still fail to open.
+    const QString movedAsidePath = database->movedAsidePath();
+    const bool movedAsideWasCorrupt = database->movedAsideWasCorrupt();
+    if (!databaseOpened) {
         qWarning() << "Cannot open the database" << Database::defaultPath() << ":" << database->lastError();
         qWarning() << "Using a temporary in-memory database: timers and statistics will NOT be saved";
         database = std::make_unique<Database>(QStringLiteral(":memory:"));
@@ -244,13 +248,13 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
     }
-    if (!database->movedAsidePath().isEmpty()) {
-        if (database->movedAsideWasCorrupt()) {
-            qWarning() << "The existing database was damaged; it was kept as" << database->movedAsidePath()
+    if (!movedAsidePath.isEmpty()) {
+        if (movedAsideWasCorrupt) {
+            qWarning() << "The existing database was damaged; it was kept as" << movedAsidePath
                        << "and a new one was started";
         } else {
             qWarning() << "The existing database was not created by Sugo; it was kept as"
-                       << database->movedAsidePath() << "and a new one was started";
+                       << movedAsidePath << "and a new one was started";
         }
     }
     PresetRepository presetRepository(database->connectionName());
@@ -346,6 +350,7 @@ int main(int argc, char *argv[])
     }
     stats->attach(&sessionRepository, recorder);
     auto *dataManager = new DataManager(database.get(), &sessionRepository, &presetRepository, presets, stats, &services);
+    dataManager->setMovedAsideDatabase(movedAsidePath, movedAsideWasCorrupt);
     dataManager->setSessionRecorder(recorder);
     dataManager->setPresetPersistence(presetPersistence);
     dataManager->setTimerActiveProvider([timer]() { return timer->isActive(); });

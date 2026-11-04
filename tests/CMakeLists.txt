@@ -122,6 +122,12 @@ add_test(NAME tst_timer_page_ui
 )
 set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 15)
 
+# Started on a damaged sugo.db: it is moved aside, and the window says so.
+add_test(NAME tst_damaged_database_ui
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> damaged-db
+)
+set_tests_properties(tst_damaged_database_ui PROPERTIES TIMEOUT 10)
+
 add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )

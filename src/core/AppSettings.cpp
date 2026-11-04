@@ -69,6 +69,15 @@ QString validColorScheme(const QString &scheme)
     return QStringLiteral("system");
 }
 
+/// An integer setting, or `fallback` when it is missing, empty or not a number: a hand-edited or
+/// half-written "SoundVolume=" must not read as 0 and mute every alert.
+int intSetting(const QSettings &settings, const char *key, int fallback)
+{
+    bool ok = false;
+    const int value = settings.value(QLatin1String(key), fallback).toInt(&ok);
+    return ok ? value : fallback;
+}
+
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
 
@@ -155,13 +164,13 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_startMinimized = settings.value(QLatin1String(kStartMinimized), Defaults::startMinimized).toBool();
     m_showDockBadge = settings.value(QLatin1String(kShowDockBadge), Defaults::showDockBadge).toBool();
     m_hideDockIcon = settings.value(QLatin1String(kHideDockIcon), Defaults::hideDockIcon).toBool();
-    m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), Defaults::trayBadgeStyle).toInt(), 0, 2);
+    m_trayBadgeStyle = std::clamp(intSetting(settings, kTrayBadgeStyle, Defaults::trayBadgeStyle), 0, 2);
     m_soundTheme = settings.value(QLatin1String(kSoundTheme), QString(Defaults::soundTheme)).toString();
-    m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), Defaults::soundVolume).toInt(), 0, 100);
+    m_soundVolume = std::clamp(intSetting(settings, kSoundVolume, Defaults::soundVolume), 0, 100);
     m_preAlarmEnabled = settings.value(QLatin1String(kPreAlarmEnabled), Defaults::preAlarmEnabled).toBool();
     m_preAlarmSound = settings.value(QLatin1String(kPreAlarmSound), QString(Defaults::preAlarmSound)).toString();
-    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), Defaults::focusSoundMode).toInt(), 0, FocusSoundController::LastMode);
-    m_focusSoundVolume = std::clamp(settings.value(QLatin1String(kFocusSoundVolume), Defaults::focusSoundVolume).toInt(), 0, 100);
+    m_focusSoundMode = std::clamp(intSetting(settings, kFocusSoundMode, Defaults::focusSoundMode), 0, FocusSoundController::LastMode);
+    m_focusSoundVolume = std::clamp(intSetting(settings, kFocusSoundVolume, Defaults::focusSoundVolume), 0, 100);
     m_keepScreenAwake = settings.value(QLatin1String(kKeepScreenAwake), Defaults::keepScreenAwake).toBool();
     m_autoPauseOnScreenLock = settings.value(QLatin1String(kAutoPauseOnScreenLock), Defaults::autoPauseOnScreenLock).toBool();
     m_protectWeekendStreak = settings.value(QLatin1String(kProtectWeekendStreak), Defaults::protectWeekendStreak).toBool();
@@ -598,7 +607,7 @@ void AppSettings::installFocusShortcuts()
 {
     if (!m_focusInstaller) {
         m_focusInstallStatus = QStringLiteral("failed");
-        m_focusInstallDetail = QStringLiteral("not supported on this system");
+        m_focusInstallDetail = i18nc("why the Focus shortcuts could not be installed", "not supported on this system");
         Q_EMIT focusShortcutsInstallChanged();
         return;
     }

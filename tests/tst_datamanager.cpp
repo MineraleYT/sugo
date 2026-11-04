@@ -48,6 +48,29 @@ bool execOn(const QString &path, const QStringList &statements)
     return ok;
 }
 
+/// Overwrites every page of a database file but the first (its header and schema) with junk:
+/// the file still reads as the same database, but its tables are damaged.
+bool spoilAllButFirstPage(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadWrite)) {
+        return false;
+    }
+    const QByteArray header = file.read(100);
+    if (header.size() != 100) {
+        return false;
+    }
+    int pageSize = (int(quint8(header.at(16))) << 8) | int(quint8(header.at(17)));
+    if (pageSize == 1) {
+        pageSize = 65536;
+    }
+    if (file.size() <= pageSize || !file.seek(pageSize)) {
+        return false;
+    }
+    const QByteArray junk(qsizetype(file.size() - pageSize), char(0x5a));
+    return file.write(junk) == junk.size();
+}
+
 } // namespace
 
 class DataManagerTest : public QObject
@@ -543,6 +566,150 @@ private Q_SLOTS:
 
         presetModel->remove(newUuid);
         QCOMPARE(manager->presetCount(), 2);
+    }
+
+    void restoringADamagedBackupSaysWhy()
+    {
+        for (int i = 0; i < 50; ++i) {
+            QVERIFY(sessions->insert(sampleRecord(QStringLiteral("Current %1").arg(i))));
+        }
+        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
+        QVERIFY(manager->backupDatabase(QUrl::fromLocalFile(backupPath)));
+
+        // Keep the first page (the header and the schema) and spoil all the others: the backup
+        // still reads as a Sugo database, but its tables are damaged.
+        QVERIFY(spoilAllButFirstPage(backupPath));
+
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QVERIFY(!manager->restoreDatabase(QUrl::fromLocalFile(backupPath)));
+        QCOMPARE(failed.count(), 1);
+        const QString message = failed.first().first().toString();
+        QVERIFY2(message.contains(QStringLiteral("damaged")), qPrintable(message));
+        QCOMPARE(manager->sessionCount(), 50);
+    }
+
+    void damagedDatabaseSaysWhyItWasMovedAside()
+    {
+        // Database::open() moves a file with damaged pages aside; its reason is kept.
+        QVERIFY(sessions->insert(sampleRecord()));
+        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
+        QVERIFY(manager->backupDatabase(QUrl::fromLocalFile(backupPath)));
+        QVERIFY(spoilAllButFirstPage(backupPath));
+
+        Database damaged(backupPath);
+        QVERIFY(damaged.open());
+        QVERIFY(!damaged.movedAsidePath().isEmpty());
+        QVERIFY(damaged.movedAsideWasCorrupt());
+        QVERIFY(!damaged.lastError().isEmpty());
+        QFile::remove(damaged.movedAsidePath());
+    }
+
+    void databaseMovedAsideIsReported()
+    {
+        QCOMPARE(manager->movedAsideDatabasePath(), QString());
+        QVERIFY(!manager->movedAsideDatabaseWasCorrupt());
+
+        // Not a database at all: moved aside as damaged, and a new one is started.
+        const QString junkPath = dir.filePath(QStringLiteral("junk.db"));
+        {
+            QFile junk(junkPath);
+            QVERIFY(junk.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            junk.write("This is not an SQLite database.\n");
+        }
+        {
+            Database damaged(junkPath);
+            QVERIFY(damaged.open());
+            DataManager reporting(&damaged, nullptr, nullptr, nullptr, nullptr);
+            QVERIFY(reporting.movedAsideDatabasePath().startsWith(junkPath + QStringLiteral(".corrupt-")));
+            QVERIFY(QFile::exists(reporting.movedAsideDatabasePath()));
+            QVERIFY(reporting.movedAsideDatabaseWasCorrupt());
+            QCOMPARE(reporting.property("movedAsideDatabasePath").toString(), damaged.movedAsidePath());
+            QCOMPARE(reporting.property("movedAsideDatabaseWasCorrupt").toBool(), true);
+            QFile::remove(damaged.movedAsidePath());
+        }
+
+        // Another program's database: moved aside as foreign.
+        const QString foreignPath = dir.filePath(QStringLiteral("foreign.db"));
+        QVERIFY(execOn(foreignPath, {QStringLiteral("CREATE TABLE notes (text TEXT)")}));
+        {
+            Database foreign(foreignPath);
+            QVERIFY(foreign.open());
+            DataManager reporting(&foreign, nullptr, nullptr, nullptr, nullptr);
+            QVERIFY(reporting.movedAsideDatabasePath().startsWith(foreignPath + QStringLiteral(".foreign-")));
+            QVERIFY(!reporting.movedAsideDatabaseWasCorrupt());
+            QFile::remove(foreign.movedAsidePath());
+        }
+
+        // main() carries the report over when the new file could not be opened either.
+        Database memory(QStringLiteral(":memory:"));
+        QVERIFY(memory.open());
+        DataManager inMemory(&memory, nullptr, nullptr, nullptr, nullptr);
+        QCOMPARE(inMemory.movedAsideDatabasePath(), QString());
+        inMemory.setMovedAsideDatabase(QStringLiteral("/data/sugo.db.corrupt-20261104-120000"), true);
+        QCOMPARE(inMemory.movedAsideDatabasePath(), QStringLiteral("/data/sugo.db.corrupt-20261104-120000"));
+        QVERIFY(inMemory.movedAsideDatabaseWasCorrupt());
+    }
+
+    void clearedNotesDoNotStayInTheFile()
+    {
+        const QByteArray marker("private-note-7f3a91");
+        SessionRecord record = sampleRecord();
+        record.note = QString::fromLatin1(marker);
+        QVERIFY(sessions->insert(record));
+
+        const QString path = database->path();
+        const auto fileBytes = [&path]() {
+            QByteArray bytes;
+            for (const QString &suffix : {QString(), QStringLiteral("-wal")}) {
+                QFile file(path + suffix);
+                if (file.open(QIODevice::ReadOnly)) {
+                    bytes += file.readAll();
+                }
+            }
+            return bytes;
+        };
+        // Folds the write-ahead log into the file and empties it, as SQLite does in time.
+        const auto checkpoint = [this]() {
+            QSqlQuery query(QSqlDatabase::database(database->connectionName()));
+            return query.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")) && query.next()
+                && query.value(0).toInt() == 0;
+        };
+        QVERIFY(checkpoint());
+        QVERIFY(fileBytes().contains(marker));
+
+        QVERIFY(manager->clearHistory());
+        QVERIFY(checkpoint());
+        QVERIFY2(!fileBytes().contains(marker), "a cleared note is still readable in the database file");
+    }
+
+    void exportOfAnUnreadableHistoryLeavesTheFileAlone()
+    {
+        QVERIFY(sessions->insert(sampleRecord()));
+        const QString path = dir.filePath(QStringLiteral("previous.csv"));
+        QVERIFY(manager->exportHistory(QUrl::fromLocalFile(path)));
+        QFile previous(path);
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        const QByteArray before = previous.readAll();
+        previous.close();
+        QVERIFY(before.contains("Pomodoro"));
+
+        // The sessions can no longer be read: that is a failure, not an empty history.
+        QSqlQuery query(QSqlDatabase::database(database->connectionName()));
+        QVERIFY(query.exec(QStringLiteral("DROP TABLE session")));
+        bool ok = true;
+        QVERIFY(sessions->between(0, 2000, &ok).isEmpty());
+        QVERIFY(!ok);
+        QCOMPARE(sessions->count(), -1);
+
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QSignalSpy succeeded(manager.get(), &DataManager::operationSucceeded);
+        QVERIFY(!manager->exportHistory(QUrl::fromLocalFile(path)));
+        QVERIFY(!manager->exportHistory(QUrl::fromLocalFile(dir.filePath(QStringLiteral("new.json")))));
+        QCOMPARE(failed.count(), 2);
+        QCOMPARE(succeeded.count(), 0);
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("new.json"))));
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        QCOMPARE(previous.readAll(), before);
     }
 };
 

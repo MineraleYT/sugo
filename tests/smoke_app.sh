@@ -66,6 +66,14 @@ check_qml_output() {
     fi
 }
 
+# damaged-db: the timer page's checks, started on a sugo.db that is not a database. Sugo must
+# move it aside, start a new one and say so (Main.qml fails with 55 otherwise).
+smoke_page=$mode
+if [[ $mode == damaged-db ]]; then
+    printf 'This is not an SQLite database.\n' >"$runtime_dir/data/sugo/sugo.db"
+    smoke_page=timer
+fi
+
 set +e
 # Quit: started normally, then ended with SIGTERM (as the system does at logout): it must quit
 # by itself, cleanly (exit status 0, no QML warnings), within 10 seconds. Works without D-Bus,
@@ -119,7 +127,7 @@ if [[ $mode != startup ]]; then
             "$app"
     else
         run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \
-            SUGO_SMOKE_PAGE="$mode" \
+            SUGO_SMOKE_PAGE="$smoke_page" \
             DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null \
             "$isolation" \
             XDG_DATA_HOME="$runtime_dir/data" \
@@ -130,6 +138,10 @@ if [[ $mode != startup ]]; then
     set -e
     if [[ $status -ne 0 ]]; then
         echo "Sugo $mode UI smoke test exited with status $status (expected 0)" >&2
+        exit 1
+    fi
+    if [[ $mode == damaged-db ]] && ! compgen -G "$runtime_dir/data/sugo/sugo.db.corrupt-*" >/dev/null; then
+        echo "Sugo did not keep the damaged database aside as sugo.db.corrupt-*" >&2
         exit 1
     fi
     exit 0

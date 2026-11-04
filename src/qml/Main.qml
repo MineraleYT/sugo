@@ -508,6 +508,12 @@ QQC2.ApplicationWindow {
         function checkTimer(page: var): bool {
             switch (stage++) {
             case 0:
+                // Started on a damaged database (smoke_app.sh damaged-db): the new one says so.
+                if (DataManager !== null && DataManager.movedAsideDatabasePath.length > 0
+                        && (!dataWarning.shown || !dataBanner.text.includes(DataManager.movedAsideDatabasePath))) {
+                    fail(55, "The database moved aside at startup is not reported");
+                    return true;
+                }
                 // New users have one timer: add a second one to choose (its row appears next tick).
                 PresetModel.create({ name: "Smoke" });
                 return false;
@@ -1213,11 +1219,16 @@ QQC2.ApplicationWindow {
                 }
 
                 // Shown on every page: nothing recorded now will survive a restart, or the last
-                // changes are still waiting to be stored. Laid over the top of the page, so the
-                // page does not move when it comes or goes.
+                // changes are still waiting to be stored, or (until dismissed) the database found
+                // at startup was damaged or not Sugo's and a new one was started. Laid over the
+                // top of the page, so the page does not move when it comes or goes.
                 Rectangle {
+                    id: dataWarning
                     objectName: "dataWarning"
-                    readonly property bool shown: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    property bool movedAsideDismissed: false
+                    readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
+                    readonly property bool shown: storageFailing || movedAside
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.right: parent.right
@@ -1233,13 +1244,40 @@ QQC2.ApplicationWindow {
                         NumberAnimation { duration: Theme.durationShort }
                     }
 
-                    Banner {
+                    MessageSlot {
                         id: dataBanner
                         anchors.fill: parent
+                        shown: dataWarning.shown
+                        lines: 3
                         tone: "warning"
-                        text: DataManager !== null && DataManager.usingTemporaryDatabase === true
-                              ? i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.")
-                              : i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.")
+                        text: {
+                            if (DataManager === null) {
+                                return "";
+                            }
+                            if (DataManager.usingTemporaryDatabase === true) {
+                                return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
+                            }
+                            if (DataManager.saveFailing === true) {
+                                return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
+                            }
+                            return DataManager.movedAsideDatabaseWasCorrupt
+                                ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
+                                : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
+                        }
+                        SButton {
+                            kind: "ghost"
+                            text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: DataManager.openDatabaseFolder()
+                        }
+                        SButton {
+                            kind: "ghost"
+                            iconOnly: true
+                            iconName: "close"
+                            text: i18n("Dismiss")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: dataWarning.movedAsideDismissed = true
+                        }
                     }
                 }
             }

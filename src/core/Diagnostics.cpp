@@ -308,9 +308,10 @@ QString Diagnostics::generateReport() const
 
     lines << QStringLiteral("## Configuration");
     if (m_settings) {
-        lines << QStringLiteral("- Sound Theme: ") + m_settings->soundTheme();
+        // A sound may be an absolute path to a file of the user's: redacted like every other path.
+        lines << QStringLiteral("- Sound Theme: ") + redact(m_settings->soundTheme());
         lines << QStringLiteral("- Sound Volume: ") + QString::number(m_settings->soundVolume()) + QStringLiteral("%");
-        lines << QStringLiteral("- Pre-Alarm: ") + (m_settings->preAlarmEnabled() ? QStringLiteral("Enabled") : QStringLiteral("Disabled")) + QStringLiteral(" (") + m_settings->preAlarmSound() + QStringLiteral(")");
+        lines << QStringLiteral("- Pre-Alarm: ") + (m_settings->preAlarmEnabled() ? QStringLiteral("Enabled") : QStringLiteral("Disabled")) + QStringLiteral(" (") + redact(m_settings->preAlarmSound()) + QStringLiteral(")");
         lines << QStringLiteral("- Focus Sound Mode: ") + QString::number(m_settings->focusSoundMode()) + QStringLiteral(" (Volume: ") + QString::number(m_settings->focusSoundVolume()) + QStringLiteral("%)");
         lines << QStringLiteral("- Screen Lock Auto-Pause: ") + (m_settings->autoPauseOnScreenLock() ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
         lines << QStringLiteral("- Keep Screen Awake: ") + (m_settings->keepScreenAwake() ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
