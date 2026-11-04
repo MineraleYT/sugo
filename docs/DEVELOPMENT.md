@@ -248,6 +248,19 @@ A release is a version bump, a commit, an annotated tag on `main` and a push. Th
    git tag -a vX.Y.Z -m "Sugo X.Y.Z: …"
    git push origin main vX.Y.Z
    ```
-6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand (`bash packaging/macos/build.sh X.Y.Z out` on a Mac, then `gh release upload vX.Y.Z out/Sugo-macOS-universal.dmg`), or leave it for the next release. On a Mac, open the disk image, drag Sugo to Applications, and check the first launch and `Sugo.app/Contents/MacOS/Sugo --version`.
+6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand, or leave it for the next release. By hand, the feed needs the disk image's `macos` entry too, as `release.yml` writes it (without it the Macs see the update but never install it): build with `bash packaging/macos/build.sh X.Y.Z out` on a Mac, then
+   ```sh
+   cd out
+   dmg=Sugo-macOS-universal.dmg
+   gh release upload vX.Y.Z "$dmg" --repo MineraleYT/sugo
+   gh release download vX.Y.Z --repo MineraleYT/sugo --pattern stable.json --clobber
+   jq --arg url "https://github.com/MineraleYT/sugo/releases/download/vX.Y.Z/$dmg" \
+      --arg sha256 "$(shasum -a 256 "$dmg" | cut -d' ' -f1)" \
+      --argjson size "$(wc -c < "$dmg" | tr -d ' ')" \
+      '. + {macos: {url: $url, sha256: $sha256, size: $size}}' stable.json > stable.json.new
+   mv stable.json.new stable.json
+   gh release upload vX.Y.Z stable.json --repo MineraleYT/sugo --clobber
+   ```
+   The disk image goes first: the feed must never announce a file that is not there. On a Mac, open the disk image, drag Sugo to Applications, and check the first launch and `Sugo.app/Contents/MacOS/Sugo --version`.
 
 The workflow refuses to publish unless the tag, the version in `CMakeLists.txt` and the newest `<release>` in the metainfo all agree. Every `v*` tag is built, tested and published, whatever the tagged commit changed. Pushes that only change Markdown files or `docs/` skip CI. Third-party actions and the build image are pinned to a commit or digest; Dependabot proposes updates.
