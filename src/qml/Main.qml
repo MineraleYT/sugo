@@ -855,7 +855,7 @@ QQC2.ApplicationWindow {
                                                      || activeFocusItem.hasOwnProperty("checkable")
                                                      || activeFocusItem.hasOwnProperty("popup"))
     readonly property bool dialogOpen: quitDialog.visible || taskNoteDialog.visible || screenLockResumeDialog.visible
-                                       || syncApprovalDialog.visible
+                                       || syncApprovalDialog.visible || syncRecoveryDialog.visible
 
     // Space starts, pauses or resumes the timer while the timer page is shown.
     Shortcut {
@@ -1235,6 +1235,106 @@ QQC2.ApplicationWindow {
         }
         function onApprovalRequested() {
             root.showSyncApproval();
+        }
+        function onRecoveryCodeToConfirm(code) {
+            syncRecoveryDialog.show(code);
+        }
+    }
+
+    // A new recovery code (first device, or a new one asked for): shown once here, kept by the
+    // user, and checked by typing one of its groups back.
+    ConfirmDialog {
+        id: syncRecoveryDialog
+        property string code
+        property int group: 0
+        readonly property int groups: code.length > 0 ? code.split("-").length : 0
+
+        function show(newCode: string): void {
+            code = newCode;
+            group = Math.floor(Math.random() * Math.max(1, groups));
+            recoveryGroupField.text = "";
+            open();
+        }
+
+        title: i18n("Keep your recovery code")
+        text: i18n("With this code a new device opens your synced timers when none of your other devices is at hand. If you lose all your devices and this code, the synced timers cannot be opened again: write it down or keep it in a password manager.")
+        confirmText: i18n("Done")
+        cancelText: i18n("Later")
+        confirmEnabled: SyncController !== null && SyncController.confirmRecoveryGroup(group, recoveryGroupField.text)
+        onConfirmed: {
+            syncRecoveryDialog.close();
+            root.showPassiveNotification(i18n("Recovery code checked. Keep it somewhere safe."));
+        }
+        onOpened: recoveryGroupField.forceActiveFocus()
+        onClosed: {
+            code = "";
+            recoveryGroupField.text = "";
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: Math.max(recoveryCodeText.implicitHeight, recoveryCopyButton.implicitHeight) + Theme.spaceMd * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            TextEdit {
+                id: recoveryCodeText
+                anchors.left: parent.left
+                anchors.right: recoveryCopyButton.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Theme.spaceLg
+                anchors.rightMargin: Theme.spaceSm
+                readOnly: true
+                selectByMouse: true
+                text: syncRecoveryDialog.code
+                color: Theme.foreground
+                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Accessible.name: i18n("Recovery code")
+            }
+            SButton {
+                id: recoveryCopyButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: Theme.spaceSm
+                kind: "ghost"
+                iconOnly: true
+                iconName: "copy"
+                text: i18n("Copy recovery code")
+                onClicked: {
+                    recoveryCodeText.selectAll();
+                    recoveryCodeText.copy();
+                    recoveryCodeText.deselect();
+                    root.showPassiveNotification(i18n("Recovery code copied to the clipboard."));
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            text: i18n("To check that you have kept it, type group %1 of %2.",
+                       syncRecoveryDialog.group + 1, syncRecoveryDialog.groups)
+            color: Theme.muted
+            font.pixelSize: Theme.fontBody
+            wrapMode: Text.WordWrap
+        }
+        STextField {
+            id: recoveryGroupField
+            Layout.fillWidth: true
+            font.family: Theme.monoFamily
+            maximumLength: 8
+            placeholderText: i18n("Group %1", syncRecoveryDialog.group + 1)
+            inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+            Accessible.name: i18n("Group %1 of the recovery code", syncRecoveryDialog.group + 1)
+            onAccepted: {
+                if (syncRecoveryDialog.confirmEnabled) {
+                    syncRecoveryDialog.confirmed();
+                }
+            }
         }
     }
 
