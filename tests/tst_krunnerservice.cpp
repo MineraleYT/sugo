@@ -22,6 +22,8 @@ private Q_SLOTS:
     void testMatchesOfferOnlyRelevantActions();
     void testCustomMinutesDoNotChangeThePreset();
     void testPresetByName();
+    void testStartingTheCurrentPresetResumesIt();
+    void testNothingIsOfferedBeforeTheTimerIsAttached();
     void testControlCanBeTurnedOff();
 };
 
@@ -255,6 +257,44 @@ void TestKRunnerService::testPresetByName()
 
     service.Run(QStringLiteral("preset:") + uuid, QString());
     QCOMPARE(presets.currentUuid(), uuid);
+    QVERIFY(timer.isRunning());
+}
+
+void TestKRunnerService::testStartingTheCurrentPresetResumesIt()
+{
+    TimerEngine timer;
+    timer.setWorkSeconds(1500);
+    PresetModel presets;
+    KRunnerService service(&timer, &presets);
+    const QString uuid = presets.currentUuid();
+    QVERIFY(!uuid.isEmpty());
+
+    timer.start();
+    timer.pause();
+    QVERIFY(timer.isPaused());
+
+    // KRunner offers "Start preset" for the current preset while it is paused too.
+    service.Run(QStringLiteral("preset:") + uuid, QString());
+    QCOMPARE(presets.currentUuid(), uuid);
+    QVERIFY(timer.isRunning());
+    QVERIFY(!timer.isPaused());
+}
+
+void TestKRunnerService::testNothingIsOfferedBeforeTheTimerIsAttached()
+{
+    // main.cpp registers the runner before the timer exists.
+    KRunnerService service(nullptr, nullptr);
+    QVERIFY(service.Match(QStringLiteral("pomodoro")).isEmpty());
+    QVERIFY(service.Match(QStringLiteral("pomodoro 25")).isEmpty());
+    service.Run(QStringLiteral("start"), QString()); // nothing to run, and no crash
+    service.Run(QStringLiteral("custom:25"), QString());
+    service.Run(QStringLiteral("x"), QStringLiteral("start"));
+
+    TimerEngine timer;
+    PresetModel presets;
+    service.attach(&timer, &presets);
+    QVERIFY(!service.Match(QStringLiteral("pomodoro")).isEmpty());
+    service.Run(QStringLiteral("start"), QString());
     QVERIFY(timer.isRunning());
 }
 
