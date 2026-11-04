@@ -134,7 +134,8 @@ public Q_SLOTS:
     /// Starts waiting for the key again (after keyRejected(), or when another device was linked).
     void waitForKey();
 
-    /// Sugo-Pending-Devices: lists the devices and asks about each new one (approvalRequested()).
+    /// Sugo-Pending-Devices: lists the devices and asks about each new one (approvalRequested());
+    /// with none waiting, lists them again if the list still shows one waiting.
     void checkPendingDevices(int count);
     /// Sends K to a pending device, boxed for its public key by this device's key.
     void approveDevice(const QString &id);

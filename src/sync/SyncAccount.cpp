@@ -594,7 +594,12 @@ void SyncAccount::becomeReady()
 
 void SyncAccount::checkPendingDevices(int count)
 {
-    if (m_phase != Phase::Ready || count <= 0 || m_checkingPending) {
+    if (m_phase != Phase::Ready || m_checkingPending) {
+        return;
+    }
+    // None waiting: listed again only if the list still shows one waiting (it got its key
+    // since), so the device list stops saying "Waiting for approval".
+    if (count <= 0 && std::none_of(m_devices.cbegin(), m_devices.cend(), [](const Device &d) { return d.pending && !d.current; })) {
         return;
     }
     m_checkingPending = true;

@@ -6,7 +6,9 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
 #include <memory>
+#include <optional>
 
 #include "FakeSecretStore.h"
 #include "FakeSyncServer.h"
@@ -305,6 +307,23 @@ private Q_SLOTS:
         QVERIFY(QJsonDocument::fromJson(keyWrites.last().value.toUtf8()).object().contains(QLatin1String("dataKey")));
         QVERIFY(keyWrites.last().sequence < confirm.first().sequence);
         QVERIFY(!b.item().contains(QLatin1String("recoveryCode")));
+
+        // A listed B still waits (listed before it took its key); the next download, with none
+        // waiting, lists the devices again.
+        const auto bOnA = [&]() {
+            const auto devices = a.account->devices();
+            const auto it = std::find_if(devices.cbegin(), devices.cend(), [&](const SyncAccount::Device &d) { return d.id == b.account->deviceId(); });
+            return it == devices.cend() ? std::optional<SyncAccount::Device>() : std::optional(*it);
+        };
+        QVERIFY(bOnA() && bOnA()->pending);
+        const int listed = server->count("GET", "/v1/devices");
+        a.api->getBlob(QByteArray(), [](const SyncReply &) {}); // Sugo-Pending-Devices: 0
+        QTRY_COMPARE_WITH_TIMEOUT(server->count("GET", "/v1/devices"), listed + 1, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(bOnA() && !bOnA()->pending, 5000);
+        // Nothing waits any more: no further listing.
+        a.api->getBlob(QByteArray(), [](const SyncReply &) {});
+        QTest::qWait(100);
+        QCOMPARE(server->count("GET", "/v1/devices"), listed + 1);
 
         // Approving again is harmless (already_ready).
         a.account->approveDevice(b.account->deviceId());
