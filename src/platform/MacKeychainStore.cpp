@@ -91,21 +91,21 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     if (secret.isEmpty()) {
         return remove(key);
     }
+    // Replaced, not updated: the item's access list trusts the build that created it, and an ad
+    // hoc signed build (each update has another code hash) may still change the data of an item
+    // it cannot read. SecItemUpdate then succeeds, but leaves an item that neither build reads
+    // without asking the user. Deleting needs no permission, and the new item is this build's.
+    if (!remove(key)) {
+        return false;
+    }
     const QByteArray utf8 = secret.toUtf8();
     const CFRef<CFDataRef> data(CFDataCreate(kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(utf8.constData()),
                                              static_cast<CFIndex>(utf8.size())));
 
     const CFRef<CFMutableDictionaryRef> query(newItemQuery(m_service, key));
-    const CFRef<CFMutableDictionaryRef> changes(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
-                                                                          &kCFTypeDictionaryValueCallBacks));
-    CFDictionarySetValue(changes.get(), kSecValueData, data.get());
-
-    OSStatus status = SecItemUpdate(query.get(), changes.get());
-    if (status == errSecItemNotFound) {
-        CFDictionarySetValue(query.get(), kSecValueData, data.get());
-        CFDictionarySetValue(query.get(), kSecAttrLabel, CFSTR("Sugo"));
-        status = SecItemAdd(query.get(), nullptr);
-    }
+    CFDictionarySetValue(query.get(), kSecValueData, data.get());
+    CFDictionarySetValue(query.get(), kSecAttrLabel, CFSTR("Sugo"));
+    const OSStatus status = SecItemAdd(query.get(), nullptr);
     m_lastStatus = static_cast<int>(status);
     if (status != errSecSuccess) {
         qCWarning(lcKeychain) << "Cannot store" << key << "in the Keychain, OSStatus" << status;
