@@ -372,6 +372,9 @@ QQC2.ApplicationWindow {
                 fail(32, "Disconnecting the calendar did not ask first");
                 return;
             }
+            if (!checkSync(page)) {
+                return;
+            }
                         // Quitting while a phase runs asks first.
             TimerEngine.start();
             root.requestQuit();
@@ -381,6 +384,45 @@ QQC2.ApplicationWindow {
             if (!asked) {
                 fail(28, "Quitting during a work session did not ask first");
             }
+        }
+
+        // Settings, Sync tab (signed out: the controller is not attached in a smoke run).
+        function checkSync(page: var): bool {
+            const ids = page.categories.map(category => category.id);
+            const at = ids.indexOf("sync");
+            if (at < 0 || ids[at - 1] !== "calendar" || ids[at + 1] !== "advanced") {
+                fail(49, "The Sync tab is missing, or not between Calendar and Advanced: " + ids.join(","));
+                return false;
+            }
+            page.category = "sync";
+            const signIn = findItem(page, item => item.objectName === "syncSignInButton");
+            if (SyncController.state !== SyncController.Off || !signIn || !signIn.visible || signIn.text.length === 0) {
+                fail(50, "Signed out, the Sync tab does not offer Sign in");
+                return false;
+            }
+            // The message place keeps its height when a message comes, long or short.
+            const slot = findItem(page, item => item.objectName === "syncStatusMessage");
+            if (!slot || slot.height <= 0) {
+                fail(51, "The Sync tab's message place is missing");
+                return false;
+            }
+            const height = slot.height;
+            slot.text = "Smoke test: a message long enough to need more than one line in the Sync tab, so that a place "
+                        + "that grew with its text would show here, and move what is below it.";
+            slot.shown = true;
+            if (Math.abs(slot.height - height) > 0.5) {
+                fail(51, "A message changed the height of the Sync tab's message place: " + height + " → " + slot.height);
+                return false;
+            }
+            // Signing out asks first.
+            page.requestSyncSignOut();
+            const asked = page.syncSignOutConfirming;
+            page.category = "general";
+            if (!asked) {
+                fail(52, "Signing out of Sugo Sync did not ask first");
+                return false;
+            }
+            return true;
         }
 
         // Welcome: the tray icon's colours, the Focus row, the step dots; then a message on the
