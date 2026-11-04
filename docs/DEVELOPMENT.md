@@ -140,7 +140,7 @@ env -i PATH=/usr/bin:/bin HOME=/tmp/sugo-test-home \
 
 A test that builds a GUI application sets `QT_QPA_PLATFORM=offscreen` for itself (see `tests/CMakeLists.txt`); tests that need D-Bus start a private daemon and are written to work without a session bus. The build is expected to be free of compiler warnings.
 
-CI builds on Linux with GCC (and runs the suite), with Clang and warnings as errors (its warnings are close to those of Apple's compiler), and on macOS (arm64, Qt from qt.io, warnings as errors, the whole suite; not blocking yet).
+CI builds on Linux with GCC (and runs the suite) and with Clang (its warnings are close to those of Apple's compiler), both with warnings as errors, and on macOS (arm64, Qt from qt.io, warnings as errors, the whole suite; not blocking yet).
 
 CI runs only what a change can affect: its first job, Changes, reads the changed files and `.github/scripts/ci-changes.sh` decides which builds they need. Documentation runs nothing, a macOS-only file (`packaging/macos/`, the `.mm` sources, the `Mac*` sources built under `if(APPLE)`) only the macOS job, a Linux-only one (the D-Bus services, the desktop entry and the metainfo) only the Linux jobs, and the test scripts skip the Clang build; anything else, or a change it cannot read, runs everything. A file added for one platform only goes in that script's lists. The Linux jobs run in a container with every build dependency already installed (`.github/ci-image/Dockerfile`, on ghcr.io as `sugo-ci`, tagged with a hash of the Dockerfile): the CI image job builds it only when the Dockerfile changes, so a new dependency goes in the Dockerfile. The jobs keep the compiler cache (ccache) between runs, and a newer push cancels the run of the older one.
 
