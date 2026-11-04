@@ -378,3 +378,16 @@ if(APPLE)
         target_sources(sugo PRIVATE "${shortcut_file}")
     endforeach()
 endif()
+
+# --- macOS: sign the bundle built here ---
+# The linker signs only the binary, ad hoc and under the name "Sugo"; macOS then refuses the
+# notification permission (it goes by the bundle's identifier). Signing the whole bundle ad hoc,
+# as packaging/macos/build.sh does for the disk image, makes a build tried from here behave like
+# the installed app.
+if(APPLE)
+    add_custom_command(TARGET sugo POST_BUILD
+        COMMAND codesign --force --sign - "$<TARGET_BUNDLE_DIR:sugo>"
+        COMMENT "Signing Sugo.app ad hoc"
+        VERBATIM
+    )
+endif()
