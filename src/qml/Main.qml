@@ -479,7 +479,7 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 // Work under way asks before it is cut short.
-                page.confirmAfterSeconds = 0;
+                root.confirmAfterSeconds = 0;
                 TimerEngine.start();
                 page.requestSkip();
                 if (!TimerEngine.active || !page.endConfirming) {
@@ -487,6 +487,17 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 TimerEngine.stop();
+                // Stop from the search asks where it is, without leaving the page.
+                root.navigate("stats");
+                TimerEngine.start();
+                root.requestEndPhase(false);
+                if (root.currentDestination !== "stats" || !TimerEngine.active || !root.endPhaseConfirming) {
+                    fail(48, "Stopping work under way away from the timer page did not ask there");
+                    return true;
+                }
+                TimerEngine.stop();
+                root.confirmAfterSeconds = 60;
+                root.navigate("timer");
                 // A note for a session that ended while the window was hidden waits for it.
                 PresetModel.setOption(PresetModel.currentUuid, "notifyOnEnd", false);
                 root.hide();
@@ -787,6 +798,63 @@ QQC2.ApplicationWindow {
         openTimer(uuid);
     }
 
+    // Stop and Skip end the phase at once, unless that would cut short a work session that has
+    // already run for a while: then they ask first. A quick mis-start stays one click away. The
+    // question is asked here, over whatever page is shown, so the timer page, the S key, the search
+    // and the menu bar ask the same without leaving the page (unsaved changes, the welcome tour).
+    property int confirmAfterSeconds: 60
+    readonly property bool workUnderWay: TimerEngine.active && TimerEngine.phase === TimerEngine.Phase.Work
+        && TimerEngine.totalSeconds - TimerEngine.remainingSeconds >= confirmAfterSeconds
+    readonly property bool endPhaseConfirming: endPhaseDialog.visible
+
+    /// Stops the phase (or skips to the next one with `skipping`), asking first when work under
+    /// way would be cut short.
+    function requestEndPhase(skipping: bool): void {
+        if (!TimerEngine.active) {
+            return;
+        }
+        if (workUnderWay) {
+            endPhaseDialog.skipping = skipping;
+            endPhaseDialog.open();
+        } else if (skipping) {
+            TimerEngine.skip();
+        } else {
+            TimerEngine.stop();
+        }
+    }
+
+    ConfirmDialog {
+        id: endPhaseDialog
+        property bool skipping: false
+        // The question is about the work session it was asked for: once that ends some other
+        // way (elapsed, tray, shortcut), confirming late must not stop or skip the next phase.
+        Connections {
+            target: TimerEngine
+            function onPhaseChanged() {
+                endPhaseDialog.close();
+            }
+            function onStateChanged() {
+                if (!TimerEngine.active) {
+                    endPhaseDialog.close();
+                }
+            }
+        }
+        title: skipping ? i18n("Skip This Work Session?") : i18n("Stop This Work Session?")
+        text: skipping ? i18n("The rest of this work session is skipped and it is saved as interrupted.")
+                       : i18n("The work session ends now and is saved as interrupted.")
+        confirmText: skipping ? i18n("Skip") : i18n("Stop")
+        confirmKind: "danger"
+        cancelText: i18n("Keep Working")
+        onConfirmed: {
+            endPhaseDialog.close();
+            if (skipping) {
+                TimerEngine.skip();
+            } else {
+                TimerEngine.stop();
+            }
+        }
+    }
+
     /// What the search (Ctrl+K) offers.
     function paletteCommands(): var {
         const list = [
@@ -800,8 +868,8 @@ QQC2.ApplicationWindow {
             { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
-            list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => TimerEngine.stop() });
-            list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => TimerEngine.skip() });
+            list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => root.requestEndPhase(false) });
+            list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => root.requestEndPhase(true) });
         }
         for (let i = 0; i < PresetModel.count; ++i) {
             const uuid = PresetModel.uuidAt(i);
@@ -862,6 +930,7 @@ QQC2.ApplicationWindow {
                                                      || activeFocusItem.hasOwnProperty("checkable")
                                                      || activeFocusItem.hasOwnProperty("popup"))
     readonly property bool dialogOpen: quitDialog.visible || taskNoteDialog.visible || screenLockResumeDialog.visible
+                                     || endPhaseDialog.visible
 
     // Space starts, pauses or resumes the timer while the timer page is shown.
     Shortcut {

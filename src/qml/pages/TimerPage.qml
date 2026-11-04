@@ -18,61 +18,16 @@ QQC2.Page {
     readonly property bool isWorkPhase: TimerEngine.phase === TimerEngine.Phase.Work
     readonly property bool running: TimerEngine.active && !TimerEngine.paused
 
-    // Stop and Skip end the phase at once, unless that would cut short a work session that has
-    // already run for a while: then they ask first. A quick mis-start stays one click away.
-    property int confirmAfterSeconds: 60
-    readonly property bool workUnderWay: TimerEngine.active && isWorkPhase
-        && TimerEngine.totalSeconds - TimerEngine.remainingSeconds >= confirmAfterSeconds
-    readonly property bool endConfirming: endPhaseDialog.visible
+    // Stop and Skip ask first when work under way would be cut short: the window asks
+    // (Main.qml), as for the search and the menu bar.
+    readonly property bool endConfirming: applicationWindow().endPhaseConfirming
 
     function requestStop(): void {
-        if (workUnderWay) {
-            endPhaseDialog.skipping = false;
-            endPhaseDialog.open();
-        } else {
-            TimerEngine.stop();
-        }
+        applicationWindow().requestEndPhase(false);
     }
 
     function requestSkip(): void {
-        if (workUnderWay) {
-            endPhaseDialog.skipping = true;
-            endPhaseDialog.open();
-        } else {
-            TimerEngine.skip();
-        }
-    }
-
-    ConfirmDialog {
-        id: endPhaseDialog
-        property bool skipping: false
-        // The question is about the work session it was asked for: once that ends some other
-        // way (elapsed, tray, shortcut), confirming late must not stop or skip the next phase.
-        Connections {
-            target: TimerEngine
-            function onPhaseChanged() {
-                endPhaseDialog.close();
-            }
-            function onStateChanged() {
-                if (!TimerEngine.active) {
-                    endPhaseDialog.close();
-                }
-            }
-        }
-        title: skipping ? i18n("Skip This Work Session?") : i18n("Stop This Work Session?")
-        text: skipping ? i18n("The rest of this work session is skipped and it is saved as interrupted.")
-                       : i18n("The work session ends now and is saved as interrupted.")
-        confirmText: skipping ? i18n("Skip") : i18n("Stop")
-        confirmKind: "danger"
-        cancelText: i18n("Keep Working")
-        onConfirmed: {
-            endPhaseDialog.close();
-            if (skipping) {
-                TimerEngine.skip();
-            } else {
-                TimerEngine.stop();
-            }
-        }
+        applicationWindow().requestEndPhase(true);
     }
 
     // --- The cycle, as segments: work, break, work, break… and the long break at the end ---

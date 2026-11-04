@@ -56,13 +56,13 @@ Item {
                 text: i18nc("@action:inmenu", "Skip to the Next Phase")
                 role: Platform.MenuItem.NoRole
                 enabled: TimerEngine.active && !!menus.app && !menus.app.dialogOpen
-                onTriggered: TimerEngine.skip()
+                onTriggered: menus.app.requestEndPhase(true)
             }
             Platform.MenuItem {
                 text: i18nc("@action:inmenu", "Stop")
                 role: Platform.MenuItem.NoRole
                 enabled: TimerEngine.active && !!menus.app && !menus.app.dialogOpen
-                onTriggered: TimerEngine.stop()
+                onTriggered: menus.app.requestEndPhase(false)
             }
             Platform.MenuSeparator {}
             Platform.MenuItem {
