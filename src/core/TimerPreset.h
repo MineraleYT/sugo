@@ -56,3 +56,16 @@ struct TimerPreset {
         return option(key).toBool();
     }
 };
+
+/// A deleted timer, remembered so that Sugo Sync can tell other computers (and not bring the timer
+/// back from them). Kept for PresetRepository::TombstoneLifetimeMs.
+struct PresetTombstone {
+    QString uuid;
+    qint64 deletedAt = 0; ///< Milliseconds since the epoch (UTC).
+    QString deletedBy;    ///< The Sugo Sync device that deleted it; empty: this computer.
+
+    bool operator==(const PresetTombstone &other) const
+    {
+        return uuid == other.uuid && deletedAt == other.deletedAt && deletedBy == other.deletedBy;
+    }
+};
