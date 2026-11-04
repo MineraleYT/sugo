@@ -526,6 +526,52 @@ private Q_SLOTS:
         QFile::remove(damaged.movedAsidePath());
     }
 
+    void databaseMovedAsideIsReported()
+    {
+        QCOMPARE(manager->movedAsideDatabasePath(), QString());
+        QVERIFY(!manager->movedAsideDatabaseWasCorrupt());
+
+        // Not a database at all: moved aside as damaged, and a new one is started.
+        const QString junkPath = dir.filePath(QStringLiteral("junk.db"));
+        {
+            QFile junk(junkPath);
+            QVERIFY(junk.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            junk.write("This is not an SQLite database.\n");
+        }
+        {
+            Database damaged(junkPath);
+            QVERIFY(damaged.open());
+            DataManager reporting(&damaged, nullptr, nullptr, nullptr, nullptr);
+            QVERIFY(reporting.movedAsideDatabasePath().startsWith(junkPath + QStringLiteral(".corrupt-")));
+            QVERIFY(QFile::exists(reporting.movedAsideDatabasePath()));
+            QVERIFY(reporting.movedAsideDatabaseWasCorrupt());
+            QCOMPARE(reporting.property("movedAsideDatabasePath").toString(), damaged.movedAsidePath());
+            QCOMPARE(reporting.property("movedAsideDatabaseWasCorrupt").toBool(), true);
+            QFile::remove(damaged.movedAsidePath());
+        }
+
+        // Another program's database: moved aside as foreign.
+        const QString foreignPath = dir.filePath(QStringLiteral("foreign.db"));
+        QVERIFY(execOn(foreignPath, {QStringLiteral("CREATE TABLE notes (text TEXT)")}));
+        {
+            Database foreign(foreignPath);
+            QVERIFY(foreign.open());
+            DataManager reporting(&foreign, nullptr, nullptr, nullptr, nullptr);
+            QVERIFY(reporting.movedAsideDatabasePath().startsWith(foreignPath + QStringLiteral(".foreign-")));
+            QVERIFY(!reporting.movedAsideDatabaseWasCorrupt());
+            QFile::remove(foreign.movedAsidePath());
+        }
+
+        // main() carries the report over when the new file could not be opened either.
+        Database memory(QStringLiteral(":memory:"));
+        QVERIFY(memory.open());
+        DataManager inMemory(&memory, nullptr, nullptr, nullptr, nullptr);
+        QCOMPARE(inMemory.movedAsideDatabasePath(), QString());
+        inMemory.setMovedAsideDatabase(QStringLiteral("/data/sugo.db.corrupt-20261104-120000"), true);
+        QCOMPARE(inMemory.movedAsideDatabasePath(), QStringLiteral("/data/sugo.db.corrupt-20261104-120000"));
+        QVERIFY(inMemory.movedAsideDatabaseWasCorrupt());
+    }
+
     void clearedNotesDoNotStayInTheFile()
     {
         const QByteArray marker("private-note-7f3a91");

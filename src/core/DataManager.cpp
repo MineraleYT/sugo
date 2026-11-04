@@ -99,6 +99,16 @@ DataManager::DataManager(Database *database, SessionRepository *sessions, Preset
     : QObject(parent), m_database(database), m_sessions(sessions), m_presetsRepository(presetsRepository),
       m_presets(presets), m_stats(stats)
 {
+    if (m_database) {
+        m_movedAsidePath = m_database->movedAsidePath();
+        m_movedAsideCorrupt = m_database->movedAsideWasCorrupt();
+    }
+}
+
+void DataManager::setMovedAsideDatabase(const QString &path, bool corrupt)
+{
+    m_movedAsidePath = path;
+    m_movedAsideCorrupt = corrupt;
 }
 
 QString DataManager::databasePath() const
