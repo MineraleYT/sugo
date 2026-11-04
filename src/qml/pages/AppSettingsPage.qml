@@ -167,7 +167,29 @@ QQC2.Page {
     // approval: read it again whenever the Sync tab is shown, so a device signed out or
     // disconnected elsewhere since then disappears from it.
     onCategoryChanged: {
-        if (category === "sync" && SyncController) {
+        // When linked, onSyncDevicesShownChanged does it.
+        if (category === "sync" && SyncController && !syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    // While the tab is on screen, "Last seen" keeps up: read the list again when the window comes
+    // back, every minute (the server moves a device's last_seen at most every 5 minutes), and
+    // after each sync of this device, which the server counts as seeing it.
+    readonly property bool syncDevicesShown: category === "sync" && page.visible && syncLinked
+                                             && !!page.Window.window && page.Window.window.active
+    onSyncDevicesShownChanged: {
+        if (syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    Timer {
+        interval: 60 * 1000
+        repeat: true
+        running: page.syncDevicesShown
+        onTriggered: SyncController.refreshDevices()
+    }
+    onSyncLastSyncChanged: {
+        if (syncDevicesShown) {
             SyncController.refreshDevices();
         }
     }
