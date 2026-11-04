@@ -458,19 +458,20 @@ QQC2.ApplicationWindow {
                 fail(57, "Signed out, the Sync tab does not offer Sign in");
                 return false;
             }
-            // The message place keeps its height when a message comes, long or short.
-            const slot = findItem(page, item => item.objectName === "syncStatusMessage");
-            if (!slot || slot.height <= 0) {
-                fail(58, "The Sync tab's message place is missing");
+            // A message (no keyring, signed out on sugo.stream) goes in the Sign in row's
+            // description, which keeps its height whichever text it shows.
+            const row = findItem(page, item => item.objectName === "syncSignInRow");
+            if (!row || row.height <= 0 || row.descriptionVariants.length < 3) {
+                fail(58, "The Sync tab's Sign in row, or the messages it can show, is missing");
                 return false;
             }
-            const height = slot.height;
-            slot.text = "Smoke test: a message long enough to need more than one line in the Sync tab, so that a place "
-                        + "that grew with its text would show here, and move what is below it.";
-            slot.shown = true;
-            if (Math.abs(slot.height - height) > 0.5) {
-                fail(58, "A message changed the height of the Sync tab's message place: " + height + " → " + slot.height);
-                return false;
+            const height = row.height;
+            for (const variant of row.descriptionVariants) {
+                row.description = variant;
+                if (Math.abs(row.height - height) > 0.5) {
+                    fail(58, "A message changed the height of the Sync tab's Sign in row: " + height + " → " + row.height);
+                    return false;
+                }
             }
             // Signing out asks first.
             page.requestSyncSignOut();

@@ -305,6 +305,7 @@ private Q_SLOTS:
         a.model->create({{QStringLiteral("name"), QStringLiteral("Local")}});
         QTRY_COMPARE(a.sync->state(), SyncController::Error);
         QCOMPARE(a.sync->errorKind(), SyncController::Server);
+        QVERIFY(SyncController::errorTexts().contains(a.sync->statusText())); // room kept for it
         QCOMPARE(puts(), before + 3);
         QTest::qWait(30 * kUnitMs);
         QCOMPARE(puts(), before + 3); // no loop: again in 5 minutes

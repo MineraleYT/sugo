@@ -59,6 +59,9 @@ class SyncController : public QObject
 
     Q_PROPERTY(State state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged FINAL)
+    /// Every text statusText() can give in the state Error, so the interface can keep room for the
+    /// longest of them.
+    Q_PROPERTY(QStringList errorTexts READ errorTexts CONSTANT FINAL)
     Q_PROPERTY(ErrorKind errorKind READ errorKind NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool keyringAvailable READ keyringAvailable NOTIFY keyringAvailableChanged FINAL)
     Q_PROPERTY(QDateTime lastSync READ lastSync NOTIFY lastSyncChanged FINAL)
@@ -127,6 +130,7 @@ public:
 
     State state() const { return m_state; }
     QString statusText() const;
+    static QStringList errorTexts();
     ErrorKind errorKind() const { return m_errorKind; }
     bool keyringAvailable() const;
     QDateTime lastSync() const;
@@ -213,6 +217,8 @@ Q_SIGNALS:
     void showSyncPageRequested(const QString &activationToken);
 
 private:
+    /// What statusText() says in the state Error about `kind` (empty for NoError).
+    static QString errorText(ErrorKind kind);
     enum class Op { None, Pull, Push };
 
     SyncController(Settings::Ptr settings, std::unique_ptr<SecretStore> ownedStore, SecretStore *store, const QUrl &baseUrl,

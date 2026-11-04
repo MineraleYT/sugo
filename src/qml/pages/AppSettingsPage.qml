@@ -150,6 +150,7 @@ QQC2.Page {
     readonly property bool syncLinked: SyncController !== null
                                        && (syncState === SyncController.Idle || syncSyncing || syncError)
     readonly property int syncErrorKind: SyncController ? SyncController.errorKind : 0
+    readonly property string syncStatusText: SyncController ? SyncController.statusText : ""
     readonly property bool syncKeyring: SyncController ? SyncController.keyringAvailable : true
     readonly property bool syncSignedOutRemotely: syncOff && SyncController !== null
                                                   && syncErrorKind === SyncController.SignedOutRemotely
@@ -163,6 +164,17 @@ QQC2.Page {
         return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
     }
     readonly property var syncDevices: SyncController ? SyncController.devices : []
+    readonly property string syncSignInText:
+        i18n("Your browser opens sugo.stream, where you sign in and enter a code that Sugo shows here.")
+    readonly property string syncSignedOutRemotelyText:
+        i18n("This device was disconnected on sugo.stream. Sign in again to keep syncing.")
+    readonly property string syncNoKeyringText: DesktopStyle.macos
+        ? i18n("Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use the Keychain, then restart Sugo.")
+        : i18n("Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock one (for example KWallet or GNOME Keyring), then restart Sugo.")
+    readonly property string syncEnterCodeText:
+        i18n("Sign in on sugo.stream in your browser and enter the code. Sugo goes on by itself once you have.")
+    readonly property string syncLimitText:
+        i18n("Your account already links as many devices as the plan allows. Disconnect one on sugo.stream to free a place: Sugo goes on by itself.")
     // The device list is otherwise read only when this computer becomes ready and after an
     // approval: read it again whenever the Sync tab is shown, so a device signed out or
     // disconnected elsewhere since then disappears from it.
@@ -1548,11 +1560,16 @@ QQC2.Page {
                         onAccepted: syncSignInButton.clicked()
                     }
                 }
+                // What keeps Sugo Sync from starting is said here, in a description that keeps the
+                // height of its longest text (the toast tells what happened once, this how things are).
                 SettingRow {
+                    objectName: "syncSignInRow"
                     visible: page.syncOff
                     title: i18n("Sign in")
-                    description: i18n("Your browser opens sugo.stream, where you sign in and enter a code that Sugo shows here.")
-                    enabled: page.syncKeyring
+                    description: !page.syncKeyring ? page.syncNoKeyringText
+                               : page.syncSignedOutRemotely ? page.syncSignedOutRemotelyText
+                               : page.syncSignInText
+                    descriptionVariants: [page.syncSignInText, page.syncNoKeyringText, page.syncSignedOutRemotelyText]
                     SButton {
                         id: syncSignInButton
                         objectName: "syncSignInButton"
@@ -1572,7 +1589,8 @@ QQC2.Page {
                     first: true
                     visible: page.syncSigningIn
                     title: i18n("Enter this code on sugo.stream")
-                    description: i18n("Sign in on sugo.stream in your browser and enter the code. Sugo goes on by itself once you have.")
+                    description: page.syncLimit ? page.syncLimitText : page.syncEnterCodeText
+                    descriptionVariants: [page.syncEnterCodeText, page.syncLimitText]
                 }
                 SyncCode {
                     visible: page.syncSigningIn
@@ -1662,9 +1680,14 @@ QQC2.Page {
                 SettingRow {
                     first: true
                     visible: page.syncLinked
+                    objectName: "syncTimersRow"
                     title: i18n("Timers")
-                    description: page.syncLastSync.length > 0 ? i18n("Last synced %1", page.syncLastSync) : i18n("Not synced yet")
+                    // What went wrong, else when the timers last synced; as tall as the longest.
+                    description: page.syncError && page.syncStatusText.length > 0 ? page.syncStatusText
+                               : page.syncLastSync.length > 0 ? i18n("Last synced %1", page.syncLastSync)
+                               : i18n("Not synced yet")
                     descriptionVariants: [i18n("Last synced %1", page.syncLastSync), i18n("Not synced yet")]
+                                         .concat(SyncController ? SyncController.errorTexts : [])
                     StatusPill {
                         objectName: "syncStatusPill"
                         text: page.syncSyncing ? i18n("Syncing")
@@ -1683,33 +1706,6 @@ QQC2.Page {
                         iconName: "refresh"
                         enabled: !page.syncSyncing
                         onClicked: SyncController.syncNow()
-                    }
-                }
-
-                // What went wrong, or what keeps Sugo Sync from starting, in a place that keeps
-                // its height (the toast tells what happened once, this says how things are).
-                MessageSlot {
-                    objectName: "syncStatusMessage"
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spaceSm
-                    Layout.bottomMargin: Theme.spaceLg
-                    shown: page.syncError || page.syncLimit || (page.syncOff && (!page.syncKeyring || page.syncSignedOutRemotely))
-                    tone: page.syncError
-                          ? (page.syncErrorKind === SyncController.Network || page.syncErrorKind === SyncController.RateLimited ? "warning" : "danger")
-                          : page.syncSignedOutRemotely ? "info" : "warning"
-                    text: {
-                        if (!SyncController) {
-                            return "";
-                        }
-                        if (page.syncOff && !page.syncKeyring) {
-                            return DesktopStyle.macos
-                                ? i18n("Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use the Keychain, then restart Sugo.")
-                                : i18n("Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock one (for example KWallet or GNOME Keyring), then restart Sugo.");
-                        }
-                        if (page.syncLimit) {
-                            return i18n("Your account already links as many devices as the plan allows. Disconnect one on sugo.stream to free a place: Sugo goes on by itself.");
-                        }
-                        return SyncController.statusText;
                     }
                 }
             }

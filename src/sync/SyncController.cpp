@@ -13,6 +13,7 @@
 #include "SyncSecrets.h"
 
 #include <QLoggingCategory>
+#include <QMetaEnum>
 #include <QSysInfo>
 
 #include <algorithm>
@@ -702,7 +703,12 @@ QString SyncController::statusText() const
     case Error:
         break;
     }
-    switch (m_errorKind) {
+    return errorText(m_errorKind);
+}
+
+QString SyncController::errorText(ErrorKind kind)
+{
+    switch (kind) {
     case Network:
         return i18n("Cannot reach Sugo Sync. Trying again later.");
     case FormatTooNew:
@@ -725,6 +731,19 @@ QString SyncController::statusText() const
         break;
     }
     return QString();
+}
+
+QStringList SyncController::errorTexts()
+{
+    QStringList texts;
+    const QMetaEnum kinds = QMetaEnum::fromType<ErrorKind>();
+    for (int i = 0; i < kinds.keyCount(); ++i) {
+        const QString text = errorText(static_cast<ErrorKind>(kinds.value(i)));
+        if (!text.isEmpty() && !texts.contains(text)) {
+            texts.append(text);
+        }
+    }
+    return texts;
 }
 
 bool SyncController::keyringAvailable() const
