@@ -28,6 +28,7 @@ Run these checks in a fresh user profile where practical. Record the application
 
 - [ ] Complete and interrupt sessions; confirm completed and interrupted records appear with the correct durations.
 - [ ] Check daily totals, streaks, previous/next period navigation, and chart ranges across a day boundary.
+- [ ] Record only breaks in a day (skip or interrupt the work under the minimum): the day's chart shows the green break bars, and "No focus time in this period yet." stays hidden.
 - [ ] Back up the database, change presets and history, restore the backup, and confirm both are restored.
 - [ ] Try restoring an invalid or newer-schema backup; confirm it is rejected without replacing current data.
 - [ ] Clear session history and confirm presets remain intact.

@@ -306,9 +306,10 @@ QQC2.Page {
                                 }
                                 Behavior on height { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
 
-                                // Breaks: a green cap on top of the bar.
+                                // Breaks: a green cap on top of the bar, or on the empty stub when
+                                // there were only breaks (the chart then has data to show).
                                 Rectangle {
-                                    visible: bucket.modelData.breakSeconds > 0 && bucket.modelData.workSeconds > 0
+                                    visible: bucket.modelData.breakSeconds > 0
                                     anchors.bottom: parent.top
                                     anchors.bottomMargin: Theme.hairline * 2
                                     width: parent.width
