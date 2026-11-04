@@ -62,21 +62,58 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash .github/scripts/ci-changes.sh "$BASE" "$HEAD"
 
+  # The system the Linux jobs run in: .github/ci-image/Dockerfile, every build dependency installed,
+  # on ghcr.io tagged with a hash of the Dockerfile. Built and pushed only when that tag is missing,
+  # i.e. the first time after the Dockerfile changes; otherwise a check of a few seconds.
+  image:
+    name: CI image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - name: Check out the Dockerfile
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/ci-image
+          sparse-checkout-cone-mode: false
+
+      - name: Name the image
+        id: name
+        run: |
+          tag=$(sha256sum .github/ci-image/Dockerfile | cut -c1-16)
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sugo-ci:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build the image if it is missing
+        env:
+          IMAGE: ${{ steps.name.outputs.image }}
+          TOKEN: ${{ github.token }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "$IMAGE is already there"
+            exit 0
+          fi
+          docker build --pull --tag "$IMAGE" .github/ci-image
+          docker push "$IMAGE"
+
   build-and-test:
-    needs: changes
+    needs: [changes, image]
     if: needs.changes.outputs.linux == 'true'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      # The runner's user id, the owner of the workspace (see the Dockerfile).
+      options: --user 1001
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install build dependencies
-        uses: ./.github/actions/apt-install
-        with:
-          packages: >-
-            appstream desktop-file-utils cmake ninja-build g++ ccache dbus-daemon
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools
-            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 
       - name: Validate metadata
         run: |
@@ -85,15 +122,16 @@ jobs:
 
       # The compiler cache of the newest run on this branch, else on the branch a pull request
       # targets, else on main (the branches a run may read caches from): only what changed recompiles.
+      # "image" in the name: a cache saved outside the container does not unpack inside it.
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          key: ccache-image-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ github.ref_name }}-
-            ccache-${{ runner.os }}-${{ github.base_ref || 'main' }}-
-            ccache-${{ runner.os }}-main-
+            ccache-image-${{ github.ref_name }}-
+            ccache-image-${{ github.base_ref || 'main' }}-
+            ccache-image-main-
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -119,30 +157,29 @@ jobs:
   # Clang's warnings are close to those of Apple's compiler: they show up here before the macOS job.
   build-clang:
     name: Build with Clang
-    needs: changes
+    needs: [changes, image]
     if: needs.changes.outputs.clang == 'true'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+      # The runner's user id, the owner of the workspace (see the Dockerfile).
+      options: --user 1001
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install build dependencies
-        uses: ./.github/actions/apt-install
-        with:
-          packages: >-
-            cmake ninja-build clang ccache
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools
-            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
 
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-clang-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          key: ccache-clang-image-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            ccache-clang-${{ runner.os }}-${{ github.ref_name }}-
-            ccache-clang-${{ runner.os }}-${{ github.base_ref || 'main' }}-
-            ccache-clang-${{ runner.os }}-main-
+            ccache-clang-image-${{ github.ref_name }}-
+            ccache-clang-image-${{ github.base_ref || 'main' }}-
+            ccache-clang-image-main-
 
       - name: Configure
         run: |
