@@ -97,7 +97,9 @@ QQC2.Control {
         }
     }
 
+    // Only for the field being edited: scrolling the page over a field must not change it.
     WheelHandler {
+        enabled: input.activeFocus
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         onWheel: event => field.setValue(field.value + (event.angleDelta.y > 0 ? 1 : -1))
     }
