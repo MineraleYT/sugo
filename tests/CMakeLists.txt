@@ -116,3 +116,7 @@ add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )
 set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
+
+# --- macOS port: B1 menu bar icon, notifications, single instance, Dock ---
+sugo_add_test(tst_localsingleinstance Qt6::Core Qt6::Network)
+sugo_add_test(tst_macnotificationmapping Qt6::Core)

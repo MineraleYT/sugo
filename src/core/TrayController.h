@@ -21,6 +21,9 @@ class TimerEngine;
  * as a badge on the icon), offers start/pause, stop and skip in its menu, and shows or
  * hides the window when clicked. Created and removed as the "Show tray icon" setting
  * changes.
+ *
+ * On macOS the icon sits in the menu bar: a click opens the menu (the window is shown from it
+ * or from the Dock), and the idle icon is a monochrome template image.
  */
 class TrayController : public QObject
 {
