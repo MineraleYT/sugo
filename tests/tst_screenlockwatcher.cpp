@@ -4,8 +4,10 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #endif
+#include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include <memory>
@@ -22,6 +24,7 @@ class ScreenLockWatcherTest : public QObject
     Q_OBJECT
 
 private:
+    QTemporaryDir dataDir;
     std::unique_ptr<FakeClock> clock;
     std::unique_ptr<TimerEngine> engine;
     std::unique_ptr<AppSettings> settings;
@@ -30,8 +33,12 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
-        // Keep the settings file away from the user's real configuration.
+        // Keep the settings file away from the user's real configuration: SUGO_DATA_DIR, which
+        // Settings::defaultPath() reads first, in a directory of its own (test mode alone would
+        // leave a file in ~/.qttest, and an exported SUGO_DATA_DIR would be written to).
         QStandardPaths::setTestModeEnabled(true);
+        QVERIFY(dataDir.isValid());
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dataDir.path()));
     }
 
     void init()
