@@ -307,7 +307,7 @@ QQC2.Page {
                     QQC2.ToolTip.text: modelData.label
                     QQC2.ToolTip.delay: Theme.toolTipDelay
                     background: Rectangle {
-                        radius: Theme.radius + 2
+                        radius: Theme.radiusMd
                         color: iconBtn.isSelected ? Theme.selected : (iconBtn.hovered ? Theme.hover : "transparent")
                         border.width: iconBtn.isSelected || iconBtn.visualFocus ? Theme.hairline : 0
                         border.color: iconBtn.visualFocus ? Theme.focusRing : Theme.borderStrong

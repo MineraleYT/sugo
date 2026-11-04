@@ -358,7 +358,7 @@ QQC2.Page {
         Text {
             text: card.title
             color: Theme.foreground
-            font.pixelSize: Theme.fontHeading - 3
+            font.pixelSize: Theme.fontSection
             font.weight: Font.DemiBold
             Layout.fillWidth: true
             elide: Text.ElideRight

@@ -79,7 +79,7 @@ QQC2.Page {
         Text {
             text: figure.value
             color: Theme.foreground
-            font.pixelSize: Theme.fontHeading + 2
+            font.pixelSize: Theme.fontFigure
             font.weight: Font.Medium
             font.features: { "tnum": 1 }
         }
