@@ -221,8 +221,14 @@ bool DataManager::exportHistory(const QUrl &fileUrl)
         return false;
     }
 
+    // A history that cannot be read is not an empty one: an existing file is left as it was.
+    bool readOk = false;
     const QList<SessionRecord> records =
-        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max());
+        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max(), &readOk);
+    if (!readOk) {
+        Q_EMIT operationFailed(i18n("Could not read the session history."));
+        return false;
+    }
     QByteArray data;
     if (csv) {
         QString out = QStringLiteral("id,kind,started_at,ended_at,duration_sec,planned_sec,completed,preset_name,category,note\r\n");

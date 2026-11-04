@@ -557,6 +557,36 @@ private Q_SLOTS:
         QVERIFY(checkpoint());
         QVERIFY2(!fileBytes().contains(marker), "a cleared note is still readable in the database file");
     }
+
+    void exportOfAnUnreadableHistoryLeavesTheFileAlone()
+    {
+        QVERIFY(sessions->insert(sampleRecord()));
+        const QString path = dir.filePath(QStringLiteral("previous.csv"));
+        QVERIFY(manager->exportHistory(QUrl::fromLocalFile(path)));
+        QFile previous(path);
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        const QByteArray before = previous.readAll();
+        previous.close();
+        QVERIFY(before.contains("Pomodoro"));
+
+        // The sessions can no longer be read: that is a failure, not an empty history.
+        QSqlQuery query(QSqlDatabase::database(database->connectionName()));
+        QVERIFY(query.exec(QStringLiteral("DROP TABLE session")));
+        bool ok = true;
+        QVERIFY(sessions->between(0, 2000, &ok).isEmpty());
+        QVERIFY(!ok);
+        QCOMPARE(sessions->count(), -1);
+
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QSignalSpy succeeded(manager.get(), &DataManager::operationSucceeded);
+        QVERIFY(!manager->exportHistory(QUrl::fromLocalFile(path)));
+        QVERIFY(!manager->exportHistory(QUrl::fromLocalFile(dir.filePath(QStringLiteral("new.json")))));
+        QCOMPARE(failed.count(), 2);
+        QCOMPARE(succeeded.count(), 0);
+        QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("new.json"))));
+        QVERIFY(previous.open(QIODevice::ReadOnly));
+        QCOMPARE(previous.readAll(), before);
+    }
 };
 
 QTEST_GUILESS_MAIN(DataManagerTest)
