@@ -162,40 +162,41 @@ private Q_SLOTS:
         QCOMPARE(changed.count(), 1);
     }
 
-    void installingFocusShortcutsReportsAndLooksForThemAgain()
+    void installingFocusShortcutsReportsAndUsesTheShippedNames()
     {
         FakeShortcutTools tools;
         QVERIFY(tools.isValid());
         FakeShortcuts shortcuts;
         QVERIFY(shortcuts.isValid());
-        ShortcutsFocusInstaller installer(tools.programs());
+        ShortcutsFocusInstaller installer(tools.programs(), tools.directory());
+        installer.setTimingForTesting(20, 2000, 2000);
         ShortcutsFocusInhibitor inhibitor(shortcuts.program());
         auto settings = make();
-        settings->setInstallRecheckDelaysForTesting({50});
         settings->attachFocusShortcuts(&inhibitor);
         settings->attachFocusShortcutsInstaller(&installer);
         QVERIFY(settings->focusShortcutsInstallable());
         QTRY_VERIFY(!shortcuts.calls().isEmpty()); // the first list
-        // Names that cannot be file names give way to the default ones.
-        settings->setFocusOnShortcut(QStringLiteral("On/Off"));
-
-        QSignalSpy changed(settings.get(), &AppSettings::focusShortcutsInstallChanged);
-        settings->installFocusShortcuts();
-        QCOMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("installing"));
-        QCOMPARE(settings->focusOnShortcut(), QStringLiteral("Sugo Focus On"));
-        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("opened"));
-        QCOMPARE(tools.calls(QStringLiteral("open")).size(), 2);
-        QVERIFY(tools.calls(QStringLiteral("open")).at(0).contains(QStringLiteral("Sugo Focus On.shortcut")));
-
-        // The user adds them: the next look finds them.
+        // Other names give way to those of the shipped shortcuts.
+        settings->setFocusOnShortcut(QStringLiteral("My Focus"));
+        QTRY_VERIFY(shortcuts.calls().size() >= 2);
         shortcuts.setList({QStringLiteral("Sugo Focus On"), QStringLiteral("Sugo Focus Off")});
+
+        QStringList statuses;
+        connect(settings.get(), &AppSettings::focusShortcutsInstallChanged, this, [&]() { statuses.append(settings->focusShortcutsInstallStatus()); });
+        settings->installFocusShortcuts();
+        QCOMPARE(settings->focusOnShortcut(), QStringLiteral("Sugo Focus On"));
+        QCOMPARE(settings->focusOffShortcut(), QStringLiteral("Sugo Focus Off"));
+        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("done"));
+        QCOMPARE(statuses, (QStringList{QStringLiteral("installing"), QStringLiteral("waitingOn"), QStringLiteral("waitingOff"), QStringLiteral("done")}));
+        QVERIFY(settings->focusShortcutsInstallDetail().isEmpty());
+        // Done: the inhibitor reads its list again and finds both.
         QTRY_VERIFY(inhibitor.isAvailable());
 
-        // Without iCloud.
-        tools.setNeedsICloud();
+        // A failure carries its detail.
+        tools.setFails(QStringLiteral("shortcuts"), "broken");
         settings->installFocusShortcuts();
-        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("needsICloud"));
-        QCOMPARE(tools.calls(QStringLiteral("open")).size(), 2);
+        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("failed"));
+        QVERIFY(settings->focusShortcutsInstallDetail().contains(QStringLiteral("broken")));
     }
 
     void focusAudioAndPowerSettingsPersistAndClamp()

@@ -111,6 +111,14 @@ The arguments are the version, as for the AppImage, and the folder that receives
 
 The app is not signed with a Developer ID nor notarized, so Gatekeeper asks users to confirm the first launch (see the README). `SIGN_IDENTITY="Developer ID Application: …"` signs with that identity and the hardened runtime instead; notarization is not done by the script.
 
+### The Focus shortcuts
+
+On macOS Sugo silences notifications by running two shortcuts of the Shortcuts app, "Sugo Focus On" (Set Focus: Do Not Disturb on, until turned off) and "Sugo Focus Off" (Do Not Disturb off). The app ships them, signed by Apple, in `data/shortcuts/` (bundled into `Sugo.app/Contents/Resources/shortcuts/`); "Install Shortcuts" (settings, welcome tour) opens one, waits until the user has added it (`shortcuts list`), then opens the other. Opening a signed file needs no iCloud on the user's Mac, but signing it does, so the files are made once by a maintainer:
+
+1. On a Mac signed into iCloud, create the two shortcuts in Shortcuts, each with the single action "Set Focus" ("Imposta Full immersion" in the Italian interface): "Sugo Focus On" turns Do Not Disturb on until turned off, "Sugo Focus Off" turns it off. The names must be exactly these: the file name becomes the shortcut's name, and Sugo looks for them.
+2. Select each and choose File → Export, then "Anyone" (not "People Who Know Me"), and save it as `Sugo Focus On.shortcut` / `Sugo Focus Off.shortcut`. Such a file starts with `AEA1` (an Apple Encrypted Archive carrying Apple's signature); `tst_shortcutsfocusinstaller` checks that.
+3. Replace the files in `data/shortcuts/` (keep their `.license` files), and check on a Mac without iCloud, or another user account, that opening each shows the "Add Shortcut" sheet.
+
 To try the result, open the disk image, or run `tests/smoke_app.sh` on `Sugo.app/Contents/MacOS/Sugo` (it needs GNU `timeout`: `brew install coreutils` and put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`). In CI, `macos.yml` builds it and starts it without a display; `nightly.yml` and `release.yml` publish it when that succeeds, and publish the Linux packages without it when it fails.
 
 ---

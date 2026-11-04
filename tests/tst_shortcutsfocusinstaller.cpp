@@ -1,77 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QDir>
 #include <QFile>
-#include <QProcess>
 #include <QSignalSpy>
 #include <QTest>
-#include <QVariant>
-#include <QXmlStreamReader>
 
 #include <memory>
 
 #include "FakeShortcutTools.h"
 #include "ShortcutsFocusInstaller.h"
 
-using Result = ShortcutsFocusInstaller::Result;
+using State = ShortcutsFocusInstaller::State;
 
 namespace
 {
 const QString kOn = QStringLiteral("Sugo Focus On");
 const QString kOff = QStringLiteral("Sugo Focus Off");
-
-// A property list's value, read with QXmlStreamReader: dict → QVariantMap, array → QVariantList,
-// string → QString, integer → qlonglong. The reader stands on the value's start element.
-QVariant readValue(QXmlStreamReader &xml)
-{
-    const QStringView tag = xml.name();
-    if (tag == QLatin1String("dict")) {
-        QVariantMap map;
-        QString key;
-        while (xml.readNextStartElement()) {
-            if (xml.name() == QLatin1String("key")) {
-                key = xml.readElementText();
-            } else {
-                map.insert(key, readValue(xml));
-            }
-        }
-        return map;
-    }
-    if (tag == QLatin1String("array")) {
-        QVariantList list;
-        while (xml.readNextStartElement()) {
-            list.append(readValue(xml));
-        }
-        return list;
-    }
-    if (tag == QLatin1String("integer")) {
-        return xml.readElementText().toLongLong();
-    }
-    if (tag == QLatin1String("string")) {
-        return xml.readElementText();
-    }
-    xml.raiseError(QStringLiteral("unexpected element ") + tag.toString());
-    return {};
-}
-
-QVariantMap readPlist(const QByteArray &data, QString *error)
-{
-    QXmlStreamReader xml(data);
-    QVariantMap root;
-    if (xml.readNextStartElement() && xml.name() == QLatin1String("plist") && xml.readNextStartElement()) {
-        root = readValue(xml).toMap();
-    }
-    *error = xml.hasError() ? xml.errorString() : QString();
-    return root;
-}
-
-QByteArray readFile(const QString &path)
-{
-    QFile file(path);
-    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-}
 } // namespace
 
-/// Writing, signing and opening the Focus shortcuts, against fake plutil/shortcuts/open.
+/// Opening the shipped Focus shortcuts and waiting for the user to add them, against fake
+/// `shortcuts` and `open` programs.
 class ShortcutsFocusInstallerTest : public QObject
 {
     Q_OBJECT
@@ -80,14 +27,23 @@ private:
     std::unique_ptr<FakeShortcutTools> tools;
     std::unique_ptr<ShortcutsFocusInstaller> installer;
 
-    /// Runs an installation to its end; the result and message of finished().
-    std::pair<Result, QString> installAndWait(const QString &on = kOn, const QString &off = kOff)
+    /// Runs an installation to its end; whether it went well, and the message.
+    std::pair<bool, QString> installAndWait()
     {
         QSignalSpy finished(installer.get(), &ShortcutsFocusInstaller::finished);
-        if (!installer->install(on, off) || !finished.wait(10000)) {
-            return {Result::Failed, QStringLiteral("<no answer>")};
+        if (!installer->install() || !finished.wait(10000)) {
+            return {false, QStringLiteral("<no answer>")};
         }
-        return {finished.at(0).at(0).value<Result>(), finished.at(0).at(1).toString()};
+        return {finished.at(0).at(0).toBool(), finished.at(0).at(1).toString()};
+    }
+
+    static QList<State> states(const QSignalSpy &spy)
+    {
+        QList<State> found;
+        for (const auto &arguments : spy) {
+            found.append(arguments.at(0).value<State>());
+        }
+        return found;
     }
 
 private Q_SLOTS:
@@ -95,8 +51,8 @@ private Q_SLOTS:
     {
         tools = std::make_unique<FakeShortcutTools>();
         QVERIFY(tools->isValid());
-        installer = std::make_unique<ShortcutsFocusInstaller>(tools->programs());
-        installer->setTimeoutForTesting(2000);
+        installer = std::make_unique<ShortcutsFocusInstaller>(tools->programs(), tools->directory());
+        installer->setTimingForTesting(20, 2000, 2000);
     }
 
     void cleanup()
@@ -105,127 +61,80 @@ private Q_SLOTS:
         tools.reset();
     }
 
-    void theShortcutsSetTheFocus_data()
+    void theNamesAreFixed()
     {
-        QTest::addColumn<bool>("turnOn");
-        QTest::newRow("on") << true;
-        QTest::newRow("off") << false;
+        QCOMPARE(ShortcutsFocusInstaller::onName(), kOn);
+        QCOMPARE(ShortcutsFocusInstaller::offName(), kOff);
+        QVERIFY(ShortcutsFocusInstaller::bundledDirectory().endsWith(QStringLiteral("Resources/shortcuts")));
     }
 
-    void theShortcutsSetTheFocus()
+    void opensOneAfterTheOtherOnceEachIsAdded()
     {
-        QFETCH(bool, turnOn);
-        QString error;
-        const QVariantMap shortcut = readPlist(ShortcutsFocusInstaller::shortcutPlist(turnOn), &error);
-        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QSignalSpy changed(installer.get(), &ShortcutsFocusInstaller::stateChanged);
+        const auto [ok, message] = installAndWait();
+        QVERIFY2(ok, qPrintable(message));
+        QCOMPARE(installer->state(), State::Done);
+        QCOMPARE(states(changed), (QList<State>{State::Installing, State::WaitingForOn, State::WaitingForOff, State::Done}));
 
-        QVERIFY(shortcut.value(QStringLiteral("WFWorkflowClientVersion")).toString().size() > 0);
-        QVERIFY(shortcut.contains(QStringLiteral("WFWorkflowMinimumClientVersion")));
-        QVERIFY(shortcut.value(QStringLiteral("WFWorkflowIcon")).toMap().contains(QStringLiteral("WFWorkflowIconGlyphNumber")));
-        QVERIFY(shortcut.contains(QStringLiteral("WFWorkflowTypes")));
-        QVERIFY(shortcut.contains(QStringLiteral("WFWorkflowInputContentItemClasses")));
-
-        const QVariantList actions = shortcut.value(QStringLiteral("WFWorkflowActions")).toList();
-        QCOMPARE(actions.size(), 1);
-        const QVariantMap action = actions.at(0).toMap();
-        QCOMPARE(action.value(QStringLiteral("WFWorkflowActionIdentifier")).toString(), QStringLiteral("is.workflow.actions.dnd.set"));
-        const QVariantMap parameters = action.value(QStringLiteral("WFWorkflowActionParameters")).toMap();
-        QCOMPARE(parameters.value(QStringLiteral("Enabled")).toLongLong(), turnOn ? 1 : 0);
-        const QVariantMap focus = parameters.value(QStringLiteral("FocusModes")).toMap();
-        QCOMPARE(focus.value(QStringLiteral("Identifier")).toString(), QStringLiteral("com.apple.donotdisturb.mode.default"));
-        QCOMPARE(focus.value(QStringLiteral("DisplayString")).toString(), QStringLiteral("Do Not Disturb"));
-        // On until turned off; turning off needs no duration.
-        QCOMPARE(parameters.value(QStringLiteral("AssertionType")).toString(), turnOn ? QStringLiteral("Turned Off") : QString());
-        QCOMPARE(parameters.size(), turnOn ? 3 : 2);
+        // list, open On, list (On is there) …, open Off, list (Off is there): never both sheets at once.
+        const QStringList calls = tools->calls();
+        const QStringList opens = tools->calls(QStringLiteral("open"));
+        QCOMPARE(opens.size(), 2);
+        QCOMPARE(opens.at(0), QStringLiteral("open|") + QDir(tools->directory()).filePath(kOn + QStringLiteral(".shortcut")) + QLatin1Char('|'));
+        QCOMPARE(opens.at(1), QStringLiteral("open|") + QDir(tools->directory()).filePath(kOff + QStringLiteral(".shortcut")) + QLatin1Char('|'));
+        const qsizetype firstOpen = calls.indexOf(opens.at(0));
+        const qsizetype secondOpen = calls.indexOf(opens.at(1));
+        QCOMPARE(calls.first(), QStringLiteral("shortcuts|list|"));
+        QVERIFY(secondOpen > firstOpen + 1);
+        QCOMPARE(calls.at(firstOpen + 1), QStringLiteral("shortcuts|list|"));
+        QCOMPARE(calls.last(), QStringLiteral("shortcuts|list|"));
     }
 
-    void namesMustBeFileNames()
+    void shortcutsAlreadyThereGetNoSheet()
     {
-        QVERIFY(ShortcutsFocusInstaller::isValidName(kOn));
-        QVERIFY(ShortcutsFocusInstaller::isValidName(QStringLiteral("Fokus an (Sugo)")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QString()));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral("  ")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral(" padded")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral("../escape")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral("a/b")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral("a:b")));
-        QVERIFY(!ShortcutsFocusInstaller::isValidName(QStringLiteral(".hidden")));
+        tools->setList({QStringLiteral("Something else"), kOn});
+        QSignalSpy changed(installer.get(), &ShortcutsFocusInstaller::stateChanged);
+        const auto [ok, message] = installAndWait();
+        QVERIFY2(ok, qPrintable(message));
+        QCOMPARE(states(changed), (QList<State>{State::Installing, State::WaitingForOff, State::Done}));
+        const QStringList opens = tools->calls(QStringLiteral("open"));
+        QCOMPARE(opens.size(), 1);
+        QVERIFY(opens.at(0).contains(kOff + QStringLiteral(".shortcut")));
+
+        // Both there: nothing opened at all.
+        const auto [again, againMessage] = installAndWait();
+        QVERIFY2(again, qPrintable(againMessage));
+        QCOMPARE(tools->calls(QStringLiteral("open")).size(), 1);
     }
 
-    void recognisesTheICloudError()
+    void aMissingFileFailsWithoutRunningAnything()
     {
-        QVERIFY(ShortcutsFocusInstaller::isICloudError(QStringLiteral("Error: In order to do this, you must be signed into iCloud.")));
-        QVERIFY(!ShortcutsFocusInstaller::isICloudError(QStringLiteral("Error: The file couldn't be opened.")));
+        tools->removeFile(kOff);
+        const auto [ok, message] = installAndWait();
+        QVERIFY(!ok);
+        QCOMPARE(installer->state(), State::Failed);
+        QVERIFY2(message.contains(QStringLiteral("missing file")), qPrintable(message));
+        QVERIFY(tools->calls().isEmpty());
     }
 
-    void writesSignsAndOpensBothShortcuts()
-    {
-        const auto [result, message] = installAndWait();
-        QCOMPARE(result, Result::Opened);
-        QVERIFY(message.isEmpty());
-
-        const QDir dir(installer->workDirectory());
-        const QString unsignedOn = dir.filePath(QStringLiteral("unsigned/Sugo Focus On.shortcut"));
-        const QString unsignedOff = dir.filePath(QStringLiteral("unsigned/Sugo Focus Off.shortcut"));
-        const QString signedOn = dir.filePath(QStringLiteral("signed/Sugo Focus On.shortcut"));
-        const QString signedOff = dir.filePath(QStringLiteral("signed/Sugo Focus Off.shortcut"));
-        // Named after the shortcuts, with the right content (the fake tools copy it unchanged).
-        QCOMPARE(readFile(signedOn), ShortcutsFocusInstaller::shortcutPlist(true));
-        QCOMPARE(readFile(signedOff), ShortcutsFocusInstaller::shortcutPlist(false));
-
-        const auto sign = [](const QString &in, const QString &out) {
-            return QStringLiteral("shortcuts|sign|--mode|anyone|--input|%1|--output|%2|").arg(in, out);
-        };
-        QCOMPARE(tools->calls(),
-                 (QStringList{
-                     QStringLiteral("plutil|-convert|binary1|") + unsignedOn + QLatin1Char('|'),
-                     sign(unsignedOn, signedOn),
-                     QStringLiteral("plutil|-convert|binary1|") + unsignedOff + QLatin1Char('|'),
-                     sign(unsignedOff, signedOff),
-                     // Opened only once both are signed, "on" first.
-                     QStringLiteral("open|") + signedOn + QLatin1Char('|'),
-                     QStringLiteral("open|") + signedOff + QLatin1Char('|'),
-                 }));
-        QVERIFY(!installer->isRunning());
-    }
-
-    void usesTheGivenNames()
-    {
-        const auto [result, message] = installAndWait(QStringLiteral("Mine On"), QStringLiteral("Mine Off"));
-        QCOMPARE(result, Result::Opened);
-        const QDir dir(installer->workDirectory());
-        QVERIFY(QFile::exists(dir.filePath(QStringLiteral("signed/Mine On.shortcut"))));
-        QVERIFY(QFile::exists(dir.filePath(QStringLiteral("signed/Mine Off.shortcut"))));
-    }
-
-    void withoutICloudNothingIsOpened()
-    {
-        tools->setNeedsICloud();
-        const auto [result, message] = installAndWait();
-        QCOMPARE(result, Result::NeedsICloud);
-        QVERIFY(message.contains(QStringLiteral("iCloud")));
-        QCOMPARE(tools->calls(QStringLiteral("shortcuts")).size(), 1); // stops at the first signature
-        QVERIFY(tools->calls(QStringLiteral("open")).isEmpty());
-    }
-
-    void otherErrorsFail_data()
+    void toolErrorsFail_data()
     {
         QTest::addColumn<QString>("program");
-        QTest::newRow("plutil") << QStringLiteral("plutil");
-        QTest::newRow("sign") << QStringLiteral("shortcuts");
+        QTest::newRow("shortcuts") << QStringLiteral("shortcuts");
         QTest::newRow("open") << QStringLiteral("open");
     }
 
-    void otherErrorsFail()
+    void toolErrorsFail()
     {
         QFETCH(QString, program);
         tools->setFails(program, "Error: something broke");
-        const auto [result, message] = installAndWait();
-        QCOMPARE(result, Result::Failed);
+        const auto [ok, message] = installAndWait();
+        QVERIFY(!ok);
+        QCOMPARE(installer->message(), message);
         QVERIFY2(message.contains(QStringLiteral("something broke")), qPrintable(message));
         QVERIFY2(message.startsWith(program), qPrintable(message));
         QCOMPARE(tools->calls(program).size(), 1); // nothing after the failure
-        if (program != QStringLiteral("open")) {
+        if (program == QStringLiteral("shortcuts")) {
             QVERIFY(tools->calls(QStringLiteral("open")).isEmpty());
         }
     }
@@ -233,68 +142,57 @@ private Q_SLOTS:
     void aMissingToolFails()
     {
         ShortcutsFocusInstaller::Programs programs = tools->programs();
-        programs.shortcuts = QStringLiteral("/nonexistent/sugo-test/shortcuts");
-        installer = std::make_unique<ShortcutsFocusInstaller>(programs);
-        const auto [result, message] = installAndWait();
-        QCOMPARE(result, Result::Failed);
-        QVERIFY(tools->calls(QStringLiteral("open")).isEmpty());
+        programs.open = QDir(tools->directory()).filePath(QStringLiteral("no-such-program"));
+        installer = std::make_unique<ShortcutsFocusInstaller>(programs, tools->directory());
+        const auto [ok, message] = installAndWait();
+        QVERIFY(!ok);
+        QVERIFY2(message.startsWith(QStringLiteral("open")), qPrintable(message));
     }
 
     void aToolThatHangsTimesOut()
     {
-        tools->setHangs(QStringLiteral("shortcuts"));
-        installer->setTimeoutForTesting(300);
-        const auto [result, message] = installAndWait();
-        QCOMPARE(result, Result::Failed);
+        tools->setHangs(QStringLiteral("open"));
+        installer->setTimingForTesting(20, 2000, 300);
+        const auto [ok, message] = installAndWait();
+        QVERIFY(!ok);
         QVERIFY2(message.contains(QStringLiteral("no answer")), qPrintable(message));
     }
 
-    void invalidNamesFailWithoutRunningAnything()
+    void givesUpWhenTheUserNeverAdds()
     {
-        QCOMPARE(installAndWait(QStringLiteral("a/b"), kOff).first, Result::Failed);
-        QCOMPARE(installAndWait(kOn, QString()).first, Result::Failed);
-        QCOMPARE(installAndWait(kOn, kOn).first, Result::Failed);
-        QVERIFY(tools->calls().isEmpty());
+        tools->setIgnored();
+        installer->setTimingForTesting(20, 300, 2000);
+        QSignalSpy changed(installer.get(), &ShortcutsFocusInstaller::stateChanged);
+        const auto [ok, message] = installAndWait();
+        QVERIFY(!ok);
+        QVERIFY2(message.contains(kOn), qPrintable(message));
+        QCOMPARE(states(changed), (QList<State>{State::Installing, State::WaitingForOn, State::Failed}));
+        QCOMPARE(tools->calls(QStringLiteral("open")).size(), 1); // "Off" never opened
+        QVERIFY(tools->calls(QStringLiteral("shortcuts")).size() >= 3); // it kept looking
     }
 
     void oneInstallationAtATime()
     {
+        tools->setIgnored();
+        installer->setTimingForTesting(20, 300, 2000);
         QSignalSpy finished(installer.get(), &ShortcutsFocusInstaller::finished);
-        QVERIFY(installer->install(kOn, kOff));
+        QVERIFY(installer->install());
         QVERIFY(installer->isRunning());
-        QVERIFY(!installer->install(kOn, kOff));
-        QVERIFY(finished.wait(10000));
-        QTest::qWait(100);
+        QVERIFY(!installer->install());
+        QVERIFY(finished.wait(5000));
+        QVERIFY(!installer->isRunning());
         QCOMPARE(finished.count(), 1);
-        QCOMPARE(tools->calls(QStringLiteral("open")).size(), 2);
     }
 
-    /// macOS, opt-in (SUGO_TEST_SHORTCUTS_SIGN=1): the real plutil and `shortcuts sign` accept
-    /// the files. `open` is replaced by /usr/bin/true: nothing reaches the Shortcuts library.
-    /// Without iCloud the result is NeedsICloud, with it Opened. The files go to $TMPDIR.
-    void realToolsAcceptTheShortcuts()
+    /// The files the app ships: Apple-signed shortcuts (Apple Encrypted Archive, "AEA1"), named
+    /// as the installer expects.
+    void theShippedFilesAreSignedShortcuts()
     {
-#ifndef Q_OS_MACOS
-        QSKIP("macOS only");
-#else
-        if (qEnvironmentVariable("SUGO_TEST_SHORTCUTS_SIGN") != QStringLiteral("1")) {
-            QSKIP("set SUGO_TEST_SHORTCUTS_SIGN=1 to run the real plutil and shortcuts sign");
+        for (const QString &name : {kOn, kOff}) {
+            QFile file(QStringLiteral(SUGO_SHORTCUTS_SOURCE_DIR "/") + name + QStringLiteral(".shortcut"));
+            QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(file.fileName()));
+            QCOMPARE(file.read(4), QByteArray("AEA1"));
         }
-        ShortcutsFocusInstaller::Programs programs;
-        programs.open = QStringLiteral("/usr/bin/true");
-        installer = std::make_unique<ShortcutsFocusInstaller>(programs);
-        QSignalSpy finished(installer.get(), &ShortcutsFocusInstaller::finished);
-        QVERIFY(installer->install(kOn, kOff));
-        QVERIFY(finished.wait(90000));
-        const auto result = finished.at(0).at(0).value<Result>();
-        qInfo() << "Result:" << result << finished.at(0).at(1).toString() << "in" << installer->workDirectory();
-        QVERIFY2(result != Result::Failed, qPrintable(finished.at(0).at(1).toString()));
-        const QString unsignedOn = QDir(installer->workDirectory()).filePath(QStringLiteral("unsigned/Sugo Focus On.shortcut"));
-        QProcess lint;
-        lint.start(QStringLiteral("/usr/bin/plutil"), {QStringLiteral("-lint"), unsignedOn});
-        QVERIFY(lint.waitForFinished(10000));
-        QCOMPARE(lint.exitCode(), 0);
-#endif
     }
 };
 

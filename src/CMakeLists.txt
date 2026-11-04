@@ -33,6 +33,7 @@ qt6_add_qml_module(sugo_core
         qml/components/TopBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
+        qml/components/MessageSlot.qml
         qml/components/FocusShortcutsStatus.qml
         qml/components/FormSection.qml
         qml/components/FormRow.qml
@@ -365,4 +366,14 @@ if(NOT APPLE)
         platform/SecretServiceStore.h
         platform/SecretServiceStore.cpp
     )
+endif()
+
+# --- macOS port: W5 shipped Focus shortcuts ---
+# The two Apple-signed shortcuts ShortcutsFocusInstaller opens, in Sugo.app/Contents/Resources/shortcuts/.
+if(APPLE)
+    foreach(shortcut IN ITEMS "Sugo Focus On.shortcut" "Sugo Focus Off.shortcut")
+        set(shortcut_file "${PROJECT_SOURCE_DIR}/data/shortcuts/${shortcut}")
+        set_source_files_properties("${shortcut_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shortcuts")
+        target_sources(sugo PRIVATE "${shortcut_file}")
+    endforeach()
 endif()

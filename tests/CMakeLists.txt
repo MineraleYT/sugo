@@ -146,5 +146,7 @@ sugo_add_test(tst_shortcutsfocusinhibitor Qt6::Core)
 sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)
 
 # --- macOS port: W4 install the Focus shortcuts ---
-# Runs on Linux too, with fake plutil/shortcuts/open scripts (tests/FakeShortcutTools.h).
+# Runs on Linux too, with fake shortcuts/open scripts (tests/FakeShortcutTools.h); also checks
+# the shipped files in data/shortcuts.
 sugo_add_test(tst_shortcutsfocusinstaller Qt6::Core)
+target_compile_definitions(tst_shortcutsfocusinstaller PRIVATE SUGO_SHORTCUTS_SOURCE_DIR="${PROJECT_SOURCE_DIR}/data/shortcuts")

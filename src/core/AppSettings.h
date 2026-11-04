@@ -104,8 +104,8 @@ class AppSettings : public QObject
     Q_PROPERTY(bool focusShortcutsSupported READ focusShortcutsSupported NOTIFY focusShortcutNamesChanged FINAL)
     /// macOS: Sugo can install the two shortcuts itself (installFocusShortcuts()).
     Q_PROPERTY(bool focusShortcutsInstallable READ focusShortcutsInstallable NOTIFY focusShortcutsInstallChanged FINAL)
-    /// Where the last installFocusShortcuts() got: "" (never asked), "installing", "opened" (the
-    /// Shortcuts app asks the user to add them), "needsICloud", "failed".
+    /// Where the last installFocusShortcuts() got: "" (never asked), "installing", "waitingOn" /
+    /// "waitingOff" (the Shortcuts app asks the user to add that shortcut), "done", "failed".
     Q_PROPERTY(QString focusShortcutsInstallStatus READ focusShortcutsInstallStatus NOTIFY focusShortcutsInstallChanged FINAL)
     /// A technical detail of a "failed" installation (the tool's error).
     Q_PROPERTY(QString focusShortcutsInstallDetail READ focusShortcutsInstallDetail NOTIFY focusShortcutsInstallChanged FINAL)
@@ -207,15 +207,14 @@ public:
     bool focusShortcutsInstallable() const { return !m_focusInstaller.isNull(); }
     QString focusShortcutsInstallStatus() const { return m_focusInstallStatus; }
     QString focusShortcutsInstallDetail() const { return m_focusInstallDetail; }
-    /// Writes, signs and opens the two Focus shortcuts (see ShortcutsFocusInstaller), under the
-    /// chosen names (the default ones if those cannot be file names); the Shortcuts app then asks
-    /// the user to add each. Without an installer (Linux, smoke runs) reports "failed".
+    /// Opens the two Focus shortcuts shipped in the app, one after the other (see
+    /// ShortcutsFocusInstaller); the Shortcuts app asks the user to add each. Sets the shortcut
+    /// names back to those of the shipped shortcuts. Without an installer (Linux, smoke runs)
+    /// reports "failed".
     Q_INVOKABLE void installFocusShortcuts();
     /// The installer installFocusShortcuts() uses. Called once at startup on macOS; tests call
     /// it on Linux with fake programs.
     void attachFocusShortcutsInstaller(ShortcutsFocusInstaller *installer);
-    /// Tests: the delays after which the list of shortcuts is read again once the files are open.
-    void setInstallRecheckDelaysForTesting(const QList<int> &delaysMs) { m_installRecheckMs = delaysMs; }
     /// Puts every preference back to its default, through the setters (so views are told and the
     /// file is updated). Kept: whether the welcome tour was seen, the login entry (it lives on
     /// disk, outside the settings file) and everything that is not a preference of this class
@@ -363,7 +362,5 @@ private:
     QPointer<ShortcutsFocusInstaller> m_focusInstaller;
     QString m_focusInstallStatus;
     QString m_focusInstallDetail;
-    // The user adds the shortcuts in the Shortcuts app's sheets; look for them a few times.
-    QList<int> m_installRecheckMs{4000, 15000, 45000};
     bool m_launchedInBackground = false;
 };

@@ -551,24 +551,30 @@ void AppSettings::attachFocusShortcutsInstaller(ShortcutsFocusInstaller *install
 {
     Q_ASSERT_X(!m_focusInstaller, "AppSettings::attachFocusShortcutsInstaller", "attach once");
     m_focusInstaller = installer;
-    connect(installer, &ShortcutsFocusInstaller::finished, this, [this](ShortcutsFocusInstaller::Result result, const QString &message) {
-        switch (result) {
-        case ShortcutsFocusInstaller::Result::Opened:
-            m_focusInstallStatus = QStringLiteral("opened");
-            m_focusInstallDetail.clear();
-            for (const int delay : std::as_const(m_installRecheckMs)) {
-                QTimer::singleShot(delay, this, &AppSettings::refreshFocusShortcuts);
-            }
+    connect(installer, &ShortcutsFocusInstaller::stateChanged, this, [this](ShortcutsFocusInstaller::State state) {
+        switch (state) {
+        case ShortcutsFocusInstaller::State::Idle:
+            m_focusInstallStatus.clear();
             break;
-        case ShortcutsFocusInstaller::Result::NeedsICloud:
-            m_focusInstallStatus = QStringLiteral("needsICloud");
-            m_focusInstallDetail = message;
+        case ShortcutsFocusInstaller::State::Installing:
+            m_focusInstallStatus = QStringLiteral("installing");
             break;
-        case ShortcutsFocusInstaller::Result::Failed:
+        case ShortcutsFocusInstaller::State::WaitingForOn:
+            m_focusInstallStatus = QStringLiteral("waitingOn");
+            break;
+        case ShortcutsFocusInstaller::State::WaitingForOff:
+            m_focusInstallStatus = QStringLiteral("waitingOff");
+            break;
+        case ShortcutsFocusInstaller::State::Done:
+            m_focusInstallStatus = QStringLiteral("done");
+            // The inhibitor (and the pages) learn the shortcuts are there.
+            refreshFocusShortcuts();
+            break;
+        case ShortcutsFocusInstaller::State::Failed:
             m_focusInstallStatus = QStringLiteral("failed");
-            m_focusInstallDetail = message;
             break;
         }
+        m_focusInstallDetail = state == ShortcutsFocusInstaller::State::Failed ? m_focusInstaller->message() : QString();
         Q_EMIT focusShortcutsInstallChanged();
     });
     Q_EMIT focusShortcutsInstallChanged();
@@ -585,17 +591,10 @@ void AppSettings::installFocusShortcuts()
     if (m_focusInstaller->isRunning()) {
         return;
     }
-    // The shortcuts get the chosen names, so the inhibitor finds them; names that cannot be
-    // file names (or the same name twice) give way to the default ones.
-    if (!ShortcutsFocusInstaller::isValidName(m_focusOnShortcut) || !ShortcutsFocusInstaller::isValidName(m_focusOffShortcut)
-        || m_focusOnShortcut == m_focusOffShortcut) {
-        setFocusOnShortcut(QString(Defaults::focusOnShortcut));
-        setFocusOffShortcut(QString(Defaults::focusOffShortcut));
-    }
-    m_focusInstallStatus = QStringLiteral("installing");
-    m_focusInstallDetail.clear();
-    Q_EMIT focusShortcutsInstallChanged();
-    m_focusInstaller->install(m_focusOnShortcut, m_focusOffShortcut);
+    // The shipped shortcuts have fixed names: the inhibitor must run those.
+    setFocusOnShortcut(ShortcutsFocusInstaller::onName());
+    setFocusOffShortcut(ShortcutsFocusInstaller::offName());
+    m_focusInstaller->install();
 }
 
 void AppSettings::resetToDefaults()

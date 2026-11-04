@@ -1,102 +1,104 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QStringList>
 
 #include <functional>
-#include <memory>
-
-class QTemporaryDir;
 
 /**
- * Installs the two shortcuts ShortcutsFocusInhibitor runs, so the user does not have to build
- * them by hand in the Shortcuts app.
+ * Installs the two shortcuts ShortcutsFocusInhibitor runs, "Sugo Focus On" and "Sugo Focus Off",
+ * so the user does not have to build them by hand in the Shortcuts app.
  *
  * Apple lets no app add a shortcut silently: a signed .shortcut file, opened, shows Shortcuts'
- * "Add Shortcut" sheet, which the user confirms. So install():
- *  1. writes, in a private temporary directory, one shortcut per name as an XML property list
- *     ("<name>.shortcut": the file name becomes the name of the imported shortcut), each with a
- *     single "Set Focus" action (is.workflow.actions.dnd.set) that turns Do Not Disturb on (until
- *     turned off) or off;
- *  2. converts each to a binary property list (`plutil -convert binary1`);
- *  3. signs each (`shortcuts sign --mode anyone`), which needs the Mac to be signed into iCloud:
- *     without it, the tool says so and the result is NeedsICloud;
- *  4. opens the signed files one after the other (`open`, each once the previous `open` has
- *     returned): Shortcuts shows an "Add Shortcut" sheet for each. That the second sheet waits
- *     behind the first could not be checked on a Mac without iCloud (see the manual checklist).
+ * "Add Shortcut" sheet, which the user confirms. The two files ship inside the app
+ * (Sugo.app/Contents/Resources/shortcuts/, from data/shortcuts/), signed by Apple for "Anyone"
+ * when the maintainer exported them (see docs/DEVELOPMENT.md), so installing needs neither
+ * iCloud nor signing on the user's Mac. install():
+ *  1. checks both files are there and reads the user's shortcuts (`shortcuts list`);
+ *  2. for "On", then "Off", unless the user already has it: opens its file (`open`), then reads
+ *     the list again every second until the shortcut appears (the user clicked Add Shortcut), for
+ *     at most three minutes. The second file is opened only once the first shortcut is there, so
+ *     its sheet cannot be lost behind the first one.
  *
- * Every step is an asynchronous QProcess with a timeout, run one at a time; finished() reports
- * the outcome once. Opened only means the sheets were shown: whether the user added the
- * shortcuts shows in the next `shortcuts list`. The files stay until the next install() or the
- * installer's destruction, since Shortcuts reads them after `open` has returned.
+ * Every program runs as an asynchronous QProcess with a timeout, one at a time; the state is
+ * reported as it changes (stateChanged()) and finished() reports the outcome once.
  *
- * Compiled everywhere (plain Qt) and tested on Linux with fake programs.
+ * Compiled everywhere (plain Qt) and tested on Linux with fake programs and files.
  */
 class ShortcutsFocusInstaller final : public QObject
 {
     Q_OBJECT
 
 public:
-    enum class Result {
-        Opened,      ///< Shortcuts was asked to import both; the user adds them.
-        NeedsICloud, ///< Signing needs the Mac to be signed into iCloud.
-        Failed,      ///< Any other error (logged, with the tool's error output).
+    enum class State {
+        Idle,          ///< Never started.
+        Installing,    ///< Checking the files and reading the user's shortcuts.
+        WaitingForOn,  ///< Shortcuts shows the sheet of "Sugo Focus On": the user clicks Add Shortcut.
+        WaitingForOff, ///< The same for "Sugo Focus Off".
+        Done,          ///< Both shortcuts are among the user's shortcuts.
+        Failed,        ///< Missing files, a tool's error, or no shortcut within the time allowed.
     };
-    Q_ENUM(Result)
+    Q_ENUM(State)
 
     struct Programs {
-        QString plutil = QStringLiteral("/usr/bin/plutil");
         QString shortcuts = QStringLiteral("/usr/bin/shortcuts");
         QString open = QStringLiteral("/usr/bin/open");
     };
 
+    /// The real programs and the files of the app bundle.
     explicit ShortcutsFocusInstaller(QObject *parent = nullptr);
-    explicit ShortcutsFocusInstaller(const Programs &programs, QObject *parent = nullptr);
+    /// Tests: other programs, and the files in @p directory.
+    ShortcutsFocusInstaller(const Programs &programs, const QString &directory, QObject *parent = nullptr);
     ~ShortcutsFocusInstaller() override;
 
-    /// Starts installing the shortcuts named @p onName and @p offName; finished() when done.
-    /// Ignored (returns false) while an installation runs.
-    bool install(const QString &onName, const QString &offName);
-    bool isRunning() const { return m_running; }
+    /// The names of the shipped shortcuts (also the files' names, without ".shortcut").
+    static QString onName();
+    static QString offName();
+    /// Where the files are in the app bundle: <app>/Contents/Resources/shortcuts.
+    static QString bundledDirectory();
 
-    /// The shortcut, as an XML property list: one "Set Focus" action turning Do Not Disturb
-    /// on (until turned off) or off.
-    static QByteArray shortcutPlist(bool turnOn);
-    /// Whether @p name can be a shortcut's file name (and so its name).
-    static bool isValidName(const QString &name);
-    /// Whether the error output of `shortcuts sign` says the Mac is not signed into iCloud.
-    static bool isICloudError(const QString &error);
+    /// Starts installing; finished() when done. Ignored (returns false) while one runs.
+    bool install();
+    bool isRunning() const { return m_state == State::Installing || m_state == State::WaitingForOn || m_state == State::WaitingForOff; }
+    State state() const { return m_state; }
+    /// Of a failed installation: what went wrong, for the log and the status line.
+    QString message() const { return m_message; }
+    QString directory() const { return m_directory; }
 
-    /// The directory of the last installation's files (empty before one).
-    QString workDirectory() const;
-
-    /// Tests: a shorter timeout for every step.
-    void setTimeoutForTesting(int ms) { m_timeoutMs = m_signTimeoutMs = ms; }
+    /// Tests: how often the list is read while waiting, for how long, and every tool's timeout.
+    void setTimingForTesting(int pollMs, int waitMs, int toolTimeoutMs)
+    {
+        m_pollMs = pollMs;
+        m_waitMs = waitMs;
+        m_toolTimeoutMs = toolTimeoutMs;
+    }
 
 Q_SIGNALS:
-    /// The installation ended. @p message is a technical detail (the tool's error), for the log
-    /// and the "failed" status; empty when it went well.
-    void finished(ShortcutsFocusInstaller::Result result, const QString &message);
+    void stateChanged(ShortcutsFocusInstaller::State state);
+    /// The installation ended (Done or Failed); @p message as message().
+    void finished(bool ok, const QString &message);
 
 private:
-    struct Step {
-        QString program;
-        QStringList arguments;
-        int timeoutMs;
-        bool isSign;
-    };
-    using Done = std::function<void(bool ok, const QString &error)>;
+    using Done = std::function<void(bool ok, const QByteArray &output, const QString &error)>;
 
-    void runNext();
-    void runProgram(const Step &step, Done done);
-    void finish(Result result, const QString &message);
+    void installNext();
+    void poll();
+    void runProgram(const QString &program, const QStringList &arguments, Done done);
+    void setState(State state);
+    void fail(const QString &message);
+    QString filePath(const QString &name) const;
 
     Programs m_programs;
-    std::unique_ptr<QTemporaryDir> m_dir;
-    QList<Step> m_steps;
-    bool m_running = false;
-    int m_timeoutMs = 10000;
-    int m_signTimeoutMs = 60000; // signing talks to Apple's servers
+    QString m_directory;
+    State m_state = State::Idle;
+    QString m_message;
+    QStringList m_pending;   ///< Shortcuts still to install, in order.
+    QString m_waitingFor;    ///< The shortcut whose sheet is open.
+    QElapsedTimer m_waited;
+    int m_pollMs = 1000;
+    int m_waitMs = 3 * 60 * 1000;
+    int m_toolTimeoutMs = 15000;
 };

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QDir>
 #include <QFile>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -8,12 +9,14 @@
 #include "ShortcutsFocusInstaller.h"
 
 /**
- * Stand-ins for macOS's /usr/bin/plutil, /usr/bin/shortcuts and /usr/bin/open, as one shell
- * script in a temporary directory under three names. Each call is recorded in calls.log (the
- * program's name, then its arguments, separated by '|'). `shortcuts sign` copies --input to
- * --output; a file `fail-<program>` makes that program fail with its content as error output,
- * `icloud` makes `shortcuts sign` print Apple's iCloud error, `hang-<program>` makes it never
- * answer. Nothing real is ever run.
+ * Stand-ins for macOS's /usr/bin/shortcuts and /usr/bin/open, as one shell script in a temporary
+ * directory under two names, and a directory with the two shortcut files (placeholders).
+ *
+ * Each call is recorded in calls.log (the program's name, then its arguments, separated by '|').
+ * `shortcuts list` prints list.txt. `open <file>` plays the user clicking Add Shortcut: it adds
+ * the file's name (without ".shortcut") to list.txt, unless `ignore` exists (the user never
+ * confirms). A file `fail-<program>` makes that program fail with its content as error output,
+ * `hang-<program>` makes it never answer. Nothing real is ever run.
  */
 class FakeShortcutTools
 {
@@ -31,20 +34,24 @@ for arg in "$@"; do line="$line$arg|"; done
 echo "$line" >> "$dir/calls.log"
 [ -f "$dir/hang-$name" ] && exec sleep 30
 [ -f "$dir/fail-$name" ] && { cat "$dir/fail-$name" >&2; exit 1; }
-if [ "$name" = shortcuts ] && [ "$1" = sign ]; then
-    if [ -f "$dir/icloud" ]; then
-        echo "Error: In order to do this, you must be signed into iCloud."
-        exit 1
-    fi
-    cp "$5" "$7" || exit 1
+if [ "$name" = shortcuts ] && [ "$1" = list ]; then
+    [ -f "$dir/list.txt" ] && cat "$dir/list.txt"
+    exit 0
+fi
+if [ "$name" = open ] && [ ! -f "$dir/ignore" ]; then
+    basename "$1" .shortcut >> "$dir/list.txt"
 fi
 exit 0
 )SH");
             file.close();
             file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
         }
-        for (const char *name : {"plutil", "shortcuts", "open"}) {
+        for (const char *name : {"shortcuts", "open"}) {
             QFile::link(script, m_dir.filePath(QLatin1String(name)));
+        }
+        QDir(m_dir.path()).mkdir(QStringLiteral("files"));
+        for (const QString &name : {ShortcutsFocusInstaller::onName(), ShortcutsFocusInstaller::offName()}) {
+            write(QStringLiteral("files/") + name + QStringLiteral(".shortcut"), "AEA1");
         }
     }
 
@@ -53,17 +60,21 @@ exit 0
     ShortcutsFocusInstaller::Programs programs() const
     {
         ShortcutsFocusInstaller::Programs programs;
-        programs.plutil = m_dir.filePath(QStringLiteral("plutil"));
         programs.shortcuts = m_dir.filePath(QStringLiteral("shortcuts"));
         programs.open = m_dir.filePath(QStringLiteral("open"));
         return programs;
     }
+    /// The directory of the two shortcut files.
+    QString directory() const { return m_dir.filePath(QStringLiteral("files")); }
 
+    void setList(const QStringList &names) { write(QStringLiteral("list.txt"), names.isEmpty() ? QByteArray() : names.join(QLatin1Char('\n')).toUtf8() + "\n"); }
     void setFails(const QString &program, const QByteArray &error) { write(QStringLiteral("fail-") + program, error); }
     void setHangs(const QString &program) { write(QStringLiteral("hang-") + program, "1"); }
-    void setNeedsICloud() { write(QStringLiteral("icloud"), "1"); }
+    /// The user never clicks Add Shortcut.
+    void setIgnored() { write(QStringLiteral("ignore"), "1"); }
+    void removeFile(const QString &name) { QFile::remove(QDir(directory()).filePath(name + QStringLiteral(".shortcut"))); }
 
-    /// The calls so far, e.g. "plutil|-convert|binary1|/tmp/…/Sugo Focus On.shortcut|".
+    /// The calls so far, e.g. "open|/tmp/…/Sugo Focus On.shortcut|".
     QStringList calls() const
     {
         QFile log(m_dir.filePath(QStringLiteral("calls.log")));
