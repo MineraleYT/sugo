@@ -40,6 +40,7 @@ struct KeyringState {
     QString connectionName;
     bool answerPrompts = true; ///< false: a prompt stays open until it is dismissed.
     int dismissals = 0;        ///< Prompt.Dismiss calls.
+    int answerAfterMs = 20;    ///< How long the user takes to answer a prompt.
 };
 
 class PromptObject : public QObject
@@ -58,6 +59,7 @@ public Q_SLOTS:
     void Prompt(const QString &)
     {
         bool dismissed = false;
+        int answerAfterMs = 0;
         {
             QMutexLocker lock(&m_state->mutex);
             ++m_state->prompts;
@@ -65,12 +67,14 @@ public Q_SLOTS:
                 return; // the user is away: the dialog stays open
             }
             dismissed = m_state->dismissPrompt;
+            answerAfterMs = m_state->answerAfterMs;
+        }
+        // The answer comes later, as a signal, like a real dialog; the keyring is unlocked then.
+        QTimer::singleShot(answerAfterMs, this, [this, dismissed] {
             if (!dismissed) {
+                QMutexLocker lock(&m_state->mutex);
                 m_state->locked = false;
             }
-        }
-        // The answer comes later, as a signal, like a real dialog.
-        QTimer::singleShot(20, this, [this, dismissed] {
             QDBusMessage signal = QDBusMessage::createSignal(m_path, QStringLiteral("org.freedesktop.Secret.Prompt"), QStringLiteral("Completed"));
             signal << dismissed << QVariant::fromValue(QDBusVariant(QVariant::fromValue(QList<QDBusObjectPath>())));
             QDBusConnection(m_state->connectionName).send(signal);
@@ -426,6 +430,34 @@ private Q_SLOTS:
         QCOMPARE(m_keyring->state.prompts, 1);
         // The dialog does not stay on screen after we stopped waiting for it.
         QCOMPARE(m_keyring->state.dismissals, 1);
+    }
+
+    void aSecondReadWhileAPromptIsOpenDoesNotPromptAgain()
+    {
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        m_keyring->state.locked = true;
+        m_keyring->state.answerAfterMs = 400;
+
+        // While the first read waits for the prompt, something else (a timer, the settings page)
+        // asks again: it fails at once, without a second prompt.
+        bool nestedRan = false;
+        std::optional<QString> nested = QStringLiteral("not read");
+        bool nestedWrite = true;
+        QTimer::singleShot(50, this, [&] {
+            nestedRan = true;
+            nested = store.read(QStringLiteral("calendar-caldav"));
+            nestedWrite = store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw2"));
+        });
+        QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QStringLiteral("pw")));
+        QVERIFY(nestedRan);
+        QVERIFY(!nested.has_value());
+        QVERIFY(!nestedWrite);
+        QCOMPARE(m_keyring->state.prompts, 1);
+
+        // Once the prompt is answered, reads work again.
+        QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QStringLiteral("pw")));
+        QCOMPARE(m_keyring->state.prompts, 1);
     }
 };
 

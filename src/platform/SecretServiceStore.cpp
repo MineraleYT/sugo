@@ -6,6 +6,7 @@
 #include <QDBusVariant>
 #include <QEventLoop>
 #include <QLoggingCategory>
+#include <QScopedValueRollback>
 #include <QTimer>
 
 Q_LOGGING_CATEGORY(lcSecretStore, "sugo.platform.secretstore")
@@ -138,6 +139,7 @@ bool SecretServiceStore::unlock(const QList<QDBusObjectPath> &objects)
 
 bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
 {
+    const QScopedValueRollback<bool> prompting(m_prompting, true);
     PromptWaiter waiter;
     QEventLoop loop;
     QObject::connect(&waiter, &PromptWaiter::done, &loop, &QEventLoop::quit);
@@ -193,6 +195,11 @@ std::optional<QString> SecretServiceStore::read(const QString &key)
     if (!ensureSession()) {
         return std::nullopt;
     }
+    if (m_prompting) {
+        // Called from the event loop that waits for an open prompt: asking now would stack a
+        // second prompt on top of it.
+        return std::nullopt;
+    }
     const auto items = search(key);
     if (!items) {
         return std::nullopt;
@@ -221,6 +228,9 @@ bool SecretServiceStore::write(const QString &key, const QString &secret)
 {
     if (!ensureSession()) {
         return false;
+    }
+    if (m_prompting) {
+        return false; // as in read(): no second prompt while one is open
     }
     if (secret.isEmpty()) {
         const auto items = search(key);

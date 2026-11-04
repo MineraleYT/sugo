@@ -67,4 +67,5 @@ private:
     QDeadlineTimer m_retryAfter; ///< Running while a failed OpenSession is not tried again.
     int m_retryIntervalMs = 60 * 1000;
     int m_promptTimeoutMs = 120 * 1000;
+    bool m_prompting = false; ///< A prompt is open: its wait runs the event loop, which may call us again.
 };
