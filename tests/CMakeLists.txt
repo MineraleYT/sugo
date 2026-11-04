@@ -59,6 +59,7 @@ sugo_add_test(tst_presetsyncformat Qt6::Core Qt6::Qml)
 sugo_add_test(tst_syncsecrets Qt6::Core)
 sugo_add_test(tst_syncapi Qt6::Core Qt6::Network)
 sugo_add_test(tst_syncaccount Qt6::Core Qt6::Network)
+sugo_add_test(tst_synccontroller Qt6::Core Qt6::Qml Qt6::Network Qt6::Sql)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
