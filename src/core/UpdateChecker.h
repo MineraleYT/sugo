@@ -98,6 +98,8 @@ public:
     /// "stable" or "nightly"; anything else reads as "stable". Only a copy that installs updates
     /// follows nightly.
     QString channel() const;
+    /// A change of channel forgets what the old one found or is fetching, and gives up a download
+    /// of it (status Idle); an update already in place (ReadyToRestart) stays.
     void setChannel(const QString &channel);
     /// Look for updates by itself (only a copy that installs them); what it finds is installed
     /// only when asked.

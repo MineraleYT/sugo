@@ -104,7 +104,13 @@ int naturalCompare(const QString &a, const QString &b)
             j = ej;
         } else {
             if (a.at(i) != b.at(j)) {
-                return a.at(i).toLower() < b.at(j).toLower() ? -1 : 1;
+                // Letters regardless of case first, then by code unit ("A" < "a"): never both ways.
+                const QChar la = a.at(i).toLower();
+                const QChar lb = b.at(j).toLower();
+                if (la != lb) {
+                    return la < lb ? -1 : 1;
+                }
+                return a.at(i) < b.at(j) ? -1 : 1;
             }
             ++i;
             ++j;
@@ -168,10 +174,10 @@ void UpdateChecker::attach(AppSettings *settings)
     follow();
     connect(settings, &AppSettings::updateChannelChanged, this, follow);
     connect(settings, &AppSettings::autoCheckUpdatesChanged, this, follow);
-    // A new channel is looked at straight away (by hand when the checks are not automatic).
+    // A new channel is looked at straight away (by hand when the checks are not automatic);
+    // setChannel() has already dropped what the old one found.
     connect(settings, &AppSettings::updateChannelChanged, this, [this]() {
         if (canInstall() && m_autoCheck && m_status != Status::Downloading && m_status != Status::ReadyToRestart) {
-            reset();
             checkForUpdates();
         }
     });
@@ -202,7 +208,22 @@ QString UpdateChecker::channel() const
 
 void UpdateChecker::setChannel(const QString &channel)
 {
+    const QString before = this->channel();
     m_channel = channel == QLatin1String("nightly") ? channel : QStringLiteral("stable");
+    if (this->channel() == before || m_status == Status::ReadyToRestart) {
+        return; // the same feed; or the update is already in place, which cannot be undone
+    }
+    // What the other channel found, or is still fetching, is not what the user now follows:
+    // never install it. A download of it in progress is given up as well.
+    if (m_status == Status::Downloading) {
+        abortDownload();
+        if (m_installer) {
+            m_installer->cancel();
+        }
+        m_status = Status::Idle; // reset() leaves a download alone
+    }
+    m_downloadUrl.clear();
+    reset();
 }
 
 QUrl UpdateChecker::feedUrl(const QString &channel)
