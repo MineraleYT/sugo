@@ -344,6 +344,7 @@ int main(int argc, char *argv[])
     auto *dataManager = new DataManager(database.get(), &sessionRepository, &presetRepository, presets, stats, &services);
     dataManager->setSessionRecorder(recorder);
     dataManager->setPresetPersistence(presetPersistence);
+    dataManager->setTimerActiveProvider([timer]() { return timer->isActive(); });
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
     // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
