@@ -122,15 +122,16 @@ jobs:
 
       # The compiler cache of the newest run on this branch, else on the branch a pull request
       # targets, else on main (the branches a run may read caches from): only what changed recompiles.
+      # "image" in the name: a cache saved outside the container does not unpack inside it.
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          key: ccache-image-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ runner.os }}-${{ github.ref_name }}-
-            ccache-${{ runner.os }}-${{ github.base_ref || 'main' }}-
-            ccache-${{ runner.os }}-main-
+            ccache-image-${{ github.ref_name }}-
+            ccache-image-${{ github.base_ref || 'main' }}-
+            ccache-image-main-
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -174,11 +175,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-clang-${{ runner.os }}-${{ github.ref_name }}-${{ github.sha }}
+          key: ccache-clang-image-${{ github.ref_name }}-${{ github.sha }}
           restore-keys: |
-            ccache-clang-${{ runner.os }}-${{ github.ref_name }}-
-            ccache-clang-${{ runner.os }}-${{ github.base_ref || 'main' }}-
-            ccache-clang-${{ runner.os }}-main-
+            ccache-clang-image-${{ github.ref_name }}-
+            ccache-clang-image-${{ github.base_ref || 'main' }}-
+            ccache-clang-image-main-
 
       - name: Configure
         run: |
