@@ -40,6 +40,7 @@
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
 #include "ShortcutsFocusInhibitor.h"
+#include "ShortcutsFocusInstaller.h"
 #else
 #include "DBusTimerService.h"
 #include "KRunnerService.h"
@@ -300,6 +301,8 @@ int main(int argc, char *argv[])
     auto *focusShortcuts = qobject_cast<ShortcutsFocusInhibitor *>(inhibitor.get());
     if (focusShortcuts && !smokeTest) {
         settings->attachFocusShortcuts(focusShortcuts);
+        // "Install Shortcuts" in the settings and the welcome tour (never in a smoke run either).
+        settings->attachFocusShortcutsInstaller(new ShortcutsFocusInstaller(&services));
         QObject::connect(&app, &QGuiApplication::applicationStateChanged, focusShortcuts, [focusShortcuts](Qt::ApplicationState state) {
             if (state == Qt::ApplicationActive) {
                 focusShortcuts->refreshShortcutList();

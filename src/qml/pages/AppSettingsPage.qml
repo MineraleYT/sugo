@@ -131,6 +131,12 @@ QQC2.Page {
     }
     readonly property bool focusOnFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
     readonly property bool focusOffFound: focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
+    /// "Create them yourself" in the Focus card: opened by the user, or because installing needs
+    /// iCloud or failed.
+    property bool focusManualExpanded: false
+    readonly property bool focusManualForced: AppSettings.focusShortcutsInstallStatus === "needsICloud"
+                                              || AppSettings.focusShortcutsInstallStatus === "failed"
+    readonly property bool focusManualShown: focusManualExpanded || focusManualForced
 
     /// The entries of a Focus shortcut list: the user's shortcuts, and the chosen one if it is
     /// not among them (so the box still shows what is set).
@@ -799,11 +805,13 @@ QQC2.Page {
                 SettingRow {
                     first: true
                     title: i18n("Silence notifications with a Focus")
-                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on, one that turns it off. Choose them below, then switch on \"Silence notifications while working\" in a timer's options.")
+                    description: i18n("macOS lets apps turn a Focus on only through the Shortcuts app. Sugo can install two shortcuts that turn Do Not Disturb on and off. Shortcuts will ask you to add each of the two shortcuts: click Add Shortcut. Then switch on \"Silence notifications while working\" in a timer's options.")
                     SButton {
-                        text: i18n("Open Shortcuts")
-                        iconName: "external"
-                        onClicked: Qt.openUrlExternally("shortcuts://")
+                        objectName: "installFocusShortcutsButton"
+                        kind: page.focusOnFound && page.focusOffFound ? "secondary" : "primary"
+                        text: i18n("Install Shortcuts")
+                        enabled: AppSettings.focusShortcutsInstallable && AppSettings.focusShortcutsInstallStatus !== "installing"
+                        onClicked: AppSettings.installFocusShortcuts()
                     }
                     SButton {
                         kind: "ghost"
@@ -815,6 +823,32 @@ QQC2.Page {
                         QQC2.ToolTip.visible: hovered
                         QQC2.ToolTip.delay: Theme.toolTipDelay
                         onClicked: AppSettings.refreshFocusShortcuts()
+                    }
+                }
+                FocusShortcutsStatus {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: Theme.spaceMd
+                    found: page.focusOnFound && page.focusOffFound
+                }
+                // The way without "Install Shortcuts": collapsed, open when installing cannot work.
+                SettingRow {
+                    objectName: "focusManualRow"
+                    title: i18n("Create them yourself")
+                    description: page.focusManualShown
+                                 ? i18n("In Shortcuts, create two shortcuts with the \"Set Focus\" action: one that turns Do Not Disturb (or any Focus) on, one that turns it off. Choose them below.")
+                                 : i18n("Build the two shortcuts in the Shortcuts app instead, for example to use another Focus.")
+                    SButton {
+                        visible: page.focusManualShown
+                        text: i18n("Open Shortcuts")
+                        iconName: "external"
+                        onClicked: Qt.openUrlExternally("shortcuts://")
+                    }
+                    SButton {
+                        objectName: "focusManualToggle"
+                        visible: !page.focusManualForced
+                        kind: "ghost"
+                        text: page.focusManualShown ? i18n("Hide") : i18n("Show How")
+                        onClicked: page.focusManualExpanded = !page.focusManualExpanded
                     }
                 }
                 SettingRow {

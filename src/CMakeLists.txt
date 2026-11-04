@@ -33,6 +33,7 @@ qt6_add_qml_module(sugo_core
         qml/components/TopBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
+        qml/components/FocusShortcutsStatus.qml
         qml/components/FormSection.qml
         qml/components/FormRow.qml
         qml/components/SSwitch.qml
@@ -326,6 +327,11 @@ qt6_add_resources(sugo_core "fallbackicons"
 target_sources(sugo_core PRIVATE
     core/TimerCommands.cpp core/TimerCommands.h
     platform/ShortcutsFocusInhibitor.cpp platform/ShortcutsFocusInhibitor.h
+)
+
+# --- macOS port: W4 install the Focus shortcuts ---
+target_sources(sugo_core PRIVATE
+    platform/ShortcutsFocusInstaller.cpp platform/ShortcutsFocusInstaller.h
 )
 
 # --- macOS port: W2-C self-update from the disk image ---

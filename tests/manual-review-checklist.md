@@ -37,3 +37,9 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Install from the native build and from the Flatpak. Confirm the desktop entry, icon, About links, notifications, tray, and audio behavior.
 - [ ] Launch with an existing database and confirm presets and settings remain available.
 - [ ] Launch Flatpak with Wayland and X11 where available; verify audio, notifications, tray registration, and screen-sleep inhibition.
+
+## macOS: Focus shortcuts
+
+- [ ] On a Mac signed into iCloud, click "Install Shortcuts" (Settings → Focus while working, or the welcome tour's setup step). Shortcuts shows an "Add Shortcut" sheet for "Sugo Focus On" and then one for "Sugo Focus Off" (check the second sheet appears after the first is confirmed, not lost). After adding both and returning to Sugo, the card says both were found.
+- [ ] Run each installed shortcut once in Shortcuts: "On" turns on Do Not Disturb until turned off, "Off" turns it off.
+- [ ] On a Mac not signed into iCloud, "Install Shortcuts" says to sign into iCloud, and "Create them yourself" opens with the "Open Shortcuts" button.

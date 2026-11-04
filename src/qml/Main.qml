@@ -351,6 +351,14 @@ QQC2.ApplicationWindow {
                 fail(44, "openSettings(\"focus\") did not show the Focus category: " + page.category);
                 return;
             }
+            // "Install Shortcuts" is there, and off in a smoke run (no installer: the real tools
+            // must never run); "Create them yourself" stays collapsed until asked.
+            const installButton = findItem(focusCard, item => item.objectName === "installFocusShortcutsButton");
+            const manualToggle = findItem(focusCard, item => item.objectName === "focusManualToggle");
+            if (!installButton || installButton.enabled || !manualToggle || page.focusManualShown) {
+                fail(45, "The Focus card's install button or its collapsed manual way is wrong");
+                return;
+            }
             // Disconnecting the calendar asks first.
             page.requestDisconnect();
             if (!page.disconnectConfirming) {
@@ -373,6 +381,13 @@ QQC2.ApplicationWindow {
             const dial = findItem(page, item => item.objectName === "trayDialPreview");
             if (!dial || !Qt.colorEqual(dial.primary, dial.isBreak ? TrayIconStyle.breakColor : TrayIconStyle.workColor)) {
                 fail(34, "The tray icon preview does not use the tray icon's colours");
+                return;
+            }
+            // The Focus shortcuts' row: hidden outside macOS, its button off without an installer.
+            // (On macOS its step may not be on screen, so its visibility says nothing there.)
+            const focusInstall = findItem(page, item => item.objectName === "welcomeInstallFocusShortcuts");
+            if (!focusInstall || focusInstall.enabled || (!DesktopStyle.macos && focusInstall.visible)) {
+                fail(46, "The welcome tour's Focus shortcuts row is missing, or shown outside macOS");
                 return;
             }
                         // The step dots are named, move the slides, and keep following them.

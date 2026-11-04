@@ -144,3 +144,7 @@ set_tests_properties(tst_dockcontroller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=
 # Both run on Linux too: the Focus with a fake `shortcuts` script (tests/FakeShortcuts.h).
 sugo_add_test(tst_shortcutsfocusinhibitor Qt6::Core)
 sugo_add_test(tst_timercommands Qt6::Core Qt6::Qml)
+
+# --- macOS port: W4 install the Focus shortcuts ---
+# Runs on Linux too, with fake plutil/shortcuts/open scripts (tests/FakeShortcutTools.h).
+sugo_add_test(tst_shortcutsfocusinstaller Qt6::Core)
