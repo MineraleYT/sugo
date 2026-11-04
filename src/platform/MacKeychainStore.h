@@ -21,6 +21,8 @@ public:
 
     std::optional<QString> read(const QString &key) override;
     bool write(const QString &key, const QString &secret) override;
+    /// The user answered "Deny" or closed the dialog (errSecAuthFailed, errSecUserCanceled).
+    bool lastReadRefused() const override { return m_lastReadRefused; }
 
     /// The OSStatus of the last call (errSecSuccess = 0), for tests and diagnostics.
     int lastStatus() const { return m_lastStatus; }
@@ -30,4 +32,5 @@ private:
 
     QString m_service;
     int m_lastStatus = 0;
+    bool m_lastReadRefused = false;
 };

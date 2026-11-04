@@ -62,6 +62,8 @@ std::optional<QString> MacKeychainStore::read(const QString &key)
     const OSStatus status = SecItemCopyMatching(query.get(), &result);
     const CFRef<CFTypeRef> data(result);
     m_lastStatus = static_cast<int>(status);
+    // Not errSecInteractionNotAllowed: nobody was asked (no login session), worth trying again.
+    m_lastReadRefused = status == errSecAuthFailed || status == errSecUserCanceled;
     if (status == errSecItemNotFound) {
         return QString();
     }
