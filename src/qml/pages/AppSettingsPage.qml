@@ -662,11 +662,25 @@ QQC2.Page {
             width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
             spacing: Theme.space2xl
 
-            // The categories: only the groups of the chosen one are shown.
-            Segmented {
-                model: page.categories
-                current: page.category
-                onActivated: id => page.category = id
+            // The categories: only the groups of the chosen one are shown. In a narrow window they
+            // scroll sideways rather than widen the page past the window.
+            Flickable {
+                id: categoryStrip
+                Layout.fillWidth: true
+                implicitHeight: categoryTabs.implicitHeight
+                contentWidth: categoryTabs.implicitWidth
+                contentHeight: categoryTabs.implicitHeight
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentWidth > width
+                clip: interactive
+
+                Segmented {
+                    id: categoryTabs
+                    model: page.categories
+                    current: page.category
+                    onActivated: id => page.category = id
+                }
             }
 
             SettingsCard {
