@@ -581,9 +581,18 @@ QQC2.ApplicationWindow {
                 editor.leaving = true;
                 root.openTimer(builtinUuid);
                 editor = root.pageStack.currentItem;
+                // A search that finds nothing says so (checked on the next tick).
+                commandPalette.commands = [];
+                commandPalette.open();
                 return false;
             }
             case 4: {
+                const nothingFound = findItem(commandPalette.contentItem, item => item.objectName === "nothingFound");
+                if (!nothingFound || !nothingFound.visible || nothingFound.height <= 0 || nothingFound.parent.height <= 0) {
+                    fail(36, "The search does not say when nothing was found");
+                    return true;
+                }
+                commandPalette.close();
                 // A value out of range is reported to the user, not changed silently.
                 root.lastAdjustmentMessage = "";
                 const adjustedUuid = PresetModel.create({ name: "Smoke", workSeconds: 100 * 3600 });
