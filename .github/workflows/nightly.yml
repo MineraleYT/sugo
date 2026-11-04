@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Every push to the branch testing that passes CI becomes the nightly build: a new pre-release
-# named after its version, with the AppImage and nightly.json. The pre-release "nightly" holds
+# named after its version, with the AppImage, the macOS disk image (when its build succeeded) and
+# nightly.json. The pre-release "nightly" holds
 # only the latest nightly.json, the feed the program's update check reads on the nightly channel
 # (see src/core/UpdateChecker.h). Daily work goes to dev, which only runs CI; see "Branches" in
 # docs/DEVELOPMENT.md.
@@ -59,9 +60,19 @@ jobs:
       version: ${{ needs.version.outputs.version }}
       ref: ${{ needs.version.outputs.sha }}
 
+  # Not blocking yet: the nightly build is published without it when it fails.
+  macos:
+    needs: version
+    uses: ./.github/workflows/macos.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      ref: ${{ needs.version.outputs.sha }}
+
   publish:
     name: Publish the nightly build
-    needs: [version, appimage]
+    needs: [version, appimage, macos]
+    # Waits for the macOS build but does not need it.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -77,6 +88,12 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sugo-appimage
+
+      - name: Download the macOS disk image
+        if: needs.macos.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sugo-macos
 
       # Commits whose subject reads as a fix go under Fixes, the others under Highlights.
       - name: Write the release notes
@@ -99,6 +116,12 @@ jobs:
             echo "The branch testing at $SHA, built automatically. It may have bugs; the stable releases are tested."
             echo
             echo "Download Sugo-x86_64.AppImage, make it executable and start it. In Settings → Updates, the Nightly channel keeps it up to date by itself."
+            if [ -f Sugo-macOS-universal.dmg ]; then
+              echo
+              cat <<'EOF'
+          On macOS 13 or later (Apple Silicon or Intel), open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS reports new versions but does not install them.
+          EOF
+            fi
             if [ -n "$highlights" ]; then printf '\n## Highlights\n%s\n' "$highlights"; fi
             if [ -n "$fixes" ]; then printf '\n## Fixes\n%s\n' "$fixes"; fi
             if [ -n "$prev" ] && [ "$prev" != "$SHA" ]; then
@@ -118,13 +141,24 @@ jobs:
           SHA: ${{ needs.version.outputs.sha }}
         run: |
           file=Sugo-x86_64.AppImage
+          dmg=Sugo-macOS-universal.dmg
           tag="v$VERSION"
+          files=("$file")
           jq -n --arg version "$VERSION" \
                 --arg url "https://github.com/$REPO/releases/download/$tag/$file" \
                 --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
                 --argjson size "$(stat -c %s "$file")" \
                 --arg page "https://github.com/$REPO/releases/tag/$tag" \
                 '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > nightly.json
+          # The disk image, when it was built, under its own key: the AppImages read only the others.
+          if [ -f "$dmg" ]; then
+            files+=("$dmg")
+            jq --arg url "https://github.com/$REPO/releases/download/$tag/$dmg" \
+               --arg sha256 "$(sha256sum "$dmg" | cut -d' ' -f1)" \
+               --argjson size "$(stat -c %s "$dmg")" \
+               '. + {macos: {url: $url, sha256: $sha256, size: $size}}' nightly.json > nightly.json.new
+            mv nightly.json.new nightly.json
+          fi
           cat nightly.json
 
           title="Sugo Nightly $VERSION (${SHA:0:12})"
@@ -135,7 +169,7 @@ jobs:
           else
             gh release create "$tag" --repo "$REPO" --prerelease --latest=false --verify-tag --title "$title" --notes-file notes.md
           fi
-          gh release upload "$tag" "$file" nightly.json --repo "$REPO" --clobber
+          gh release upload "$tag" "${files[@]}" nightly.json --repo "$REPO" --clobber
 
           # The feed last: it must never announce a file that is not there yet. The tag nightly
           # follows the branch testing.

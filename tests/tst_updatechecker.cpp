@@ -280,6 +280,30 @@ private Q_SLOTS:
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
 
+    void macosEntryInTheFeedIsIgnored()
+    {
+        // The feeds also describe the macOS disk image under "macos": the AppImage keeps reading
+        // the top-level keys, and installs the file they announce.
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        const QJsonObject macos{
+            {QStringLiteral("url"), QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/v2.0.0/Sugo-macOS-universal.dmg")},
+            {QStringLiteral("sha256"), QString(64, QLatin1Char('0'))},
+            {QStringLiteral("size"), 1000},
+        };
+        release.announce(QStringLiteral("2.0.0"), QJsonObject{{QStringLiteral("macos"), macos}});
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        QCOMPARE(checker.latestVersion(), QStringLiteral("2.0.0"));
+        QCOMPARE(checker.releaseUrl(), QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v2.0.0"));
+        checker.installUpdate();
+        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::ReadyToRestart, 10000);
+        QCOMPARE(readFile(release.appImage), release.newContent);
+        qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
     void automaticChecksNeverDownload()
     {
         qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
