@@ -1192,19 +1192,30 @@ QQC2.ApplicationWindow {
         if (!screenLockPromptPending || !root.visible || !root.active) {
             return;
         }
+        // Not over a task note: this prompt waits until that dialog closes.
+        if (taskNoteDialog.visible) {
+            return;
+        }
         screenLockPromptPending = false;
         if (TimerEngine.paused && (ScreenLockWatcher.pausedByScreenLock || ScreenLockWatcher.pausedBySleep)) {
             screenLockResumeDialog.open();
         }
     }
 
+    // The task note first: the resume prompt waits for it to close.
     onActiveChanged: {
-        showPendingScreenLockPrompt();
         showPendingTaskNote();
+        showPendingScreenLockPrompt();
     }
     onVisibleChanged: {
-        showPendingScreenLockPrompt();
         showPendingTaskNote();
+        showPendingScreenLockPrompt();
+    }
+    Connections {
+        target: taskNoteDialog
+        function onClosed() {
+            Qt.callLater(root.showPendingScreenLockPrompt);
+        }
     }
 
     Connections {
@@ -1237,6 +1248,15 @@ QQC2.ApplicationWindow {
               : i18n("The timer was paused while your screen was locked. Would you like to resume?")
         confirmText: i18n("Resume")
         cancelText: i18n("Keep Paused")
+        // Resumed or stopped some other way (tray, shortcut, KRunner): the question is moot.
+        Connections {
+            target: TimerEngine
+            function onStateChanged() {
+                if (!TimerEngine.paused) {
+                    screenLockResumeDialog.close();
+                }
+            }
+        }
         onConfirmed: {
             TimerEngine.resume();
             screenLockResumeDialog.close();
