@@ -113,7 +113,23 @@ private Q_SLOTS:
 
         elapse(5 * 60); // break ends, next work phase auto-starts
         QCOMPARE(engine->state(), State::Working);
-        QVERIFY(inhibitor->isInhibited());
+        // Silenced again once the end of the break has been announced: on the next turn.
+        QVERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY(inhibitor->isInhibited());
+        QVERIFY(silence->active());
+    }
+
+    void anAutoStartedWorkPhaseStoppedAtOnceIsNeverSilenced()
+    {
+        enableSilenceOnDefaultTimer();
+        QVERIFY(presets->setOption(PresetModel::DefaultUuid, PresetOption::AutoStartMode, 2));
+        engine->start();
+        elapse(25 * 60);
+        elapse(5 * 60); // the break ends, work auto-starts
+        engine->stop(); // before the put-off silencing comes
+        QTest::qWait(20);
+        QVERIFY(!inhibitor->isInhibited());
+        QCOMPARE(inhibitor->calls.last(), QStringLiteral("release"));
     }
 
     void workEndWithoutAutoStartReleases()
@@ -156,7 +172,7 @@ private Q_SLOTS:
         QVERIFY(!inhibitor->isInhibited());
         elapse(1);           // this timer's 10 minute break is over
         QCOMPARE(engine->state(), State::Working);
-        QVERIFY(inhibitor->isInhibited());
+        QTRY_VERIFY(inhibitor->isInhibited());
     }
 
     void turningTheOptionOffDuringWorkReleasesAtOnce()
