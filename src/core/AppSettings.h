@@ -5,13 +5,17 @@
 
 #include <QLatin1String>
 #include <QObject>
+#include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <QtQml/qqmlregistration.h>
 
 #include <functional>
 #include <memory>
 
 class Autostart;
+class ShortcutsFocusInhibitor;
+class ShortcutsFocusInstaller;
 
 /**
  * Settings of the program itself (as opposed to the per-timer options in PresetSettings):
@@ -32,15 +36,24 @@ class AppSettings : public QObject
     Q_PROPERTY(bool trayAvailable READ trayAvailable NOTIFY trayAvailableChanged FINAL)
     /// This platform can manage a login entry from inside the application.
     Q_PROPERTY(bool autostartSupported READ autostartSupported CONSTANT FINAL)
+    /// Other programs can drive the timer: D-Bus, KRunner and global shortcuts on Linux, sugo://
+    /// links (scripts, the Shortcuts app) on macOS.
+    Q_PROPERTY(bool externalControlSupported READ externalControlSupported CONSTANT FINAL)
 
     Q_PROPERTY(bool showTrayIcon READ showTrayIcon WRITE setShowTrayIcon NOTIFY showTrayIconChanged FINAL)
     /// Closing the window hides it instead of quitting (needs the tray icon).
     Q_PROPERTY(bool closeToTray READ closeToTray WRITE setCloseToTray NOTIFY closeToTrayChanged FINAL)
-    /// Other programs (global shortcuts, scripts over D-Bus, KRunner) may start, pause, skip and stop the timer.
+    /// Other programs (global shortcuts, scripts over D-Bus, KRunner; sugo:// links on macOS) may
+    /// start, pause, skip and stop the timer.
     Q_PROPERTY(bool allowExternalControl READ allowExternalControl WRITE setAllowExternalControl NOTIFY allowExternalControlChanged FINAL)
     Q_PROPERTY(bool startAtLogin READ startAtLogin WRITE setStartAtLogin NOTIFY startAtLoginChanged FINAL)
     /// When started at login, start without showing the window.
     Q_PROPERTY(bool startMinimized READ startMinimized WRITE setStartMinimized NOTIFY startMinimizedChanged FINAL)
+
+    /// macOS: the Dock icon shows the minutes left while a phase runs.
+    Q_PROPERTY(bool showDockBadge READ showDockBadge WRITE setShowDockBadge NOTIFY showDockBadgeChanged FINAL)
+    /// macOS: no Dock icon while the window is hidden (needs the menu bar icon; see DockController).
+    Q_PROPERTY(bool hideDockIcon READ hideDockIcon WRITE setHideDockIcon NOTIFY hideDockIconChanged FINAL)
 
     /// Tray badge style: 0 = Minutes, 1 = Pie, 2 = Plain.
     Q_PROPERTY(int trayBadgeStyle READ trayBadgeStyle WRITE setTrayBadgeStyle NOTIFY trayBadgeStyleChanged FINAL)
@@ -76,12 +89,26 @@ class AppSettings : public QObject
 
     /// Window colours: "dark", "light" or "system" (the default: the desktop's light or dark mode).
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged FINAL)
-    /// "stable" (releases) or "nightly" (a build of every change), for the AppImage's updates.
+    /// "stable" (releases) or "nightly" (a build of every change), for the updates of the AppImage and the macOS app.
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
     /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
     Q_PROPERTY(bool autoCheckUpdates READ autoCheckUpdates WRITE setAutoCheckUpdates NOTIFY autoCheckUpdatesChanged FINAL)
     /// Sugo's debug messages are recorded (in the diagnostic report). Applied by Diagnostics.
     Q_PROPERTY(bool verboseLogging READ verboseLogging WRITE setVerboseLogging NOTIFY verboseLoggingChanged FINAL)
+
+    /// macOS: the shortcuts (Shortcuts app) that turn the Focus on and off while working,
+    /// run by ShortcutsFocusInhibitor.
+    Q_PROPERTY(QString focusOnShortcut READ focusOnShortcut WRITE setFocusOnShortcut NOTIFY focusOnShortcutChanged FINAL)
+    Q_PROPERTY(QString focusOffShortcut READ focusOffShortcut WRITE setFocusOffShortcut NOTIFY focusOffShortcutChanged FINAL)
+    /// macOS: the `shortcuts` program is there (macOS 12 or later).
+    Q_PROPERTY(bool focusShortcutsSupported READ focusShortcutsSupported NOTIFY focusShortcutNamesChanged FINAL)
+    /// macOS: Sugo can install the two shortcuts itself (installFocusShortcuts()).
+    Q_PROPERTY(bool focusShortcutsInstallable READ focusShortcutsInstallable NOTIFY focusShortcutsInstallChanged FINAL)
+    /// Where the last installFocusShortcuts() got: "" (never asked), "installing", "waitingOn" /
+    /// "waitingOff" (the Shortcuts app asks the user to add that shortcut), "done", "failed".
+    Q_PROPERTY(QString focusShortcutsInstallStatus READ focusShortcutsInstallStatus NOTIFY focusShortcutsInstallChanged FINAL)
+    /// A technical detail of a "failed" installation (the tool's error).
+    Q_PROPERTY(QString focusShortcutsInstallDetail READ focusShortcutsInstallDetail NOTIFY focusShortcutsInstallChanged FINAL)
 
 
     /// The close button really keeps the program running: tray icon on, tray present, option set.
@@ -100,6 +127,7 @@ public:
     /// Normally driven by the D-Bus watcher of the tray host; public for tests.
     void setTrayAvailable(bool available);
     bool autostartSupported() const;
+    static constexpr bool externalControlSupported() { return true; }
 
     bool showTrayIcon() const { return m_showTrayIcon; }
     void setShowTrayIcon(bool show);
@@ -111,6 +139,11 @@ public:
     void setStartAtLogin(bool enabled);
     bool startMinimized() const { return m_startMinimized; }
     void setStartMinimized(bool minimized);
+
+    bool showDockBadge() const { return m_showDockBadge; }
+    void setShowDockBadge(bool show);
+    bool hideDockIcon() const { return m_hideDockIcon; }
+    void setHideDockIcon(bool hide);
 
     int trayBadgeStyle() const { return m_trayBadgeStyle; }
     void setTrayBadgeStyle(int style);
@@ -158,6 +191,30 @@ public:
     void setAutoCheckUpdates(bool enabled);
     bool verboseLogging() const { return m_verboseLogging; }
     void setVerboseLogging(bool verbose);
+
+    QString focusOnShortcut() const { return m_focusOnShortcut; }
+    void setFocusOnShortcut(const QString &name);
+    QString focusOffShortcut() const { return m_focusOffShortcut; }
+    void setFocusOffShortcut(const QString &name);
+    bool focusShortcutsSupported() const;
+    /// The names of the user's shortcuts, as last read (empty without the Focus inhibitor).
+    Q_INVOKABLE QStringList focusShortcutNames() const;
+    /// Reads the user's shortcuts again; focusShortcutNamesChanged() when done.
+    Q_INVOKABLE void refreshFocusShortcuts();
+    /// Gives the Focus inhibitor its shortcut names (now and on every change) and reads its list
+    /// of shortcuts. Called once at startup on macOS; tests call it on Linux.
+    void attachFocusShortcuts(ShortcutsFocusInhibitor *inhibitor);
+    bool focusShortcutsInstallable() const { return !m_focusInstaller.isNull(); }
+    QString focusShortcutsInstallStatus() const { return m_focusInstallStatus; }
+    QString focusShortcutsInstallDetail() const { return m_focusInstallDetail; }
+    /// Opens the two Focus shortcuts shipped in the app, one after the other (see
+    /// ShortcutsFocusInstaller); the Shortcuts app asks the user to add each. Sets the shortcut
+    /// names back to those of the shipped shortcuts. Without an installer (Linux, smoke runs)
+    /// reports "failed".
+    Q_INVOKABLE void installFocusShortcuts();
+    /// The installer installFocusShortcuts() uses. Called once at startup on macOS; tests call
+    /// it on Linux with fake programs.
+    void attachFocusShortcutsInstaller(ShortcutsFocusInstaller *installer);
     /// Puts every preference back to its default, through the setters (so views are told and the
     /// file is updated). Kept: whether the welcome tour was seen, the login entry (it lives on
     /// disk, outside the settings file) and everything that is not a preference of this class
@@ -180,6 +237,17 @@ public:
     /// An event sound name ("complete", "alarm-clock-elapsed") or an absolute path to a file.
     /// Anything else from the configuration ("../x", "-x", "a/b") is not looked up or played.
     static bool isUsableSoundName(const QString &soundName);
+    /// The directories that may hold sounds/<theme>/stereo/<name>.<ext>, searched in order: the
+    /// XDG data dirs (so it also works inside Flatpak), the host's /usr/share and, on macOS, the
+    /// sounds bundled in the app's Resources.
+    static QStringList soundSearchRoots();
+    /// The file for an event sound name under one of the roots ("ocean" before "freedesktop",
+    /// .oga before .ogg before .wav), or empty. An absolute path is used as is if it is a file.
+    static QString findSoundFile(const QString &soundName, const QStringList &roots);
+    /// afplay (macOS) can play the file: it has a format Core Audio decodes (not Ogg).
+    static bool afplayCanPlay(const QString &file);
+    /// afplay arguments for a file at a volume percentage (afplay's volume is linear, 1 = 100 %).
+    static QStringList afplayArguments(const QString &file, int volume);
     Q_INVOKABLE void openShortcutsSettings();
 
     bool keepRunningInTray() const;
@@ -194,6 +262,8 @@ Q_SIGNALS:
     void allowExternalControlChanged();
     void startAtLoginChanged();
     void startMinimizedChanged();
+    void showDockBadgeChanged();
+    void hideDockIconChanged();
     void trayBadgeStyleChanged();
     void soundThemeChanged();
     void soundVolumeChanged();
@@ -210,6 +280,11 @@ Q_SIGNALS:
     void updateChannelChanged();
     void autoCheckUpdatesChanged();
     void verboseLoggingChanged();
+    void focusOnShortcutChanged();
+    void focusOffShortcutChanged();
+    /// The list of shortcuts was read again.
+    void focusShortcutNamesChanged();
+    void focusShortcutsInstallChanged();
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
@@ -224,6 +299,8 @@ private:
         static constexpr bool closeToTray = true;
         static constexpr bool allowExternalControl = true;
         static constexpr bool startMinimized = true;
+        static constexpr bool showDockBadge = true;
+        static constexpr bool hideDockIcon = false;
         static constexpr int trayBadgeStyle = 0;
         static constexpr QLatin1String soundTheme{"alarm-clock-elapsed"};
         static constexpr int soundVolume = 80;
@@ -240,12 +317,17 @@ private:
         static constexpr QLatin1String updateChannel{"stable"};
         static constexpr bool autoCheckUpdates = true;
         static constexpr bool verboseLogging = false;
+        static constexpr QLatin1String focusOnShortcut{"Sugo Focus On"};
+        static constexpr QLatin1String focusOffShortcut{"Sugo Focus Off"};
     };
 
     void store(const char *key, bool value);
     void storeInt(const char *key, int value);
     void storeString(const char *key, const QString &value);
+#ifdef Q_OS_LINUX
+    /// Follows the StatusNotifierWatcher on the session bus (the tray host).
     void watchTray();
+#endif
 
     Settings::Ptr m_config;
     std::unique_ptr<Autostart> m_autostart;
@@ -256,6 +338,8 @@ private:
     bool m_closeToTray = Defaults::closeToTray;
     bool m_allowExternalControl = Defaults::allowExternalControl;
     bool m_startMinimized = Defaults::startMinimized;
+    bool m_showDockBadge = Defaults::showDockBadge;
+    bool m_hideDockIcon = Defaults::hideDockIcon;
     int m_trayBadgeStyle = Defaults::trayBadgeStyle;
     QString m_soundTheme = QString(Defaults::soundTheme);
     int m_soundVolume = Defaults::soundVolume;
@@ -272,5 +356,11 @@ private:
     QString m_updateChannel = QString(Defaults::updateChannel);
     bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
     bool m_verboseLogging = Defaults::verboseLogging;
+    QString m_focusOnShortcut = QString(Defaults::focusOnShortcut);
+    QString m_focusOffShortcut = QString(Defaults::focusOffShortcut);
+    QPointer<ShortcutsFocusInhibitor> m_focusInhibitor;
+    QPointer<ShortcutsFocusInstaller> m_focusInstaller;
+    QString m_focusInstallStatus;
+    QString m_focusInstallDetail;
     bool m_launchedInBackground = false;
 };

@@ -33,6 +33,9 @@ qt6_add_qml_module(sugo_core
         qml/components/TopBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
+        qml/components/MessageSlot.qml
+        qml/components/FeatureInventory.qml
+        qml/components/FocusShortcutsStatus.qml
         qml/components/FormSection.qml
         qml/components/FormRow.qml
         qml/components/SSwitch.qml
@@ -90,13 +93,9 @@ target_sources(sugo_core PRIVATE
     platform/PowerInhibitor.h
     platform/PowerInhibitor.cpp
     platform/NoopInhibitor.h
-    platform/FreedesktopInhibitor.h
-    platform/FreedesktopInhibitor.cpp
     platform/InhibitorFactory.h
     platform/InhibitorFactory.cpp
     platform/Notifier.h
-    platform/FreedesktopNotifier.h
-    platform/FreedesktopNotifier.cpp
     platform/TrayNotifier.h
     platform/TrayNotifier.cpp
     platform/NotifierFactory.h
@@ -107,12 +106,6 @@ target_sources(sugo_core PRIVATE
     platform/Autostart.cpp
     platform/SystemTray.h
     platform/SystemTray.cpp
-    platform/SingleInstance.h
-    platform/SingleInstance.cpp
-    platform/DBusTimerService.h
-    platform/DBusTimerService.cpp
-    platform/KRunnerService.h
-    platform/KRunnerService.cpp
     platform/ScreenLockWatcher.h
     platform/ScreenLockWatcher.cpp
     platform/SecretStore.h
@@ -153,12 +146,37 @@ target_link_libraries(sugo_core PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Sql
-    Qt6::DBus
+    ${SUGO_DBUS}
     Qt6::Network
     Qt6::Multimedia
 )
 
-add_executable(sugo main.cpp)
+set(sugo_app_sources main.cpp)
+if(APPLE)
+    # Sugo.app: the icon (Contents/Resources/Sugo.icns, from packaging/macos/render-icons.sh's PNGs)
+    # and an Info.plist whose version is only X.Y.Z (nightly suffixes are not valid there).
+    include(ECMAddAppIcon)
+    file(GLOB sugo_macos_icons "${PROJECT_SOURCE_DIR}/data/icons/macos/*-apps-io.github.mineraleyt.sugo.png")
+    if(sugo_macos_icons)
+        ecm_add_app_icon(sugo_app_sources ICONS ${sugo_macos_icons} OUTFILE_BASENAME Sugo)
+    endif()
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" SUGO_BUNDLE_VERSION "${sugo_version}")
+    if(NOT SUGO_BUNDLE_VERSION)
+        set(SUGO_BUNDLE_VERSION "${PROJECT_VERSION}")
+    endif()
+    set(SUGO_BUNDLE_EXECUTABLE Sugo)
+    configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
+endif()
+
+# A plain program on Linux; Sugo.app on macOS (MACOSX_BUNDLE is ignored elsewhere).
+add_executable(sugo MACOSX_BUNDLE ${sugo_app_sources})
+if(APPLE)
+    set_target_properties(sugo PROPERTIES
+        OUTPUT_NAME Sugo
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.mineraleyt.sugo
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
+    )
+endif()
 
 # The timer icons, shown through PresetModel::iconSource() as qrc:/icons/<name>.svg.
 qt6_add_resources(sugo "preseticons"
@@ -186,9 +204,11 @@ qt6_add_resources(sugo "appicon"
     FILES "${CMAKE_SOURCE_DIR}/data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg"
 )
 
+# The QML plugin first, then the library it links privately: listed the other way round, CMake repeats
+# libsugo_core.a after the plugin to keep the static link order (Apple's ld warns about duplicates).
 target_link_libraries(sugo PRIVATE
-    sugo_core
     sugo_qml
+    sugo_core
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
@@ -196,8 +216,178 @@ target_link_libraries(sugo PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Sql
-    Qt6::DBus
+    ${SUGO_DBUS}
     Qt6::Network
 )
 
-install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+if(APPLE)
+    # KDE_INSTALL_TARGETS_DEFAULT_ARGS would put the bundle in /Applications/KDE (absolute).
+    install(TARGETS sugo BUNDLE DESTINATION . RUNTIME DESTINATION ${KDE_INSTALL_BINDIR})
+else()
+    install(TARGETS sugo ${KDE_INSTALL_TARGETS_DEFAULT_ARGS})
+endif()
+
+# --- macOS port: B1 menu bar icon, notifications, single instance, Dock ---
+target_sources(sugo_core PRIVATE
+    platform/MacNotificationMapping.h
+    platform/MacNotificationMapping.cpp
+    platform/LocalSingleInstance.h
+    platform/LocalSingleInstance.cpp
+)
+# The menu bar icon while idle, a template image for macOS (see TrayController, which the tests
+# use too: so in the library, not the program).
+qt6_add_resources(sugo_core "trayicon"
+    PREFIX "/icons"
+    BASE "${PROJECT_SOURCE_DIR}/data/icons/tray"
+    FILES "${PROJECT_SOURCE_DIR}/data/icons/tray/sugo-tray-template.svg"
+)
+if(APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/MacNotifier.h
+        platform/MacNotifier.mm
+        platform/MacApp.h
+        platform/MacApp.mm
+    )
+    set_source_files_properties(platform/MacNotifier.mm platform/MacApp.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(sugo_core PRIVATE "-framework Foundation" "-framework AppKit" "-framework UserNotifications")
+endif()
+
+# --- macOS port: B2 (keep-awake, screen lock and sleep, Keychain, login item) ---
+target_sources(sugo_core PRIVATE
+    platform/LaunchAgentAutostart.cpp platform/LaunchAgentAutostart.h
+)
+if(APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/MacPowerAssertion.cpp platform/MacPowerAssertion.h
+        platform/MacSessionEvents.cpp platform/MacSessionEvents.h
+        platform/MacKeychainStore.cpp platform/MacKeychainStore.h
+    )
+    target_link_libraries(sugo_core PRIVATE
+        "-framework CoreFoundation"
+        "-framework IOKit"
+        "-framework Security"
+    )
+endif()
+
+# --- macOS port: B3 sounds ---
+# The alert sounds the settings page offers, for macOS, which has no freedesktop sound themes:
+# copied into Sugo.app/Contents/Resources/sounds/<theme>/stereo/ (see AppSettings::findSoundFile).
+if(APPLE)
+    set(SUGO_BUNDLED_SOUNDS
+        ocean/stereo/alarm-clock-elapsed.oga
+        ocean/stereo/bell.oga
+        ocean/stereo/completion-success.oga
+        ocean/stereo/dialog-information.oga
+        ocean/stereo/message-new-instant.oga
+        ocean/stereo/phone-incoming-call.oga
+        ocean/stereo/service-login.oga
+        freedesktop/stereo/complete.oga
+        freedesktop/stereo/message.oga
+        freedesktop/stereo/window-attention.oga
+    )
+    foreach(sound IN LISTS SUGO_BUNDLED_SOUNDS)
+        set(sound_file "${PROJECT_SOURCE_DIR}/data/sounds/${sound}")
+        get_filename_component(sound_dir "${sound}" DIRECTORY)
+        set_source_files_properties("${sound_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/sounds/${sound_dir}")
+        target_sources(sugo PRIVATE "${sound_file}")
+    endforeach()
+endif()
+
+# --- macOS port: C (window chrome, menus, shortcuts, texts) ---
+# The macOS menu bar (Qt.labs.platform). A plain resource next to the module's QML, not one of its
+# QML_FILES: Main.qml loads it by URL only on macOS, so Linux neither compiles nor imports it.
+qt_add_resources(sugo_core "sugo_macos_menu"
+    PREFIX "/qt/qml/io/github/mineraleyt/sugo"
+    FILES qml/components/MacMenuBar.qml
+)
+
+# --- macOS port: W2-B Dock integration and fallback icons ---
+target_sources(sugo_core PRIVATE
+    core/TimerMenuActions.h core/TimerMenuActions.cpp
+    core/DockController.h core/DockController.cpp
+)
+# The theme icons the menus use, from Breeze, for platforms without an icon theme (see
+# data/icons/sugo-fallback/README.md and ThemeIcons::installFallbackTheme()).
+set(sugo_fallback_icon_names
+    application-exit chronometer configure media-playback-pause media-playback-start
+    media-playback-stop media-skip-forward office-chart-bar
+)
+set(sugo_fallback_icons "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback/index.theme")
+foreach(size 16 22)
+    foreach(name IN LISTS sugo_fallback_icon_names)
+        list(APPEND sugo_fallback_icons "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback/actions/${size}/${name}.svg")
+    endforeach()
+endforeach()
+qt6_add_resources(sugo_core "fallbackicons"
+    PREFIX "/icons/sugo-fallback"
+    BASE "${PROJECT_SOURCE_DIR}/data/icons/sugo-fallback"
+    FILES ${sugo_fallback_icons}
+)
+
+# --- macOS port: W2-A (Focus through Shortcuts, sugo:// links) ---
+# Plain Qt, compiled everywhere: the Linux tests drive them with a fake `shortcuts` program.
+target_sources(sugo_core PRIVATE
+    core/TimerCommands.cpp core/TimerCommands.h
+    platform/ShortcutsFocusInhibitor.cpp platform/ShortcutsFocusInhibitor.h
+)
+
+# --- macOS port: W4 install the Focus shortcuts ---
+target_sources(sugo_core PRIVATE
+    platform/ShortcutsFocusInstaller.cpp platform/ShortcutsFocusInstaller.h
+)
+
+# --- macOS port: W2-C self-update from the disk image ---
+# Built everywhere: the macOS install steps are QProcess calls, tested on Linux with stand-ins.
+target_sources(sugo_core PRIVATE
+    core/UpdateInstaller.h
+    core/UpdateInstaller.cpp
+    platform/MacBundle.h
+    platform/MacBundle.cpp
+)
+
+# --- macOS port: W3 QtDBus only on Linux ---
+# The freedesktop services over D-Bus: notifications, notification and screen-sleep inhibition,
+# the single-instance bus name, /Timer, KRunner, the Background portal and the Secret Service.
+# PowerInhibitor, ScreenLockWatcher, AppSettings and the factories keep their D-Bus code under
+# #ifndef Q_OS_MACOS / #ifdef Q_OS_LINUX, built everywhere.
+if(NOT APPLE)
+    target_sources(sugo_core PRIVATE
+        platform/FreedesktopInhibitor.h
+        platform/FreedesktopInhibitor.cpp
+        platform/FreedesktopNotifier.h
+        platform/FreedesktopNotifier.cpp
+        platform/SingleInstance.h
+        platform/SingleInstance.cpp
+        platform/DBusTimerService.h
+        platform/DBusTimerService.cpp
+        platform/KRunnerService.h
+        platform/KRunnerService.cpp
+        platform/PortalAutostart.h
+        platform/PortalAutostart.cpp
+        platform/SecretServiceStore.h
+        platform/SecretServiceStore.cpp
+    )
+endif()
+
+# --- macOS port: W5 shipped Focus shortcuts ---
+# The two Apple-signed shortcuts ShortcutsFocusInstaller opens, in Sugo.app/Contents/Resources/shortcuts/.
+if(APPLE)
+    foreach(shortcut IN ITEMS "Sugo Focus On.shortcut" "Sugo Focus Off.shortcut")
+        set(shortcut_file "${PROJECT_SOURCE_DIR}/data/shortcuts/${shortcut}")
+        set_source_files_properties("${shortcut_file}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shortcuts")
+        target_sources(sugo PRIVATE "${shortcut_file}")
+    endforeach()
+endif()
+
+# --- macOS: sign the bundle built here ---
+# The linker signs only the binary, ad hoc and under the name "Sugo"; macOS then refuses the
+# notification permission (it goes by the bundle's identifier). Signing the whole bundle ad hoc,
+# as packaging/macos/build.sh does for the disk image, makes a build tried from here behave like
+# the installed app.
+if(APPLE)
+    add_custom_command(TARGET sugo POST_BUILD
+        COMMAND codesign --force --sign - "$<TARGET_BUNDLE_DIR:sugo>"
+        COMMENT "Signing Sugo.app ad hoc"
+        VERBATIM
+    )
+endif()

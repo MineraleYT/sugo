@@ -28,7 +28,9 @@ Rectangle {
     signal minimizeRequested()
     signal closeRequested()
 
-    implicitHeight: Theme.topBarHeight
+    // macOS: the strip of the title bar above it, with the traffic lights (0 elsewhere).
+    readonly property real titleStripHeight: DesktopStyle.nativeChrome ? bar.SafeArea.margins.top : 0
+    implicitHeight: Theme.topBarHeight + titleStripHeight
     color: Theme.background
 
     Rectangle {
@@ -65,6 +67,7 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
+        anchors.topMargin: bar.titleStripHeight
         anchors.leftMargin: Theme.spaceLg
         anchors.rightMargin: Theme.spaceLg
         spacing: Theme.spaceMd

@@ -208,31 +208,6 @@ QQC2.Page {
         width: Math.min(implicitWidth, page.width - Theme.space2xl * 2)
         spacing: Theme.space2xl
 
-        // Paused by the screen lock or by sleep: say so, and offer to go on.
-        Banner {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: page.trackWidth
-            visible: (ScreenLockWatcher.pausedByScreenLock || ScreenLockWatcher.pausedBySleep) && TimerEngine.paused
-            tone: "warning"
-            text: ScreenLockWatcher.pausedBySleep ? i18n("The timer was paused because the computer went to sleep.")
-                                                  : i18n("The timer was paused because your screen was locked.")
-            SButton {
-                kind: "ghost"
-                text: i18n("Resume")
-                onClicked: {
-                    ScreenLockWatcher.clearLockPauseNotice();
-                    TimerEngine.resume();
-                }
-            }
-            SButton {
-                kind: "ghost"
-                iconOnly: true
-                iconName: "close"
-                text: i18n("Dismiss")
-                onClicked: ScreenLockWatcher.clearLockPauseNotice()
-            }
-        }
-
         // The phase, in its colour.
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
@@ -411,21 +386,59 @@ QQC2.Page {
                 text: i18nc("keyboard key", "Space")
             }
             Text {
+                id: spaceHint
                 text: TimerEngine.active && !TimerEngine.paused ? i18n("pause") : i18n("start")
                 color: Theme.subtle
                 font.pixelSize: Theme.fontCaption
+                // As wide as the wider word.
+                Layout.preferredWidth: Math.ceil(Math.max(hintMetrics.advanceWidth(i18n("pause")), hintMetrics.advanceWidth(i18n("start"))))
+                FontMetrics {
+                    id: hintMetrics
+                    font: spaceHint.font
+                }
             }
+            // Faded rather than hidden: the hints beside them keep their place.
             Kbd {
                 Layout.leftMargin: Theme.spaceSm
-                visible: TimerEngine.active
+                opacity: TimerEngine.active ? 1 : 0
                 text: i18nc("keyboard key", "S")
             }
             Text {
-                visible: TimerEngine.active
+                opacity: TimerEngine.active ? 1 : 0
                 text: i18n("skip")
                 color: Theme.subtle
                 font.pixelSize: Theme.fontCaption
             }
+        }
+    }
+
+    // Paused by the screen lock or by sleep: say so, and offer to go on.
+    // Over the clock and out of its column, so the clock does not move when it comes or goes.
+    MessageSlot {
+        objectName: "lockPauseMessage"
+        anchors.bottom: clockColumn.top
+        anchors.bottomMargin: Theme.spaceXl
+        anchors.horizontalCenter: clockColumn.horizontalCenter
+        width: page.trackWidth
+        lines: 2
+        shown: (ScreenLockWatcher.pausedByScreenLock || ScreenLockWatcher.pausedBySleep) && TimerEngine.paused
+        tone: "warning"
+        text: ScreenLockWatcher.pausedBySleep ? i18n("The timer was paused because the computer went to sleep.")
+                                              : i18n("The timer was paused because your screen was locked.")
+        SButton {
+            kind: "ghost"
+            text: i18n("Resume")
+            onClicked: {
+                ScreenLockWatcher.clearLockPauseNotice();
+                TimerEngine.resume();
+            }
+        }
+        SButton {
+            kind: "ghost"
+            iconOnly: true
+            iconName: "close"
+            text: i18n("Dismiss")
+            onClicked: ScreenLockWatcher.clearLockPauseNotice()
         }
     }
 

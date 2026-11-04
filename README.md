@@ -36,7 +36,7 @@
 - **Task notes**: jot down what you did when a work session ends, from the notification or an in-app prompt.
 - **Calendar events (optional)**: log in with Nextcloud, or use any CalDAV calendar, and every finished work session becomes an event.
 - **Desktop integration**: a tray icon with a live countdown and a menu to control the timer, native notifications with actions, KRunner commands, start at login, and a D-Bus interface for scripts and shortcuts.
-- **Private**: everything lives in a local SQLite database, with one-click backup and restore. Sugo sends no data about you: the AppImage looks for updates on GitHub (you can turn that off) and downloads them when you ask, and the other packages only look for one when you ask; the calendar sync is off until you set it up.
+- **Private**: everything lives in a local SQLite database, with one-click backup and restore. Sugo sends no data about you: the AppImage and the macOS app look for updates on GitHub (you can turn that off) and download them when you ask, and the other packages only look for one when you ask; the calendar sync is off until you set it up.
 
 See the [user guide](docs/USAGE.md) for the details of each feature.
 
@@ -69,6 +69,20 @@ Releases also provide an x86_64 Flatpak bundle (it does not update itself):
    ```
 
 *Flatpak downloads the KDE 6.11 runtime from Flathub the first time, if it is not installed yet.*
+
+### macOS
+
+Releases also provide a disk image for **macOS 13 Ventura or later**, one app for both Apple Silicon and Intel Macs:
+
+1. Download [Sugo-macOS-universal.dmg](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg), open it and drag **Sugo** to **Applications**.
+2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
+   - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
+   - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
+   - or, in Terminal, remove the quarantine mark: `xattr -dr com.apple.quarantine /Applications/Sugo.app`.
+
+   macOS remembers the choice: later launches open normally.
+
+Sugo for macOS updates itself like the AppImage when it is in a folder you can write to, such as **Applications** for an administrator account: **Install update** downloads the new disk image, checks it and prepares the new app, **Restart to update** (or simply quitting) puts it in place. In Settings you can turn the automatic check off or choose the **Nightly** channel. Installed elsewhere, it only tells you that a new release is out: download the new disk image and replace the app. Some features are Linux-only for now: control from scripts and launchers (the D-Bus interface and KRunner commands) and silencing other notifications while you work.
 
 ### From source
 

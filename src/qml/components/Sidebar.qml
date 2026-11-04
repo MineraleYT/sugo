@@ -18,8 +18,9 @@ Rectangle {
     signal searchRequested()
     /// "Restart to update": an update has been installed and waits for the restart.
     signal restartRequested()
-    /// The top of the sidebar moves the window, which has no system title bar; on desktops that
-    /// put window buttons on the left, they are here.
+    /// The top of the sidebar moves the window (on Linux it has no system title bar; on macOS the
+    /// title bar is drawn over the window); on desktops that put window buttons on the left, they
+    /// are here.
     signal moveRequested()
     property bool maximized: false
     signal minimizeRequested()
@@ -36,9 +37,29 @@ Rectangle {
         color: Theme.border
     }
 
+    // macOS: the strip of the system's title bar, with the traffic lights. The sidebar starts
+    // below it, in line with the top bar (which leaves the same strip); dragging the strip moves
+    // the window, a double click zooms it, as in a title bar.
+    Item {
+        id: titleStrip
+        visible: DesktopStyle.nativeChrome
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: sidebar.SafeArea.margins.top
+        DragHandler {
+            target: null
+            onActiveChanged: if (active) sidebar.moveRequested()
+        }
+        TapHandler {
+            onDoubleTapped: sidebar.toggleMaximizeRequested()
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.spaceMd
+        anchors.topMargin: Theme.spaceMd + (DesktopStyle.nativeChrome ? titleStrip.height : 0)
         anchors.rightMargin: Theme.spaceMd + Theme.hairline
         spacing: Theme.hairline * 2
 
@@ -119,7 +140,7 @@ Rectangle {
                     Layout.fillWidth: true
                 }
                 Kbd {
-                    text: i18nc("keyboard shortcut", "Ctrl K")
+                    text: DesktopStyle.shortcutText("Ctrl+K")
                 }
             }
         }
@@ -195,9 +216,9 @@ Rectangle {
             Layout.fillHeight: true
         }
 
-        // The AppImage's update, one step at a time: found, downloading, installed.
+        // The update of the AppImage or the macOS app, one step at a time: found, downloading, installed.
         NavItem {
-            readonly property bool found: UpdateChecker.canInstall && UpdateChecker.status === UpdateChecker.UpdateAvailable
+            readonly property bool found: UpdateChecker.installable
             readonly property bool downloading: UpdateChecker.status === UpdateChecker.Downloading
             readonly property bool installed: UpdateChecker.status === UpdateChecker.ReadyToRestart
             Layout.fillWidth: true
@@ -208,8 +229,9 @@ Rectangle {
                   : i18n("Install update")
             iconName: installed ? "refresh" : "download"
             dotColor: downloading ? "transparent" : Theme.brand
-            Accessible.description: installed ? i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
-                                              : i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+            Accessible.description: !installed ? i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+                                    : DesktopStyle.macos ? i18n("Sugo %1 is ready; it replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                    : i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
             onClicked: installed ? sidebar.restartRequested() : UpdateChecker.installUpdate()
         }
         NavItem {

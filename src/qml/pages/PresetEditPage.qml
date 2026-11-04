@@ -206,7 +206,7 @@ QQC2.Page {
             SButton {
                 kind: "primary"
                 text: page.isNew ? i18n("Create Timer") : i18n("Save")
-                shortcutText: i18nc("keyboard shortcut", "Ctrl S")
+                shortcutText: DesktopStyle.shortcutText("Ctrl+S")
                 enabled: page.canSave
                 onClicked: page.save()
             }
@@ -653,11 +653,25 @@ QQC2.Page {
                 FormRow {
                     title: i18n("Silence notifications while working")
                     description: SilenceController.available
-                        ? i18n("Turns off all system notifications for the work phase and back on for the break.")
-                        : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
-                    enabled: SilenceController.available
+                        ? (DesktopStyle.macos
+                           ? i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts.")
+                           : i18n("Turns off all system notifications for the work phase and back on for the break."))
+                        : DesktopStyle.macos
+                          ? i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")
+                          : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
+                    enabled: SilenceController.available || DesktopStyle.macos
+                    // macOS: until the shortcuts exist, a way to set them up instead of the switch.
+                    SButton {
+                        objectName: "silenceSetupButton"
+                        visible: DesktopStyle.macos && !SilenceController.available
+                        text: i18n("Set Up…")
+                        iconName: "settings"
+                        onClicked: applicationWindow().openSettings("focus")
+                    }
                     SSwitch {
                         id: silenceBox
+                        visible: SilenceController.available || !DesktopStyle.macos
+                        enabled: SilenceController.available
                         Accessible.name: i18n("Silence notifications while working")
                         checked: (page.preset.options && page.preset.options.silenceWhileWorking !== undefined)
                             ? Boolean(page.preset.options.silenceWhileWorking)

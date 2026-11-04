@@ -8,8 +8,18 @@ QQC2.ApplicationWindow {
     id: root
 
     color: Theme.background
-    // No system title bar: the top bar moves the window and has its buttons; the edges resize it.
-    flags: Qt.Window | Qt.FramelessWindowHint
+    // Linux: no system title bar; the top bar moves the window and has its buttons, the edges
+    // resize it. macOS (DesktopStyle.nativeChrome): the system's title bar, transparent over the
+    // content, with its own buttons (the traffic lights), resizing, full screen and tiling.
+    flags: DesktopStyle.nativeChrome ? (Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint)
+                                     : (Qt.Window | Qt.FramelessWindowHint)
+    // The content fills the whole window, also under macOS' transparent title bar: by default
+    // ApplicationWindow keeps it in the safe area below it, where nothing could move the window.
+    // The top bar and the sidebar leave that strip free for the traffic lights themselves.
+    topPadding: 0
+    leftPadding: 0
+    rightPadding: 0
+    bottomPadding: 0
     readonly property bool maximized: visibility === Window.Maximized || visibility === Window.FullScreen
     readonly property bool wideScreen: width >= Theme.wideBreakpoint
 
@@ -74,10 +84,17 @@ QQC2.ApplicationWindow {
     // is set once in Component.onCompleted: a binding would hide the window again whenever the
     // tray or start-minimized settings change later.
 
-    // The close button hides the window when the program is meant to live in the tray;
-    // otherwise it quits (the application does not quit on its own when a window closes).
+    /// Set from C++ (main.cpp) when macOS asks the application to quit (Cmd+Q from the Dock,
+    /// logging out): the window then lets itself close.
+    property bool platformQuitting: false
+
+    // The close button hides the window when the program is meant to live in the tray, and
+    // always on macOS (Sugo stays in the Dock and the menu bar; Quit ends it); otherwise it quits
+    // (the application does not quit on its own when a window closes).
     onClosing: close => {
-        if (AppSettings.keepRunningInTray) {
+        if (root.platformQuitting) {
+            close.accepted = true;
+        } else if (DesktopStyle.nativeChrome || AppSettings.keepRunningInTray) {
             close.accepted = false;
             root.hide();
         } else {
@@ -88,6 +105,9 @@ QQC2.ApplicationWindow {
 
     /// Quits, after asking when that would cut a running or paused phase short.
     function requestQuit(): void {
+        if (quitDialog.visible) {
+            return;
+        }
         if (TimerEngine.active) {
             quitDialog.open();
         } else {
@@ -272,6 +292,7 @@ QQC2.ApplicationWindow {
         property string userUuid: ""
         property string builtinUuid: ""
         property bool paletteRan: false
+        property real welcomePanelY: 0
 
         function findItem(item: var, predicate: var): var {
             if (!item) {
@@ -324,6 +345,27 @@ QQC2.ApplicationWindow {
                 fail(29, "The volume slider no longer follows the setting after a drag: " + slider.value);
                 return;
             }
+            // The Focus card (shortcuts that silence notifications) exists on macOS only, and
+            // openSettings() shows the category it is in.
+            const focusCard = findItem(page, item => item.objectName === "focusModeCard");
+            if (!focusCard || focusCard.available !== DesktopStyle.macos) {
+                fail(44, "The Focus card is missing, or shown outside macOS");
+                return;
+            }
+            root.openSettings("focus");
+            const focusShown = page.category === "focus" && focusCard.visible === DesktopStyle.macos;
+            page.category = "general";
+            if (!focusShown) {
+                fail(44, "openSettings(\"focus\") did not show the Focus category: " + page.category);
+                return;
+            }
+            // "Install Shortcuts" is there, and off in a smoke run (no installer: the real tools
+            // must never run).
+            const installButton = findItem(focusCard, item => item.objectName === "installFocusShortcutsButton");
+            if (!installButton || installButton.enabled) {
+                fail(45, "The Focus card's install button is missing, or on in a smoke run");
+                return;
+            }
             // Disconnecting the calendar asks first.
             page.requestDisconnect();
             if (!page.disconnectConfirming) {
@@ -341,31 +383,67 @@ QQC2.ApplicationWindow {
             }
         }
 
-        function checkWelcome(page: var): void {
+        // Welcome: the tray icon's colours, the Focus row, the step dots; then a message on the
+        // setup step must not move the step (stage 1 → 2, a tick apart so the layout settles).
+        function checkWelcome(page: var): bool {
+            if (stage === 1) {
+                ++stage;
+                const panel = findItem(page, item => item.objectName === "welcomeSetupPanel");
+                const slot = findItem(page, item => item.objectName === "welcomeSetupMessage");
+                if (!panel || !slot) {
+                    fail(47, "The welcome tour's setup panel or its message place is missing");
+                    return true;
+                }
+                welcomePanelY = panel.mapToItem(page, 0, 0).y;
+                page.autostartError = "Smoke test: a message long enough to need more than one line in the welcome tour, "
+                                      + "so that a place too small for it would show.";
+                return false;
+            }
+            if (stage === 2) {
+                const panel = findItem(page, item => item.objectName === "welcomeSetupPanel");
+                const y = panel.mapToItem(page, 0, 0).y;
+                page.autostartError = "";
+                if (Math.abs(y - welcomePanelY) > 0.5) {
+                    fail(47, "A message on the welcome tour's setup step moved the step: y " + welcomePanelY + " → " + y);
+                }
+                return true;
+            }
             // The tray icon's picture uses the colours the real icon is painted with.
             const dial = findItem(page, item => item.objectName === "trayDialPreview");
             if (!dial || !Qt.colorEqual(dial.primary, dial.isBreak ? TrayIconStyle.breakColor : TrayIconStyle.workColor)) {
                 fail(34, "The tray icon preview does not use the tray icon's colours");
-                return;
+                return true;
             }
-                        // The step dots are named, move the slides, and keep following them.
+            // The Focus shortcuts' row: hidden outside macOS, its button off without an installer.
+            // (On macOS its step may not be on screen, so its visibility says nothing there.)
+            const focusInstall = findItem(page, item => item.objectName === "welcomeInstallFocusShortcuts");
+            if (!focusInstall || focusInstall.enabled || (!DesktopStyle.macos && focusInstall.visible)) {
+                fail(46, "The welcome tour's Focus shortcuts row is missing, or shown outside macOS");
+                return true;
+            }
+            // The step dots are named, move the slides, and keep following them.
             const indicator = findItem(page, item => item.objectName === "welcomeIndicator");
             const last = indicator ? indicator.count - 1 : -1;
             const lastDot = findItem(page, item => item.objectName === "welcomeStepDot-" + last);
             const firstDot = findItem(page, item => item.objectName === "welcomeStepDot-0");
             if (!indicator || last < 1 || !lastDot || !firstDot || lastDot.accessibleName.length === 0) {
                 fail(31, "Welcome step dots missing or unnamed");
-                return;
+                return true;
             }
             lastDot.activate();
             if (indicator.currentIndex !== last) {
                 fail(31, "Choosing a step dot did not move the tour: " + indicator.currentIndex);
-                return;
+                return true;
             }
             firstDot.activate();
             if (indicator.currentIndex !== 0) {
                 fail(31, "The dots stopped following the tour: " + indicator.currentIndex);
+                return true;
             }
+            // On to the setup step for the layout check.
+            page.current = 2;
+            stage = 1;
+            return false;
         }
 
         // Timer page: the picker's text, Stop/Skip confirmation, the note of a hidden window.
@@ -540,11 +618,13 @@ QQC2.ApplicationWindow {
                 if (appSmokePage === "settings") {
                     checkSettings(currentPage);
                 } else if (appSmokePage === "welcome") {
-                    checkWelcome(currentPage);
+                    done = checkWelcome(currentPage);
                 } else if (appSmokePage === "presets") {
                     done = checkPresets(currentPage);
                 } else if (appSmokePage === "timer") {
                     done = checkTimer(root.pageStack.get(0));
+                } else if (appSmokePage === "inventory") {
+                    done = featureInventory.step();
                 }
                 if (done && running) {
                     stop();
@@ -663,6 +743,21 @@ QQC2.ApplicationWindow {
         navigate(name);
     }
 
+    /// The settings category the settings page opens on next ("" for its default).
+    property string pendingSettingsCategory: ""
+
+    /// Opens the settings on one category, e.g. "focus".
+    function openSettings(category: string): void {
+        pendingSettingsCategory = category;
+        navigate("settings");
+        // Already open: navigate() kept the page, so tell it here.
+        const top = pageStack.currentItem;
+        if (top && top.categories !== undefined && pendingSettingsCategory.length > 0) {
+            top.category = pendingSettingsCategory;
+            pendingSettingsCategory = "";
+        }
+    }
+
     /// Opens a timer's page; `reload` shows it afresh (after a reset, or dropped changes).
     function openTimer(uuid: string, reload: var): void {
         navigate("preset", uuid, reload === true);
@@ -688,14 +783,14 @@ QQC2.ApplicationWindow {
     /// What the search (Ctrl+K) offers.
     function paletteCommands(): var {
         const list = [
-            { text: i18n("Focus"), icon: "timer", hint: i18nc("keyboard shortcut", "Ctrl 1"), run: () => root.navigate("timer") },
-            { text: i18n("Statistics"), icon: "stats", hint: i18nc("keyboard shortcut", "Ctrl 2"), run: () => root.navigate("stats") },
-            { text: i18n("Settings"), icon: "settings", hint: i18nc("keyboard shortcut", "Ctrl ,"), run: () => root.navigate("settings") },
+            { text: i18n("Focus"), icon: "timer", hint: DesktopStyle.shortcutText("Ctrl+1"), run: () => root.navigate("timer") },
+            { text: i18n("Statistics"), icon: "stats", hint: DesktopStyle.shortcutText("Ctrl+2"), run: () => root.navigate("stats") },
+            { text: i18n("Settings"), icon: "settings", hint: DesktopStyle.shortcutText("Ctrl+,"), run: () => root.navigate("settings") },
             { text: i18n("About"), icon: "info", run: () => root.navigate("about") },
             { text: TimerEngine.paused ? i18n("Resume the timer") : TimerEngine.active ? i18n("Pause the timer") : i18n("Start the timer"),
               icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", hint: i18nc("keyboard key", "Space"),
               run: () => TimerEngine.toggle() },
-            { text: i18n("New timer"), icon: "plus", hint: i18nc("keyboard shortcut", "Ctrl N"), run: () => root.newTimer() }
+            { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
             list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => TimerEngine.stop() });
@@ -711,27 +806,45 @@ QQC2.ApplicationWindow {
         return list;
     }
 
+    function openSearch(): void {
+        commandPalette.commands = root.paletteCommands();
+        commandPalette.open();
+    }
+
     CommandPalette {
         id: commandPalette
     }
 
+    // The smoke run "inventory": what every screen offers, for the platform parity test.
+    FeatureInventory {
+        id: featureInventory
+        app: root
+    }
+
+    // On macOS the menu bar has these shortcuts: the Shortcut items below that would claim the
+    // same keys are off there.
+    Loader {
+        active: DesktopStyle.nativeChrome
+        source: active ? Qt.resolvedUrl("components/MacMenuBar.qml") : ""
+        onLoaded: item.app = root
+    }
+    readonly property bool menuBarShortcuts: DesktopStyle.nativeChrome
+
     Shortcut {
         sequence: "Ctrl+K"
-        enabled: !root.isWelcomeActive && !root.dialogOpen
-        onActivated: {
-            commandPalette.commands = root.paletteCommands();
-            commandPalette.open();
-        }
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
+        onActivated: root.openSearch()
     }
 
     Shortcut {
         sequences: [StandardKey.New]
-        enabled: !root.isWelcomeActive && !root.dialogOpen
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.newTimer()
     }
 
     Shortcut {
         sequence: StandardKey.Quit
+        enabled: !root.menuBarShortcuts
         onActivated: root.requestQuit()
     }
 
@@ -772,15 +885,17 @@ QQC2.ApplicationWindow {
             required property int index
             Shortcut {
                 sequence: "Ctrl+" + (pageShortcut.index + 1)
-                enabled: !root.isWelcomeActive && !root.dialogOpen
+                enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
                 onActivated: root.navigate(pageShortcut.modelData)
             }
         }
     }
 
+    // KDE's Ctrl+Shift+, and the common Ctrl+,. Off on macOS, where StandardKey.Preferences is
+    // Cmd+, as well (the same key twice would be ambiguous): the menu bar has it once there.
     Shortcut {
         sequences: [StandardKey.Preferences, "Ctrl+,"]
-        enabled: !root.isWelcomeActive && !root.dialogOpen
+        enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.navigate("settings")
     }
 
@@ -802,10 +917,7 @@ QQC2.ApplicationWindow {
             onTimerRequested: uuid => root.chooseTimer(uuid)
             onNewTimerRequested: root.newTimer()
             onRestartRequested: root.requestRestart()
-            onSearchRequested: {
-                commandPalette.commands = root.paletteCommands();
-                commandPalette.open();
-            }
+            onSearchRequested: root.openSearch()
             onMoveRequested: root.startSystemMove()
         }
 
@@ -832,31 +944,54 @@ QQC2.ApplicationWindow {
                 onStatusClicked: root.navigate("timer")
             }
 
-            // Shown on every page: nothing recorded now will survive a restart, or the last
-            // changes are still waiting to be stored.
-            Banner {
-                Layout.fillWidth: true
-                Layout.margins: Theme.spaceMd
-                visible: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
-                tone: "warning"
-                text: DataManager !== null && DataManager.usingTemporaryDatabase === true
-                      ? i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.")
-                      : i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.")
-            }
-
-            QQC2.StackView {
-                id: stack
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                clip: true
-                pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+
+                QQC2.StackView {
+                    id: stack
+                    anchors.fill: parent
+                    clip: true
+                    pushEnter: Transition {
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                    }
+                    pushExit: Transition {}
+                    popEnter: Transition {}
+                    popExit: Transition {}
+                    replaceEnter: Transition {}
+                    replaceExit: Transition {}
                 }
-                pushExit: Transition {}
-                popEnter: Transition {}
-                popExit: Transition {}
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
+
+                // Shown on every page: nothing recorded now will survive a restart, or the last
+                // changes are still waiting to be stored. Laid over the top of the page, so the
+                // page does not move when it comes or goes.
+                Rectangle {
+                    objectName: "dataWarning"
+                    readonly property bool shown: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spaceMd
+                    height: dataBanner.implicitHeight
+                    z: 1
+                    // The banner's fill is see-through: the page must not show under it.
+                    color: Theme.background
+                    radius: Theme.radius
+                    opacity: shown ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
+                    }
+
+                    Banner {
+                        id: dataBanner
+                        anchors.fill: parent
+                        tone: "warning"
+                        text: DataManager !== null && DataManager.usingTemporaryDatabase === true
+                              ? i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.")
+                              : i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.")
+                    }
+                }
             }
         }
     }
@@ -901,10 +1036,11 @@ QQC2.ApplicationWindow {
         id: toast
     }
 
-    // A frameless window still needs an outline and edges to resize it by.
+    // A frameless window still needs an outline and edges to resize it by (macOS's own window
+    // has both).
     Rectangle {
         anchors.fill: parent
-        visible: !root.maximized
+        visible: !root.maximized && !DesktopStyle.nativeChrome
         color: "transparent"
         border.width: Theme.hairline
         border.color: Theme.borderStrong
@@ -915,7 +1051,8 @@ QQC2.ApplicationWindow {
         id: resizeEdge
         required property int edges
         property int cursor: Qt.ArrowCursor
-        enabled: !root.maximized
+        enabled: !root.maximized && !DesktopStyle.nativeChrome
+        visible: enabled
         z: 1000
         HoverHandler {
             cursorShape: resizeEdge.cursor
@@ -941,11 +1078,12 @@ QQC2.ApplicationWindow {
             pushPage(destinations.welcome);
         } else {
             if (typeof appSmokePage !== "undefined" && appSmokePage.length > 0) {
-                currentDestination = appSmokePage;
+                // The inventory starts on the focus page and goes through the others itself.
+                currentDestination = appSmokePage === "inventory" ? "timer" : appSmokePage;
             } else if (appStatsSmokeTest) {
                 currentDestination = "stats";
-            } else if (appStartPage.length > 0 && (destinations[appStartPage] || appStartPage === "presets")) {
-                currentDestination = appStartPage;
+            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets")) {
+                currentDestination = startPageName;
             }
             // "presets" (smoke test, development): the page of the timer in use.
             if (currentDestination === "presets") {
@@ -954,7 +1092,19 @@ QQC2.ApplicationWindow {
             }
             pushPage(destinations[currentDestination], currentDestination === "preset" ? { uuid: openTimerUuid } : {});
         }
+        // "settings/<category>", "welcome/<step>": that part of the page.
+        const startPart = appStartPage.split("/")[1] ?? "";
+        if (startPart.length > 0 && currentDestination === startPageName) {
+            const page = pageStack.currentItem;
+            if (startPageName === "settings") {
+                page.category = startPart;
+            } else if (startPageName === "welcome") {
+                page.current = Number(startPart);
+            }
+        }
     }
+    /// SUGO_START_PAGE without its part ("settings" for "settings/focus").
+    readonly property string startPageName: appStartPage.split("/")[0]
 
     ConfirmDialog {
         id: taskNoteDialog

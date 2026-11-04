@@ -109,7 +109,8 @@ QtObject {
     readonly property int wideBreakpoint: 680
 
     // --- Type --------------------------------------------------------------------------------
-    readonly property string monoFamily: "monospace"
+    /// The system's fixed-width font ("monospace" is a fontconfig alias, unknown to macOS).
+    readonly property string monoFamily: DesktopStyle.monoFamily
     readonly property int fontMicro: 10
     readonly property int fontSmall: 11
     readonly property int fontCaption: 12

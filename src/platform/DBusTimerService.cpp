@@ -1,186 +1,91 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "DBusTimerService.h"
 
-#include "Localization.h"
-#include "PresetModel.h"
-
 DBusTimerService::DBusTimerService(TimerEngine *engine, PresetModel *presets, TimerDBusObject *host)
     : QDBusAbstractAdaptor(host)
-    , m_engine(engine)
-    , m_presets(presets)
+    , m_commands(engine, presets)
 {
 }
 
-bool DBusTimerService::mayControl()
+bool DBusTimerService::answer(const TimerCommands::Result &result)
 {
-    if (!m_engine) {
-        return false;
-    }
-    if (!m_allowed || m_allowed()) {
+    QString name;
+    switch (result.error) {
+    case TimerCommands::Error::None:
         return true;
+    case TimerCommands::Error::Unavailable:
+        return false; // nothing to control: no answer, as before there was an engine
+    case TimerCommands::Error::ControlDisabled:
+        name = ControlDisabledError;
+        break;
+    case TimerCommands::Error::UnknownPreset:
+        name = UnknownPresetError;
+        break;
+    case TimerCommands::Error::TimerActive:
+        name = TimerActiveError;
+        break;
+    case TimerCommands::Error::UnknownCommand:
+        name = QStringLiteral("org.freedesktop.DBus.Error.UnknownMethod");
+        break;
     }
-    replyError(ControlDisabledError, i18n("Control by other programs is turned off in Sugo's settings."));
-    return false;
-}
-
-void DBusTimerService::replyError(const QString &name, const QString &message)
-{
     auto *host = static_cast<TimerDBusObject *>(parent());
     if (host->calledFromDBus()) {
-        host->sendErrorReply(name, message);
+        host->sendErrorReply(name, result.message);
     }
-}
-
-QString DBusTimerService::resolvePreset(const QString &nameOrUuid) const
-{
-    if (!m_presets) {
-        return {};
-    }
-    const QList<TimerPreset> &list = m_presets->presets();
-    for (const TimerPreset &preset : list) {
-        if (preset.uuid == nameOrUuid) {
-            return preset.uuid;
-        }
-    }
-    for (const TimerPreset &preset : list) {
-        if (preset.name.compare(nameOrUuid, Qt::CaseInsensitive) == 0) {
-            return preset.uuid;
-        }
-    }
-    return {};
-}
-
-bool DBusTimerService::switchTo(const QString &uuid)
-{
-    if (uuid == m_presets->currentUuid()) {
-        return true;
-    }
-    if (m_engine->isActive()) {
-        replyError(TimerActiveError, i18n("A timer is running. Stop it before choosing another timer."));
-        return false;
-    }
-    m_presets->setCurrentUuid(uuid);
-    return true;
+    return false;
 }
 
 QStringList DBusTimerService::presets() const
 {
-    QStringList names;
-    if (m_presets) {
-        for (const TimerPreset &preset : m_presets->presets()) {
-            names.append(preset.name);
-        }
-    }
-    return names;
+    return m_commands.presets();
 }
 
 bool DBusTimerService::selectPreset(const QString &nameOrUuid)
 {
-    if (!mayControl()) {
-        return false;
-    }
-    const QString uuid = resolvePreset(nameOrUuid);
-    if (uuid.isEmpty()) {
-        replyError(UnknownPresetError, i18n("There is no timer named \"%1\".", nameOrUuid));
-        return false;
-    }
-    return switchTo(uuid);
-}
-
-void DBusTimerService::stepPreset(int step)
-{
-    if (!mayControl() || !m_presets || m_presets->count() == 0) {
-        return;
-    }
-    const int count = m_presets->count();
-    const int row = ((m_presets->currentIndex() + step) % count + count) % count;
-    switchTo(m_presets->uuidAt(row));
+    return answer(m_commands.selectPreset(nameOrUuid));
 }
 
 void DBusTimerService::nextPreset()
 {
-    stepPreset(1);
+    answer(m_commands.stepPreset(1));
 }
 
 void DBusTimerService::previousPreset()
 {
-    stepPreset(-1);
+    answer(m_commands.stepPreset(-1));
 }
 
 bool DBusTimerService::startPreset(const QString &nameOrUuid)
 {
-    if (!selectPreset(nameOrUuid)) {
-        return false;
-    }
-    if (m_engine->isPaused()) {
-        m_engine->resume();
-    } else {
-        m_engine->start();
-    }
-    return true;
+    return answer(m_commands.startPreset(nameOrUuid));
 }
 
 void DBusTimerService::toggle()
 {
-    if (mayControl()) {
-        m_engine->toggle();
-    }
+    answer(m_commands.toggle());
 }
 
 void DBusTimerService::start()
 {
-    if (mayControl()) {
-        m_engine->start();
-    }
+    answer(m_commands.start());
 }
 
 void DBusTimerService::pause()
 {
-    if (mayControl()) {
-        m_engine->pause();
-    }
+    answer(m_commands.pause());
 }
 
 void DBusTimerService::stop()
 {
-    if (mayControl()) {
-        m_engine->stop();
-    }
+    answer(m_commands.stop());
 }
 
 void DBusTimerService::skip()
 {
-    if (mayControl()) {
-        m_engine->skip();
-    }
+    answer(m_commands.skip());
 }
 
 QString DBusTimerService::status() const
 {
-    if (!m_engine) {
-        return QStringLiteral("unavailable");
-    }
-    QString stateStr;
-    if (m_engine->state() == TimerEngine::State::Idle) {
-        stateStr = QStringLiteral("idle");
-    } else if (m_engine->isPaused()) {
-        stateStr = QStringLiteral("paused");
-    } else {
-        stateStr = QStringLiteral("running");
-    }
-
-    QString phaseStr;
-    switch (m_engine->phase()) {
-    case TimerEngine::Phase::Work:
-        phaseStr = QStringLiteral("work");
-        break;
-    case TimerEngine::Phase::ShortBreak:
-        phaseStr = QStringLiteral("short_break");
-        break;
-    case TimerEngine::Phase::LongBreak:
-        phaseStr = QStringLiteral("long_break");
-        break;
-    }
-
-    return QStringLiteral("%1:%2:%3").arg(stateStr, phaseStr, QString::number(m_engine->remainingSeconds()));
+    return m_commands.status();
 }

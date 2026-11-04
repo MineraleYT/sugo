@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Template of Sugo.app/Contents/Info.plist, filled in by src/CMakeLists.txt with configure_file(@ONLY).
+  Only @VARIABLE@ placeholders: CMake configures the result again as MACOSX_BUNDLE_INFO_PLIST,
+  so this file must contain no dollar signs.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>@SUGO_BUNDLE_EXECUTABLE@</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.mineraleyt.sugo</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Sugo</string>
+    <key>CFBundleDisplayName</key>
+    <string>Sugo</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@SUGO_BUNDLE_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@SUGO_BUNDLE_VERSION@</string>
+    <key>CFBundleIconFile</key>
+    <string>Sugo</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@CMAKE_OSX_DEPLOYMENT_TARGET@</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <!-- sugo://toggle and friends: scripts and the Shortcuts app control the timer (main.cpp). -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>io.github.mineraleyt.sugo</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>sugo</string>
+            </array>
+        </dict>
+    </array>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Sugo contributors. GPL-3.0-or-later.</string>
+</dict>
+</plist>

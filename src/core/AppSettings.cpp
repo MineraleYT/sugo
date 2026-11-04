@@ -3,12 +3,18 @@
 
 #include "Autostart.h"
 #include "FocusSoundController.h"
+#include "ShortcutsFocusInhibitor.h"
+#include "ShortcutsFocusInstaller.h"
 #include "SystemTray.h"
 
 #include <QAudioOutput>
-#include <QDBusConnection>
 #include <QDebug>
+#ifdef Q_OS_LINUX
+#include <QDBusConnection>
 #include <QDBusServiceWatcher>
+#endif
+#include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -31,6 +37,8 @@ const char kShowTrayIcon[] = "ShowTrayIcon";
 const char kCloseToTray[] = "CloseToTray";
 const char kAllowExternalControl[] = "AllowExternalControl";
 const char kStartMinimized[] = "StartMinimized";
+const char kShowDockBadge[] = "ShowDockBadge";
+const char kHideDockIcon[] = "HideDockIcon";
 const char kTrayBadgeStyle[] = "TrayBadgeStyle";
 const char kSoundTheme[] = "SoundTheme";
 const char kSoundVolume[] = "SoundVolume";
@@ -47,6 +55,8 @@ const char kColorScheme[] = "ColorScheme";
 const char kUpdateChannel[] = "UpdateChannel";
 const char kAutoCheckUpdates[] = "AutoCheckUpdates";
 const char kVerboseLogging[] = "VerboseLogging";
+const char kFocusOnShortcut[] = "FocusOnShortcut";
+const char kFocusOffShortcut[] = "FocusOffShortcut";
 
 QString validColorScheme(const QString &scheme)
 {
@@ -58,39 +68,19 @@ QString validColorScheme(const QString &scheme)
     return QStringLiteral("system");
 }
 
-/// A sound file for an event sound name, looked up in the XDG data dirs (so it also works
-/// inside Flatpak), then in the host's /usr/share. An absolute path is used as is.
-QString findSoundFile(const QString &soundName)
-{
-    if (soundName.startsWith(QLatin1Char('/'))) {
-        return QFileInfo(soundName).isFile() ? soundName : QString();
-    }
-    for (const char *theme : {"ocean", "freedesktop"}) {
-        for (const char *ext : {"oga", "ogg", "wav"}) {
-            const QString relative = QStringLiteral("sounds/%1/stereo/%2.%3").arg(QLatin1String(theme), soundName, QLatin1String(ext));
-            QString file = QStandardPaths::locate(QStandardPaths::GenericDataLocation, relative);
-            if (file.isEmpty()) {
-                for (const QString &prefix : {QStringLiteral("/usr/share/"), QStringLiteral("/run/host/usr/share/")}) {
-                    if (QFile::exists(prefix + relative)) {
-                        file = prefix + relative;
-                        break;
-                    }
-                }
-            }
-            if (!file.isEmpty()) {
-                return file;
-            }
-        }
-    }
-    return {};
-}
-
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
 
-/// Plays a file with pw-play or paplay, at a fixed volume.
+/// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume.
 void playWithPlayerProgram(const QString &file, int vol)
 {
+#ifdef Q_OS_MACOS
+    if (AppSettings::afplayCanPlay(file)
+        && QProcess::startDetached(QStringLiteral("/usr/bin/afplay"), AppSettings::afplayArguments(file, vol))) {
+        return;
+    }
+    qWarning() << "Cannot play" << file << "- afplay could not be started or cannot read the format";
+#else
     if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
         const double volFactor = vol / 100.0;
         if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
@@ -105,6 +95,7 @@ void playWithPlayerProgram(const QString &file, int vol)
         }
     }
     qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+#endif
 }
 
 /// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
@@ -145,7 +136,9 @@ bool playWithFade(const QString &file, int vol, QObject *parent)
 AppSettings::AppSettings(QObject *parent)
     : AppSettings(Settings::openDefault(), createAutostart(), systemTrayAvailable(), parent)
 {
+#ifdef Q_OS_LINUX
     watchTray();
+#endif
 }
 
 AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autostart, bool trayAvailable, QObject *parent)
@@ -159,6 +152,8 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_closeToTray = settings.value(QLatin1String(kCloseToTray), Defaults::closeToTray).toBool();
     m_allowExternalControl = settings.value(QLatin1String(kAllowExternalControl), Defaults::allowExternalControl).toBool();
     m_startMinimized = settings.value(QLatin1String(kStartMinimized), Defaults::startMinimized).toBool();
+    m_showDockBadge = settings.value(QLatin1String(kShowDockBadge), Defaults::showDockBadge).toBool();
+    m_hideDockIcon = settings.value(QLatin1String(kHideDockIcon), Defaults::hideDockIcon).toBool();
     m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), Defaults::trayBadgeStyle).toInt(), 0, 2);
     m_soundTheme = settings.value(QLatin1String(kSoundTheme), QString(Defaults::soundTheme)).toString();
     m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), Defaults::soundVolume).toInt(), 0, 100);
@@ -176,6 +171,8 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
     m_verboseLogging = settings.value(QLatin1String(kVerboseLogging), Defaults::verboseLogging).toBool();
+    m_focusOnShortcut = settings.value(QLatin1String(kFocusOnShortcut), QString(Defaults::focusOnShortcut)).toString().trimmed();
+    m_focusOffShortcut = settings.value(QLatin1String(kFocusOffShortcut), QString(Defaults::focusOffShortcut)).toString().trimmed();
 
     // Left behind by versions that had a daily goal.
     if (m_config->contains(QStringLiteral("DailyGoal"))) {
@@ -183,8 +180,10 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
         Settings::sync(*m_config);
     }
 
-    // The program may have moved since the entry was written (new install prefix).
-    if (m_autostart) {
+    // The program may have moved since the entry was written (new install prefix). Not in an
+    // isolated run (SUGO_DATA_DIR: tests, a build tried out): the login entry is the user's, and
+    // on macOS it would point at the copy being tried.
+    if (m_autostart && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
         m_autostart->repair();
     }
 }
@@ -209,6 +208,7 @@ void AppSettings::storeString(const char *key, const QString &value)
     Settings::sync(*m_config);
 }
 
+#ifdef Q_OS_LINUX
 void AppSettings::watchTray()
 {
     // The tray host can appear after us (login) or restart (plasmashell crash).
@@ -223,6 +223,7 @@ void AppSettings::watchTray()
         setTrayAvailable(false);
     });
 }
+#endif
 
 void AppSettings::setTrayAvailable(bool available)
 {
@@ -250,6 +251,26 @@ void AppSettings::setShowTrayIcon(bool show)
     Q_EMIT showTrayIconChanged();
     Q_EMIT keepRunningInTrayChanged();
     Q_EMIT startHiddenChanged();
+}
+
+void AppSettings::setShowDockBadge(bool show)
+{
+    if (m_showDockBadge == show) {
+        return;
+    }
+    m_showDockBadge = show;
+    store(kShowDockBadge, show);
+    Q_EMIT showDockBadgeChanged();
+}
+
+void AppSettings::setHideDockIcon(bool hide)
+{
+    if (m_hideDockIcon == hide) {
+        return;
+    }
+    m_hideDockIcon = hide;
+    store(kHideDockIcon, hide);
+    Q_EMIT hideDockIconChanged();
 }
 
 void AppSettings::setCloseToTray(bool close)
@@ -473,6 +494,111 @@ void AppSettings::setVerboseLogging(bool verbose)
     Q_EMIT verboseLoggingChanged();
 }
 
+void AppSettings::setFocusOnShortcut(const QString &name)
+{
+    const QString trimmed = name.trimmed();
+    if (m_focusOnShortcut == trimmed) {
+        return;
+    }
+    m_focusOnShortcut = trimmed;
+    storeString(kFocusOnShortcut, trimmed);
+    Q_EMIT focusOnShortcutChanged();
+}
+
+void AppSettings::setFocusOffShortcut(const QString &name)
+{
+    const QString trimmed = name.trimmed();
+    if (m_focusOffShortcut == trimmed) {
+        return;
+    }
+    m_focusOffShortcut = trimmed;
+    storeString(kFocusOffShortcut, trimmed);
+    Q_EMIT focusOffShortcutChanged();
+}
+
+bool AppSettings::focusShortcutsSupported() const
+{
+    return m_focusInhibitor && m_focusInhibitor->toolFound();
+}
+
+QStringList AppSettings::focusShortcutNames() const
+{
+    return m_focusInhibitor ? m_focusInhibitor->shortcutList() : QStringList();
+}
+
+void AppSettings::refreshFocusShortcuts()
+{
+    if (m_focusInhibitor) {
+        m_focusInhibitor->refreshShortcutList();
+    }
+}
+
+void AppSettings::attachFocusShortcuts(ShortcutsFocusInhibitor *inhibitor)
+{
+    Q_ASSERT_X(!m_focusInhibitor, "AppSettings::attachFocusShortcuts", "attach once");
+    m_focusInhibitor = inhibitor;
+    const auto pushNames = [this]() {
+        if (m_focusInhibitor) {
+            m_focusInhibitor->setShortcutNames(m_focusOnShortcut, m_focusOffShortcut);
+        }
+    };
+    connect(this, &AppSettings::focusOnShortcutChanged, inhibitor, pushNames);
+    connect(this, &AppSettings::focusOffShortcutChanged, inhibitor, pushNames);
+    connect(inhibitor, &ShortcutsFocusInhibitor::shortcutListChanged, this, &AppSettings::focusShortcutNamesChanged);
+    pushNames(); // also reads the list of shortcuts
+    Q_EMIT focusShortcutNamesChanged();
+}
+
+void AppSettings::attachFocusShortcutsInstaller(ShortcutsFocusInstaller *installer)
+{
+    Q_ASSERT_X(!m_focusInstaller, "AppSettings::attachFocusShortcutsInstaller", "attach once");
+    m_focusInstaller = installer;
+    connect(installer, &ShortcutsFocusInstaller::stateChanged, this, [this](ShortcutsFocusInstaller::State state) {
+        switch (state) {
+        case ShortcutsFocusInstaller::State::Idle:
+            m_focusInstallStatus.clear();
+            break;
+        case ShortcutsFocusInstaller::State::Installing:
+            m_focusInstallStatus = QStringLiteral("installing");
+            break;
+        case ShortcutsFocusInstaller::State::WaitingForOn:
+            m_focusInstallStatus = QStringLiteral("waitingOn");
+            break;
+        case ShortcutsFocusInstaller::State::WaitingForOff:
+            m_focusInstallStatus = QStringLiteral("waitingOff");
+            break;
+        case ShortcutsFocusInstaller::State::Done:
+            m_focusInstallStatus = QStringLiteral("done");
+            // The inhibitor (and the pages) learn the shortcuts are there.
+            refreshFocusShortcuts();
+            break;
+        case ShortcutsFocusInstaller::State::Failed:
+            m_focusInstallStatus = QStringLiteral("failed");
+            break;
+        }
+        m_focusInstallDetail = state == ShortcutsFocusInstaller::State::Failed ? m_focusInstaller->message() : QString();
+        Q_EMIT focusShortcutsInstallChanged();
+    });
+    Q_EMIT focusShortcutsInstallChanged();
+}
+
+void AppSettings::installFocusShortcuts()
+{
+    if (!m_focusInstaller) {
+        m_focusInstallStatus = QStringLiteral("failed");
+        m_focusInstallDetail = QStringLiteral("not supported on this system");
+        Q_EMIT focusShortcutsInstallChanged();
+        return;
+    }
+    if (m_focusInstaller->isRunning()) {
+        return;
+    }
+    // The shipped shortcuts have fixed names: the inhibitor must run those.
+    setFocusOnShortcut(ShortcutsFocusInstaller::onName());
+    setFocusOffShortcut(ShortcutsFocusInstaller::offName());
+    m_focusInstaller->install();
+}
+
 void AppSettings::resetToDefaults()
 {
     // Through the setters: they skip what is already right, store the rest and tell the views.
@@ -481,6 +607,8 @@ void AppSettings::resetToDefaults()
     setAllowExternalControl(Defaults::allowExternalControl);
     setStartMinimized(Defaults::startMinimized);
     setTrayBadgeStyle(Defaults::trayBadgeStyle);
+    setShowDockBadge(Defaults::showDockBadge);
+    setHideDockIcon(Defaults::hideDockIcon);
     setSoundTheme(QString(Defaults::soundTheme));
     setSoundVolume(Defaults::soundVolume);
     setPreAlarmEnabled(Defaults::preAlarmEnabled);
@@ -495,6 +623,8 @@ void AppSettings::resetToDefaults()
     setUpdateChannel(QString(Defaults::updateChannel));
     setAutoCheckUpdates(Defaults::autoCheckUpdates);
     setVerboseLogging(Defaults::verboseLogging);
+    setFocusOnShortcut(QString(Defaults::focusOnShortcut));
+    setFocusOffShortcut(QString(Defaults::focusOffShortcut));
 }
 
 void AppSettings::applyColorScheme()
@@ -523,7 +653,7 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
         m_soundPlayer(soundName, vol);
         return;
     }
-    const QString file = findSoundFile(soundName);
+    const QString file = findSoundFile(soundName, soundSearchRoots());
     if (file.isEmpty()) {
         // Not a file we can find: let libcanberra resolve the event sound name.
         if (QStandardPaths::findExecutable(QStringLiteral("canberra-gtk-play")).isEmpty()
@@ -550,6 +680,52 @@ double AppSettings::alertFadeGain(qint64 positionMs, qint64 durationMs)
         }
     }
     return gain;
+}
+
+QStringList AppSettings::soundSearchRoots()
+{
+    QStringList roots = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+    roots << QStringLiteral("/usr/share") << QStringLiteral("/run/host/usr/share");
+#ifdef Q_OS_MACOS
+    // The sounds bundled in Sugo.app/Contents/Resources/sounds/ (macOS has no sound themes).
+    roots << QDir::cleanPath(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources"));
+#endif
+    return roots;
+}
+
+QString AppSettings::findSoundFile(const QString &soundName, const QStringList &roots)
+{
+    if (soundName.startsWith(QLatin1Char('/'))) {
+        return QFileInfo(soundName).isFile() ? soundName : QString();
+    }
+    for (const char *theme : {"ocean", "freedesktop"}) {
+        for (const char *ext : {"oga", "ogg", "wav"}) {
+            const QString relative = QStringLiteral("/sounds/%1/stereo/%2.%3").arg(QLatin1String(theme), soundName, QLatin1String(ext));
+            for (const QString &root : roots) {
+                const QString file = root + relative;
+                if (!root.isEmpty() && QFileInfo(file).isFile()) {
+                    return file;
+                }
+            }
+        }
+    }
+    return {};
+}
+
+bool AppSettings::afplayCanPlay(const QString &file)
+{
+    static const QStringList formats = {
+        QStringLiteral("wav"), QStringLiteral("aif"), QStringLiteral("aiff"), QStringLiteral("aifc"),
+        QStringLiteral("caf"), QStringLiteral("mp3"), QStringLiteral("m4a"), QStringLiteral("aac"),
+    };
+    return formats.contains(QFileInfo(file).suffix().toLower());
+}
+
+QStringList AppSettings::afplayArguments(const QString &file, int volume)
+{
+    const double factor = std::clamp(volume, 0, 100) / 100.0;
+    // The file is an absolute path (see findSoundFile()), so it is never read as an option.
+    return {QStringLiteral("-v"), QString::number(factor, 'f', 2), file};
 }
 
 bool AppSettings::isUsableSoundName(const QString &soundName)

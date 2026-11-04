@@ -41,6 +41,9 @@ public:
     /// wanted, since waiting for a release that is not coming would only delay the caller.
     virtual bool isReleasing() const { return isInhibited(); }
 
+    /// How long a release may take to be confirmed: what the shutdown waits at most.
+    virtual int releaseTimeoutMs() const { return 1000; }
+
     /// Runs `callback` as soon as nothing is inhibited, or after `timeoutMs` at the latest.
     /// Immediate if already released, or if the silencing is wanted again (nothing to wait for).
     /// Dropped if `context` is destroyed first.
@@ -52,4 +55,6 @@ public:
 
 Q_SIGNALS:
     void inhibitedChanged();
+    /// isAvailable() changed (for implementations whose availability depends on the user's setup).
+    void availableChanged();
 };

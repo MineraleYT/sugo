@@ -107,10 +107,30 @@ QQC2.Page {
     // visit should show up: reload it when the page opens, if the calendar is on and signed in,
     // unless it was fetched a short while ago (the refresh button always reloads).
     Component.onCompleted: {
+        // Opened on one category (the timer page's "Set Up in Settings").
+        const window = applicationWindow();
+        if (window && window.pendingSettingsCategory && window.pendingSettingsCategory.length > 0) {
+            page.category = window.pendingSettingsCategory;
+            window.pendingSettingsCategory = "";
+        }
+        if (DesktopStyle.macos) {
+            AppSettings.refreshFocusShortcuts();
+        }
         if (CalendarSync && CalendarSync.enabled && CalendarSync.hasPassword && !calWaiting) {
             CalendarSync.refreshCalendarsIfStale();
         }
     }
+
+    // macOS: the user's shortcuts, as last read, for the Focus card.
+    property var focusShortcutNames: AppSettings.focusShortcutNames()
+    Connections {
+        target: AppSettings
+        function onFocusShortcutNamesChanged() {
+            page.focusShortcutNames = AppSettings.focusShortcutNames();
+        }
+    }
+    readonly property bool focusOnFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
+    readonly property bool focusOffFound: focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
 
     /// Disconnect forgets the password: asked first.
     function requestDisconnect(): void {
@@ -144,15 +164,12 @@ QQC2.Page {
         onTriggered: page.diagnosticsCopied = false
     }
 
-    // Result of the last diagnostics export: "", "exported" or "exportFailed".
-    property string diagnosticsResult: ""
-    property bool diagnosticsDismissed: false
-    // Translated reason of the last failed export, from Diagnostics.lastExportError().
-    property string diagnosticsExportError: ""
-
-    function showDiagnosticsResult(result: string): void {
-        diagnosticsResult = result;
-        diagnosticsDismissed = false;
+    // The result of an export, in a toast: a message in the card would move what is below it.
+    function showDiagnosticsResult(exported: bool, error: string): void {
+        applicationWindow().showPassiveNotification(
+            exported ? i18n("Diagnostic report successfully exported.")
+                     : (error.length > 0 ? error : i18n("Failed to export diagnostic report.")),
+            exported ? 3500 : "long");
     }
 
     Connections {
@@ -347,6 +364,9 @@ QQC2.Page {
         property string title
         property string description
         property bool first: false
+        /// Every text `description` can show, when it changes with a state: the row keeps the
+        /// height of the tallest, so nothing moves when the description changes.
+        property var descriptionVariants: []
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
@@ -368,12 +388,19 @@ QQC2.Page {
             rowSpacing: Theme.spaceMd
 
             ColumnLayout {
+                id: textColumn
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 Layout.alignment: Qt.AlignVCenter
+                // With variants, as tall as the title and the tallest of them; the text shown sits
+                // in the middle of that room, in line with the controls.
+                Layout.minimumHeight: row.descriptionVariants.length > 0
+                                      ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
                 spacing: Theme.hairline * 2
                 opacity: row.enabled ? 1 : 0.5
+                Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
                 Text {
+                    id: titleText
                     Layout.fillWidth: true
                     visible: text.length > 0
                     text: row.title
@@ -383,9 +410,35 @@ QQC2.Page {
                     wrapMode: Text.WordWrap
                 }
                 SmallText {
+                    id: descriptionText
                     visible: row.description.length > 0
                     text: row.description
+                    readonly property real reservedHeight: {
+                        let height = 0;
+                        for (let i = 0; i < descriptionMeasures.count; ++i) {
+                            const measure = descriptionMeasures.itemAt(i);
+                            if (measure) {
+                                height = Math.max(height, measure.implicitHeight);
+                            }
+                        }
+                        return height;
+                    }
+
+                    // The variants, never shown: their heights at this width.
+                    Repeater {
+                        id: descriptionMeasures
+                        model: row.descriptionVariants
+                        delegate: Text {
+                            required property string modelData
+                            visible: false
+                            width: descriptionText.width
+                            text: modelData
+                            font: descriptionText.font
+                            wrapMode: Text.WordWrap
+                        }
+                    }
                 }
+                Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
             }
 
             RowLayout {
@@ -449,19 +502,23 @@ QQC2.Page {
                 SettingRow {
                     first: true
                     title: i18n("Start Sugo automatically when I log in")
-                    description: AppSettings.autostartSupported ? "" : i18n("Starting at login cannot be set up from inside this environment (for example a sandboxed package). Use your desktop's autostart settings instead.")
+                    description: AppSettings.autostartSupported ? ""
+                                 : DesktopStyle.macos ? i18n("Starting at login cannot be set up from inside Sugo here. Add Sugo in System Settings → General → Login Items instead.")
+                                 : i18n("Starting at login cannot be set up from inside this environment (for example a sandboxed package). Use your desktop's autostart settings instead.")
                     enabled: AppSettings.autostartSupported
                     SettingSwitch { setting: "startAtLogin" }
                 }
                 SettingRow {
-                    title: i18n("Start minimized to the system tray")
-                    description: i18n("When started at login, Sugo opens in the tray without showing its window.")
+                    title: DesktopStyle.macos ? i18n("Start hidden in the menu bar") : i18n("Start minimized to the system tray")
+                    description: DesktopStyle.macos ? i18n("When started at login, Sugo opens in the menu bar without showing its window.")
+                                                    : i18n("When started at login, Sugo opens in the tray without showing its window.")
                     enabled: AppSettings.startAtLogin && AppSettings.showTrayIcon && AppSettings.trayAvailable
                     SettingSwitch { setting: "startMinimized" }
                 }
             }
 
-            // Only the AppImage replaces itself; other packages are updated by whoever installed them.
+            // Only the AppImage and the macOS app (in a folder the user can write to) replace
+            // themselves; other packages are updated by whoever installed them.
             SettingsCard {
                 category: "general"
                 available: UpdateChecker.canInstall
@@ -477,7 +534,7 @@ QQC2.Page {
 
             SettingsCard {
                 category: "general"
-                title: i18n("System tray")
+                title: DesktopStyle.macos ? i18n("Menu bar") : i18n("System tray")
                 iconName: "notifications"
                 Banner {
                     Layout.fillWidth: true
@@ -485,16 +542,21 @@ QQC2.Page {
                     Layout.bottomMargin: Theme.spaceXs
                     visible: !AppSettings.trayAvailable
                     tone: "info"
-                    text: i18n("No system tray was found on this desktop, so the tray options are not available and closing the window quits Sugo.")
+                    text: DesktopStyle.macos ? i18n("The menu bar icon is not available, so its options are turned off.")
+                                             : i18n("No system tray was found on this desktop, so the tray options are not available and closing the window quits Sugo.")
                 }
                 SettingRow {
                     first: AppSettings.trayAvailable
-                    title: i18n("Show an icon in the system tray")
-                    description: AppSettings.trayAvailable ? i18n("While a timer runs, the tray icon shows its progress. Click it to show or hide the window; use its menu to start, pause, stop or quit.") : ""
+                    title: DesktopStyle.macos ? i18n("Show an icon in the menu bar") : i18n("Show an icon in the system tray")
+                    description: !AppSettings.trayAvailable ? ""
+                                 : DesktopStyle.macos ? i18n("While a timer runs, the menu bar icon shows its progress. Click it to show the window, or to start, pause, stop or quit.")
+                                 : i18n("While a timer runs, the tray icon shows its progress. Click it to show or hide the window; use its menu to start, pause, stop or quit.")
                     enabled: AppSettings.trayAvailable
                     SettingSwitch { setting: "showTrayIcon" }
                 }
+                // On macOS closing the window always hides it (Sugo stays in the Dock and menu bar).
                 SettingRow {
+                    visible: !DesktopStyle.nativeChrome
                     title: i18n("Keep running in the tray when the window is closed")
                     enabled: AppSettings.showTrayIcon && AppSettings.trayAvailable
                     SettingSwitch { setting: "closeToTray" }
@@ -575,6 +637,28 @@ QQC2.Page {
                             }
                         }
                     }
+                }
+            }
+
+            // macOS: the Dock icon (see DockController).
+            SettingsCard {
+                category: "general"
+                available: DesktopStyle.macos
+                title: i18n("Dock")
+                iconName: "preferences-desktop"
+                SettingRow {
+                    first: true
+                    title: i18n("Show the minutes left on the Dock icon")
+                    description: i18n("While a timer runs, a badge on the Dock icon shows the minutes left.")
+                    SettingSwitch { setting: "showDockBadge" }
+                }
+                SettingRow {
+                    title: i18n("Hide the Dock icon while the window is hidden")
+                    description: AppSettings.showTrayIcon && AppSettings.trayAvailable
+                                 ? i18n("Sugo stays in the menu bar; the Dock icon comes back when the window is shown.")
+                                 : i18n("Needs the menu bar icon, to bring the window back.")
+                    enabled: AppSettings.showTrayIcon && AppSettings.trayAvailable
+                    SettingSwitch { setting: "hideDockIcon" }
                 }
             }
 
@@ -724,6 +808,37 @@ QQC2.Page {
                     title: i18n("Pause timer when screen is locked")
                     description: i18n("Automatically pauses the active work phase when you lock your screen and prompts to resume when you unlock.")
                     SettingSwitch { setting: "autoPauseOnScreenLock" }
+                }
+            }
+
+            // macOS: silencing notifications through a Focus, run by two of the user's shortcuts.
+            SettingsCard {
+                id: focusModeCard
+                objectName: "focusModeCard"
+                category: "focus"
+                available: DesktopStyle.macos
+                title: i18n("Focus while working")
+                iconName: "notifications-disabled"
+                // One row: what the shortcuts are for, where installing them got, and the button.
+                // Every state's text is in the variants, so the card keeps its height.
+                FocusShortcutsStatus {
+                    id: focusInstallStatus
+                    found: page.focusOnFound && page.focusOffFound
+                }
+                SettingRow {
+                    first: true
+                    objectName: "focusShortcutRow"
+                    title: i18n("Silence notifications with a Focus")
+                    description: focusInstallStatus.description(AppSettings.focusShortcutsSupported)
+                    descriptionVariants: focusInstallStatus.descriptionVariants(AppSettings.focusShortcutsSupported)
+                    SButton {
+                        objectName: "installFocusShortcutsButton"
+                        kind: focusInstallStatus.found ? "secondary" : "primary"
+                        text: i18n("Install Shortcuts")
+                        enabled: AppSettings.focusShortcutsInstallable && !focusInstallStatus.found && !focusInstallStatus.busy
+                        Accessible.description: focusInstallStatus.description(AppSettings.focusShortcutsSupported)
+                        onClicked: AppSettings.installFocusShortcuts()
+                    }
                 }
             }
 
@@ -1038,11 +1153,12 @@ QQC2.Page {
 
                 // Status area, kept readable even while the sync is switched off. Nothing is shown while
                 // the server is being asked (the buttons are disabled meanwhile): only a result is.
-                Banner {
+                MessageSlot {
+                    objectName: "calendarStatusMessage"
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spaceSm
-                    Layout.bottomMargin: Theme.spaceMd
-                    visible: page.calFailed || (page.calNotConfigured && !page.calWaiting)
+                    Layout.bottomMargin: Theme.spaceSm
+                    shown: page.calFailed || (page.calNotConfigured && !page.calWaiting)
                     tone: page.calFailed ? "danger" : "info"
                     text: {
                         if (!CalendarSync) {
@@ -1065,15 +1181,25 @@ QQC2.Page {
                         return CalendarSync.statusText;
                     }
                 }
+                // The last event sent and those waiting, on one line that keeps its place.
                 SmallText {
-                    Layout.bottomMargin: Theme.spaceSm
-                    visible: page.calLastSuccess.length > 0
-                    text: i18n("Last event sent: %1", page.calLastSuccess)
-                }
-                SmallText {
+                    readonly property string lastSent: page.calLastSuccess.length > 0 ? i18n("Last event sent: %1", page.calLastSuccess) : ""
+                    readonly property string waiting: page.calPending > 0
+                        ? i18np("%1 event waiting to be sent", "%1 events waiting to be sent", page.calPending) : ""
                     Layout.bottomMargin: Theme.spaceMd
-                    visible: page.calPending > 0
-                    text: i18np("%1 event waiting to be sent", "%1 events waiting to be sent", page.calPending)
+                    Layout.preferredHeight: calendarFooterMetrics.height
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
+                    opacity: text.length > 0 ? 1 : 0
+                    text: lastSent.length > 0 && waiting.length > 0 ? i18nc("last event sent · events waiting", "%1 · %2", lastSent, waiting)
+                                                                    : lastSent + waiting
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
+                    }
+                    FontMetrics {
+                        id: calendarFooterMetrics
+                        font.pixelSize: Theme.fontCaption + 1
+                    }
                 }
             }
 
@@ -1086,7 +1212,7 @@ QQC2.Page {
                     title: i18n("Database")
                     description: DataManager ? DataManager.databasePath : ""
                     SButton {
-                        text: i18n("Open folder")
+                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
                         iconName: "external"
                         visible: DataManager !== null && !DataManager.usingTemporaryDatabase
                         onClicked: DataManager.openDatabaseFolder()
@@ -1097,6 +1223,8 @@ QQC2.Page {
                     description: TimerEngine.active
                         ? i18n("Stop the active timer before restoring a backup.")
                         : i18n("Save your timers and session history to a file, or bring them back from one.")
+                    descriptionVariants: [i18n("Stop the active timer before restoring a backup."),
+                                          i18n("Save your timers and session history to a file, or bring them back from one.")]
                     SButton {
                         text: i18n("Back up…")
                         iconName: "download"
@@ -1150,18 +1278,25 @@ QQC2.Page {
 
             SettingsCard {
                 category: "advanced"
-                title: i18n("Global Shortcuts and Automation")
+                // D-Bus and KRunner on Linux, sugo:// links on macOS.
+                available: AppSettings.externalControlSupported
+                title: DesktopStyle.macos ? i18n("Shortcuts and Automation") : i18n("Global Shortcuts and Automation")
                 iconName: "configure-shortcuts"
                 SettingRow {
                     first: true
                     title: i18n("Allow other programs to control the timer")
-                    description: i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
+                    description: DesktopStyle.macos
+                        ? i18n("Scripts, the Shortcuts app and other programs can start, pause, skip and stop it by opening sugo:// links. Turn this off if you only use Sugo's own window and menu bar icon.")
+                        : i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
                     SettingSwitch { setting: "allowExternalControl" }
                 }
                 SettingRow {
-                    title: i18n("D-Bus commands")
-                    description: i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
-                                      "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
+                    title: DesktopStyle.macos ? i18n("Links") : i18n("D-Bus commands")
+                    description: DesktopStyle.macos
+                        ? i18n("Open a sugo:// link to control Sugo: in Terminal or a script with the command below, or in the Shortcuts app with the \"Open URLs\" action (give it a keyboard shortcut there). Available links: %1.",
+                               "sugo://toggle, start, pause, resume, stop, skip, show, start/<timer>, preset/<timer>")
+                        : i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
+                               "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
                     Item { implicitWidth: 1 }
                 }
                 Rectangle {
@@ -1183,7 +1318,7 @@ QQC2.Page {
                             Layout.fillWidth: true
                             readOnly: true
                             selectByMouse: true
-                            text: "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
+                            text: DesktopStyle.macos ? "open sugo://toggle" : "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
                             color: Theme.foreground
                             selectionColor: Theme.alpha(Theme.brand, 0.35)
                             font.family: Theme.monoFamily
@@ -1263,6 +1398,7 @@ QQC2.Page {
                     Layout.bottomMargin: Theme.spaceMd
                     spacing: Theme.spaceSm
                     SButton {
+                        labels: [i18n("Copied"), i18n("Copy to Clipboard")]
                         text: page.diagnosticsCopied ? i18n("Copied") : i18n("Copy to Clipboard")
                         iconName: page.diagnosticsCopied ? "check" : "copy"
                         onClicked: {
@@ -1284,32 +1420,6 @@ QQC2.Page {
                         }
                     }
                 }
-                Banner {
-                    id: diagnosticsInlineMessage
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
-                    visible: page.diagnosticsResult.length > 0 && !page.diagnosticsDismissed
-                    tone: page.diagnosticsResult === "exportFailed" ? "danger" : "info"
-                    text: {
-                        switch (page.diagnosticsResult) {
-                        case "exported":
-                            return i18n("Diagnostic report successfully exported.");
-                        case "exportFailed":
-                            return page.diagnosticsExportError.length > 0
-                                ? page.diagnosticsExportError
-                                : i18n("Failed to export diagnostic report.");
-                        }
-                        return "";
-                    }
-                    SButton {
-                        kind: "ghost"
-                        iconOnly: true
-                        iconName: "close"
-                        text: i18n("Dismiss")
-                        onClicked: page.diagnosticsDismissed = true
-                    }
-                }
-
                 SettingRow {
                     title: i18n("Verbose logging")
                     description: i18n("Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce the problem, then copy the report.")
@@ -1372,10 +1482,9 @@ QQC2.Page {
             nameFilters: [i18n("Text files (*.txt)"), i18n("All files (*)")]
             onAccepted: {
                 if (Diagnostics.exportReport(selectedFile)) {
-                    page.showDiagnosticsResult("exported");
+                    page.showDiagnosticsResult(true, "");
                 } else {
-                    page.diagnosticsExportError = Diagnostics.lastExportError();
-                    page.showDiagnosticsResult("exportFailed");
+                    page.showDiagnosticsResult(false, Diagnostics.lastExportError());
                 }
             }
         }

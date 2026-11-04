@@ -260,7 +260,18 @@ QString Diagnostics::generateReport() const
 #else
     lines << QStringLiteral("- Version: ") + QCoreApplication::applicationVersion();
 #endif
+#ifdef Q_OS_MACOS
+    {
+        // Sugo.app/Contents/MacOS/Sugo: the bundle is two levels above the executable's folder.
+        QDir bundle(QCoreApplication::applicationDirPath());
+        const bool inBundle = bundle.dirName() == QLatin1String("MacOS") && bundle.cdUp()
+            && bundle.dirName() == QLatin1String("Contents") && bundle.cdUp()
+            && bundle.dirName().endsWith(QLatin1String(".app"));
+        lines << QStringLiteral("- App Bundle: ") + (inBundle ? QStringLiteral("Yes (") + redact(bundle.absolutePath()) + QStringLiteral(")") : QStringLiteral("No"));
+    }
+#else
     lines << QStringLiteral("- Build Type: ") + (QFile::exists(QStringLiteral("/.flatpak-info")) ? QStringLiteral("Flatpak (Sandboxed)") : QStringLiteral("Native"));
+#endif
     lines << QStringLiteral("- Qt Runtime: ") + QString::fromUtf8(qVersion()) + QStringLiteral(" (compiled with ") + QStringLiteral(QT_VERSION_STR) + QStringLiteral(")");
     lines << QStringLiteral("- QPA Platform: ") + QGuiApplication::platformName();
     lines << QStringLiteral("- Verbose Logging: ") + (verboseLogging() ? QStringLiteral("On (debug messages are recorded, up to %1 lines)").arg(logCapacity()) : QStringLiteral("Off"));
@@ -270,10 +281,16 @@ QString Diagnostics::generateReport() const
     lines << QStringLiteral("- OS: ") + QSysInfo::prettyProductName();
     lines << QStringLiteral("- Kernel: ") + QSysInfo::kernelType() + QStringLiteral(" ") + QSysInfo::kernelVersion();
     lines << QStringLiteral("- Architecture: ") + QSysInfo::currentCpuArchitecture();
+#ifndef Q_OS_MACOS
     lines << QStringLiteral("- Desktop Environment (XDG_CURRENT_DESKTOP): ") + QString::fromLocal8Bit(qgetenv("XDG_CURRENT_DESKTOP"));
     lines << QStringLiteral("- Session Type (XDG_SESSION_TYPE): ") + QString::fromLocal8Bit(qgetenv("XDG_SESSION_TYPE"));
+#endif
     lines << QStringLiteral("- System Tray Available: ") + ((m_settings && m_settings->trayAvailable()) ? QStringLiteral("Yes") : QStringLiteral("No"));
+#ifdef Q_OS_MACOS
+    lines << QStringLiteral("- Login Item (LaunchAgent): ") + (m_settings ? (m_settings->startAtLogin() ? QStringLiteral("Enabled") : QStringLiteral("Disabled")) : QStringLiteral("Unknown"));
+#else
     lines << QStringLiteral("- Autostart Supported: ") + ((m_settings && m_settings->autostartSupported()) ? QStringLiteral("Yes") : QStringLiteral("No"));
+#endif
     lines << QString();
 
     lines << QStringLiteral("## Configuration");
@@ -352,4 +369,17 @@ void Diagnostics::copyToClipboard() const
     if (clipboard) {
         clipboard->setText(generateReport());
     }
+}
+
+bool Diagnostics::saveInventory(const QString &json) const
+{
+    const QString path = qEnvironmentVariable("SUGO_INVENTORY");
+    if (path.isEmpty()) {
+        return false;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    return file.write(json.toUtf8()) >= 0;
 }

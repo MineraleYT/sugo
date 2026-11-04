@@ -13,6 +13,14 @@ bool systemTrayAvailable()
     return bus.isConnected() && bus.interface()
         && bus.interface()->isServiceRegistered(QStringLiteral("org.kde.StatusNotifierWatcher"));
 }
+#elif defined(Q_OS_MACOS)
+#include <QSystemTrayIcon>
+
+bool systemTrayAvailable()
+{
+    // The menu bar is always there.
+    return QSystemTrayIcon::isSystemTrayAvailable();
+}
 #else
 bool systemTrayAvailable()
 {

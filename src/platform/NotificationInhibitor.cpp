@@ -19,7 +19,7 @@ void NotificationInhibitor::whenReleased(QObject *context, std::function<void()>
     auto *timer = new QTimer(context);
     timer->setSingleShot(true);
 
-    auto fire = [this, done, connection, timer, callback = std::move(callback)]() {
+    auto fire = [done, connection, timer, callback = std::move(callback)]() {
         if (*done) {
             return;
         }

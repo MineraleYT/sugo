@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QDir>
 #include <QFile>
+#include <QFontInfo>
+#include <QKeySequence>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -48,6 +50,9 @@ private Q_SLOTS:
 
     void readsWhereTheDesktopPutsItsButtons()
     {
+#ifndef Q_OS_LINUX
+        QSKIP("Linux desktops only: elsewhere the style is the system's, whatever XDG_CURRENT_DESKTOP says");
+#endif
         QStandardPaths::setTestModeEnabled(true);
         const QByteArray desktop = qgetenv("XDG_CURRENT_DESKTOP");
         const QByteArray path = qgetenv("PATH");
@@ -142,10 +147,57 @@ private Q_SLOTS:
         qputenv("SUGO_WINDOW_STYLE", "windows");
         const DesktopStyle style;
         QCOMPARE(style.style(), QStringLiteral("windows"));
+#ifdef Q_OS_MACOS
+        // The system's title bar has the buttons, whatever the style.
+        QVERIFY(style.rightButtons().isEmpty());
+#else
         QVERIFY(style.rightButtons().contains(QStringLiteral("close")));
+#endif
         qunsetenv("SUGO_WINDOW_STYLE");
+    }
+
+    void macosStyleChoosesTheWording()
+    {
+        qputenv("SUGO_WINDOW_STYLE", "macos");
+        const DesktopStyle style;
+        QVERIFY(style.isMacos());
+#ifdef Q_OS_MACOS
+        // The system draws the title bar and its buttons.
+        QVERIFY(style.nativeChrome());
+        QVERIFY(style.leftButtons().isEmpty());
+        QVERIFY(style.rightButtons().isEmpty());
+#else
+        // A preview on Linux: macOS's texts, but still our own title bar and its buttons.
+        QVERIFY(!style.nativeChrome());
+        QCOMPARE(style.leftButtons().first(), QStringLiteral("close"));
+#endif
+        qputenv("SUGO_WINDOW_STYLE", "kde");
+        QVERIFY(!DesktopStyle().isMacos());
+        qunsetenv("SUGO_WINDOW_STYLE");
+    }
+
+    void monoFamilyIsFixedWidth()
+    {
+        const DesktopStyle style;
+        QVERIFY(!style.monoFamily().isEmpty());
+        QFont font(style.monoFamily());
+        QVERIFY(QFontInfo(font).fixedPitch());
+    }
+
+    void shortcutTextIsTheSystemsOwn()
+    {
+        const QString search = DesktopStyle::shortcutText(QStringLiteral("Ctrl+K"));
+        QCOMPARE(search, QKeySequence(Qt::CTRL | Qt::Key_K).toString(QKeySequence::NativeText));
+#ifdef Q_OS_MACOS
+        QCOMPARE(search, QStringLiteral("⌘K"));
+#else
+        QCOMPARE(search, QStringLiteral("Ctrl+K"));
+        QCOMPARE(DesktopStyle::shortcutText(QStringLiteral("Ctrl+,")), QStringLiteral("Ctrl+,"));
+        QCOMPARE(DesktopStyle::shortcutText(QStringLiteral("Space")), QStringLiteral("Space"));
+#endif
+        QVERIFY(DesktopStyle::shortcutText(QString()).isEmpty());
     }
 };
 
-QTEST_GUILESS_MAIN(DesktopStyleTest)
+QTEST_MAIN(DesktopStyleTest)
 #include "tst_desktopstyle.moc"

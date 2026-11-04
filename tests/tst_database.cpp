@@ -404,6 +404,21 @@ private Q_SLOTS:
         QVERIFY(!file.isTemporary());
     }
 
+    void dataDirVariableReplacesDefaultLocation()
+    {
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        const bool wasSet = qEnvironmentVariableIsSet("SUGO_DATA_DIR");
+        QTemporaryDir dir;
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dir.path()));
+        QCOMPARE(Database::defaultPath(), dir.filePath(QStringLiteral("sugo.db")));
+        qunsetenv("SUGO_DATA_DIR");
+        QVERIFY(Database::defaultPath().endsWith(QLatin1String("/sugo/sugo.db")));
+        QVERIFY(Database::defaultPath() != dir.filePath(QStringLiteral("sugo.db")));
+        if (wasSet) {
+            qputenv("SUGO_DATA_DIR", saved);
+        }
+    }
+
     void unusablePathReportsAnError()
     {
         QTemporaryDir dir;

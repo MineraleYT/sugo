@@ -85,9 +85,11 @@ QQC2.Page {
             color: Theme.muted
             font.pixelSize: Theme.fontCaption
         }
+        // Faded rather than hidden: its line stays, so the chart below does not move when a
+        // period has a note and the next has none.
         Text {
-            visible: figure.note.length > 0
-            text: figure.note
+            opacity: figure.note.length > 0 ? 1 : 0
+            text: figure.note.length > 0 ? figure.note : " "
             color: Theme.subtle
             font.pixelSize: Theme.fontSmall
         }

@@ -7,6 +7,7 @@
 
 #include <functional>
 
+#include "TimerCommands.h"
 #include "TimerEngine.h"
 
 class PresetModel;
@@ -25,6 +26,9 @@ class PresetModel;
  * Choosing a timer (selectPreset, nextPreset, previousPreset, startPreset) resets the engine
  * (TimerBinding), so while a phase is active these refuse with TimerActive instead of throwing
  * the running session away; choosing the timer that is already current is always fine.
+ *
+ * The commands themselves are TimerCommands, shared with the sugo:// links of macOS; this class
+ * only turns their errors into D-Bus errors.
  */
 class DBusTimerService;
 
@@ -52,7 +56,7 @@ public:
     static inline const QString TimerActiveError = QStringLiteral("io.github.mineraleyt.sugo.Error.TimerActive");
 
     /// Asked before every command; without one, commands are always allowed.
-    void setControlAllowed(std::function<bool()> allowed) { m_allowed = std::move(allowed); }
+    void setControlAllowed(std::function<bool()> allowed) { m_commands.setControlAllowed(std::move(allowed)); }
 
 public Q_SLOTS:
     void toggle();
@@ -74,18 +78,8 @@ public Q_SLOTS:
     bool startPreset(const QString &nameOrUuid);
 
 private:
-    /// True if a command may run; otherwise answers the caller with ControlDisabled.
-    bool mayControl();
-    /// Answers the caller (when it is a D-Bus call) with an error.
-    void replyError(const QString &name, const QString &message);
-    /// The uuid `nameOrUuid` stands for; empty if there is none.
-    QString resolvePreset(const QString &nameOrUuid) const;
-    /// Makes `uuid` the current timer unless that would discard an active phase.
-    bool switchTo(const QString &uuid);
-    /// Moves the selection by `step` rows, wrapping around.
-    void stepPreset(int step);
+    /// True on success; otherwise answers the caller (when it is a D-Bus call) with the error.
+    bool answer(const TimerCommands::Result &result);
 
-    TimerEngine *m_engine;
-    PresetModel *m_presets;
-    std::function<bool()> m_allowed;
+    TimerCommands m_commands;
 };

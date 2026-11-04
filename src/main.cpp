@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QApplication>
 #include <QCommandLineParser>
-#include <QDBusConnection>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QDebug>
+#include <QEvent>
+#include <QFileOpenEvent>
+#include <QPointer>
 #include <QUrl>
 #include <QQmlContext>
 #include <QQmlExtensionPlugin>
 
 #include <QLocale>
 
+#include <functional>
 #include <memory>
 
 #include "Localization.h"
@@ -21,8 +25,6 @@
 #include "AppSettings.h"
 #include "DataManager.h"
 #include "Database.h"
-#include "DBusTimerService.h"
-#include "KRunnerService.h"
 #include "InhibitorFactory.h"
 #include "NotifierFactory.h"
 #include "FocusSoundController.h"
@@ -33,9 +35,22 @@
 #include "SessionRecorder.h"
 #include "SessionRepository.h"
 #include "SilenceController.h"
+#ifdef Q_OS_MACOS
+#include "DockController.h"
+#include "LocalSingleInstance.h"
+#include "MacApp.h"
+#include "ShortcutsFocusInhibitor.h"
+#include "ShortcutsFocusInstaller.h"
+#else
+#include "DBusTimerService.h"
+#include "KRunnerService.h"
 #include "SingleInstance.h"
+
+#include <QDBusConnection>
+#endif
 #include "StatsModel.h"
 #include "TimerBinding.h"
+#include "TimerCommands.h"
 #include "TimerEngine.h"
 #include "TrayController.h"
 #include "UnixSignals.h"
@@ -48,6 +63,90 @@
 
 // The QML module is a static library (sugo_core); its plugin registers the types.
 Q_IMPORT_QML_PLUGIN(SugoQmlPlugin)
+
+#ifdef Q_OS_MACOS
+namespace
+{
+/**
+ * What macOS tells the application as a whole, seen on the application object.
+ *
+ * - A click on the Dock icon while the window is hidden shows it. Cocoa reports it as
+ *   applicationShouldHandleReopen:, which Qt turns into an ApplicationActivate event (forced
+ *   even when the application is already active). Activation by other means (Cmd+Tab, a click
+ *   on a notification) also shows a hidden window. After a `--background` launch the
+ *   activation macOS may give a newly launched application is ignored: the filter is armed a
+ *   moment after the event loop starts.
+ * - Cmd+Q, Quit in the Dock menu, logging out or shutting down: Cocoa asks
+ *   applicationShouldTerminate:, Qt sends QEvent::Quit to the application, which closes every
+ *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
+ *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
+ *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
+ *   so this also covers the menu bar icon's Quit. The running phase is then saved as
+ *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
+ * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
+ *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
+ *   also activates the application; that must not pop the hidden window up for a command like
+ *   toggle, so a hidden window is shown a moment after the activation, unless a link arrives
+ *   meanwhile or has just arrived (the order of the two events is not fixed).
+ */
+class MacApplicationEvents : public QObject
+{
+public:
+    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, std::function<void(const QUrl &)> openUrl,
+                         bool armed, QObject *parent)
+        : QObject(parent)
+        , m_window(window)
+        , m_showWindow(std::move(showWindow))
+        , m_openUrl(std::move(openUrl))
+        , m_armed(armed)
+    {
+        m_pendingShow.setSingleShot(true);
+        m_pendingShow.setInterval(kActivationDelayMs);
+        connect(&m_pendingShow, &QTimer::timeout, this, [this]() {
+            if (m_window && !m_window->isVisible()) {
+                m_showWindow();
+            }
+        });
+    }
+
+    void arm() { m_armed = true; }
+
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == QCoreApplication::instance() && m_window) {
+            if (event->type() == QEvent::ApplicationActivate) {
+                const bool justOpenedUrl = m_lastUrl.isValid() && m_lastUrl.elapsed() < kUrlActivationMs;
+                if (m_armed && !m_window->isVisible() && !justOpenedUrl) {
+                    m_pendingShow.start();
+                }
+            } else if (event->type() == QEvent::Quit) {
+                m_window->setProperty("platformQuitting", true);
+            } else if (event->type() == QEvent::FileOpen) {
+                const QUrl url = static_cast<QFileOpenEvent *>(event)->url();
+                if (url.scheme().compare(QLatin1String("sugo"), Qt::CaseInsensitive) == 0) {
+                    m_pendingShow.stop();
+                    m_lastUrl.start();
+                    m_openUrl(url);
+                    return true;
+                }
+            }
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    static constexpr int kActivationDelayMs = 250; ///< How long a link may follow its activation.
+    static constexpr int kUrlActivationMs = 1000;  ///< How long an activation may follow its link.
+
+    QPointer<QQuickWindow> m_window;
+    std::function<void()> m_showWindow;
+    std::function<void(const QUrl &)> m_openUrl;
+    bool m_armed;
+    QTimer m_pendingShow;
+    QElapsedTimer m_lastUrl;
+};
+} // namespace
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -84,8 +183,13 @@ int main(int argc, char *argv[])
     parser.setApplicationDescription(about.value(QStringLiteral("shortDescription")).toString());
     parser.addHelpOption();
     parser.addVersionOption();
+#ifdef Q_OS_MACOS
+    const QCommandLineOption backgroundOption(QStringLiteral("background"),
+                                              i18n("Start hidden in the menu bar (used by the login item)"));
+#else
     const QCommandLineOption backgroundOption(QStringLiteral("background"),
                                               i18n("Start hidden in the system tray (used by the login entry)"));
+#endif
     parser.addOption(backgroundOption);
     parser.process(app);
     const bool background = parser.isSet(backgroundOption);
@@ -96,7 +200,14 @@ int main(int argc, char *argv[])
     // One instance only. A second launch (login entry plus menu, say) shows the first one's
     // window and exits, so two programs never share the database. A second `--background`
     // launch (the login entry while already running) exits without popping the window up.
+#ifdef Q_OS_MACOS
+    // No session bus here: a lock file and a local socket, private to the user.
+    LocalSingleInstance singleInstance(LocalSingleInstance::defaultName(QStringLiteral("sugo")));
+    using AppSingleInstance = LocalSingleInstance;
+#else
     SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
+    using AppSingleInstance = SingleInstance;
+#endif
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
     }
@@ -135,6 +246,11 @@ int main(int argc, char *argv[])
     QObject services; // parent of the C++ helpers below; destroyed before the engine
     // i18n() and friends for the QML files.
     engine.rootContext()->setContextObject(new LocalizedContext(&engine));
+#ifdef Q_OS_MACOS
+    // No freedesktop icon theme here: the names Qt's own Apple icons do not cover come from
+    // the Breeze subset bundled in the program.
+    ThemeIcons::installFallbackTheme();
+#endif
     // Icons of the desktop's theme, as image://icon/<name> (the engine owns the provider).
     engine.addImageProvider(QStringLiteral("icon"), new ThemeIconProvider);
     engine.rootContext()->setContextProperty(QStringLiteral("appAboutData"), about);
@@ -142,7 +258,8 @@ int main(int argc, char *argv[])
     const bool statsSmokeTest = qEnvironmentVariable("SUGO_STATS_SMOKE_TEST") == QStringLiteral("1");
     engine.rootContext()->setContextProperty(QStringLiteral("appStatsSmokeTest"), statsSmokeTest);
     engine.rootContext()->setContextProperty(QStringLiteral("appSmokePage"), smokePage);
-    // For development: open on another page ("presets" for the timer in use, "stats", "settings", "about", "welcome").
+    // For development and screenshots: open on another page ("presets" for the timer in use, "stats",
+    // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
     int smokeWarnings = 0;
@@ -178,9 +295,26 @@ int main(int argc, char *argv[])
         qCritical() << "Cannot create the QML singletons";
         return EXIT_FAILURE;
     }
+#ifdef Q_OS_MACOS
+    // The Focus shortcuts the user chose in the settings; their list is read again whenever Sugo
+    // comes to the front (the user may just have created them in the Shortcuts app). Never in a
+    // smoke run: it starts the timer, and must not run the user's real shortcuts.
+    auto *focusShortcuts = qobject_cast<ShortcutsFocusInhibitor *>(inhibitor.get());
+    if (focusShortcuts && !smokeTest) {
+        settings->attachFocusShortcuts(focusShortcuts);
+        // "Install Shortcuts" in the settings and the welcome tour (never in a smoke run either).
+        settings->attachFocusShortcutsInstaller(new ShortcutsFocusInstaller(&services));
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, focusShortcuts, [focusShortcuts](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) {
+                focusShortcuts->refreshShortcutList();
+            }
+        });
+    }
+#endif
     silence->attach(timer, presets, inhibitor.get());
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
+#ifndef Q_OS_MACOS
     auto *timerDBusObject = new TimerDBusObject(timer);
     auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
@@ -188,6 +322,7 @@ int main(int argc, char *argv[])
     auto *krunner = new KRunnerService(timer, presets, &services);
     krunner->setControlAllowed(externalControlAllowed);
     QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
+#endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
     auto *stats = engine.singletonInstance<StatsModel *>("io.github.mineraleyt.sugo", "StatsModel");
@@ -201,13 +336,17 @@ int main(int argc, char *argv[])
     dataManager->setPresetPersistence(presetPersistence);
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
-    // The AppImage looks for updates by itself (when the user lets it) and installs them.
+    // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
     auto *updates = engine.singletonInstance<UpdateChecker *>("io.github.mineraleyt.sugo", "UpdateChecker");
     if (updates && !smokeTest) {
         updates->attach(settings);
     }
 
+#ifdef Q_OS_MACOS
+    auto *powerInhibitor = new PowerInhibitor(&services);
+#else
     auto *powerInhibitor = new PowerInhibitor(QDBusConnection::sessionBus(), &services);
+#endif
     powerInhibitor->attach(timer, settings);
     auto *screenLockWatcher = engine.singletonInstance<ScreenLockWatcher *>("io.github.mineraleyt.sugo", "ScreenLockWatcher");
     if (screenLockWatcher) {
@@ -239,6 +378,15 @@ int main(int argc, char *argv[])
         stats->setProtectWeekendStreak(settings->protectWeekendStreak());
     });
     auto *tray = new TrayController(timer, presets, settings, &services);
+    // The inventory (platform parity test) lists the tray's settings too, which an offscreen run
+    // would hide: no tray there.
+    if (smokePage == QLatin1String("inventory")) {
+        settings->setTrayAvailable(true);
+    }
+#ifdef Q_OS_MACOS
+    // The Dock icon: minutes left on its badge, the timer in its menu, hidden on request.
+    auto *dock = new DockController(timer, presets, settings, DockController::platformNative(), &services);
+#endif
     // Desktop notifications; where there is no notification server, messages from the tray icon.
     auto *notifications = createNotifier([tray]() { return tray->icon(); }, &services).release();
     auto *notifier = new PhaseNotifier(timer, presets, inhibitor.get(), notifications, settings, &services);
@@ -274,12 +422,28 @@ int main(int argc, char *argv[])
     }
     if (window) {
         tray->setWindow(window);
+#ifdef Q_OS_MACOS
+        macHideWindowTitle(window);
+        dock->setWindow(window);
+        auto activateWindow = [window, dock](const QString &activationToken = QString()) {
+#else
         auto activateWindow = [window](const QString &activationToken = QString()) {
+#endif
+#ifdef Q_OS_LINUX
             // On Wayland the compositor only gives focus with the token of the launch that asked
             // for it; Qt's Wayland plugin takes it from this variable on requestActivate().
             if (!activationToken.isEmpty()) {
                 qputenv("XDG_ACTIVATION_TOKEN", activationToken.toUtf8());
             }
+#else
+            Q_UNUSED(activationToken)
+#endif
+#ifdef Q_OS_MACOS
+            // A hidden Dock icon comes back first: an accessory application gets no focus or menu bar.
+            dock->prepareToShowWindow();
+            // requestActivate() alone would leave the window behind the active application.
+            macActivateApp();
+#endif
             window->show();
             if (window->windowStates() & Qt::WindowMinimized) {
                 window->showNormal();
@@ -292,10 +456,39 @@ int main(int argc, char *argv[])
         QObject::connect(tray, &TrayController::showWindowRequested, window, [activateWindow]() { activateWindow(); });
 
         // A second launch asks this instance to come to the front.
-        QObject::connect(&singleInstance, &SingleInstance::activateRequested, window, activateWindow);
+        QObject::connect(&singleInstance, &AppSingleInstance::activateRequested, window, activateWindow);
 
+#ifdef Q_OS_MACOS
+        // sugo:// links: the same commands as D-Bus on Linux, under the same setting. A refused
+        // or failed command shows the window with the reason, so it does not fail silently.
+        auto urlCommands = std::make_shared<TimerCommands>(timer, presets);
+        urlCommands->setControlAllowed(externalControlAllowed);
+        const auto openUrl = [urlCommands, window, activateWindow](const QUrl &url) {
+            const TimerCommands::UrlCommand command = TimerCommands::parseUrl(url);
+            const TimerCommands::Result result = urlCommands->run(command);
+            if (result.ok() && command.action != TimerCommands::UrlCommand::Action::Show) {
+                return;
+            }
+            if (!result.ok()) {
+                qWarning().noquote() << "Cannot follow" << url.toDisplayString() << ":" << result.message;
+            }
+            activateWindow();
+            if (!result.ok()) {
+                QMetaObject::invokeMethod(window, "showPassiveNotification", Q_ARG(QString, result.message), Q_ARG(QVariant, QVariant()));
+            }
+        };
+        // The Dock icon, links, and quitting from the system (see MacApplicationEvents).
+        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, openUrl, !background, &services);
+        app.installEventFilter(macEvents);
+        if (background) {
+            QTimer::singleShot(1000, macEvents, [macEvents]() { macEvents->arm(); });
+        }
+#endif
+
+#ifndef Q_OS_MACOS
         // KRunner runner action to open window
         QObject::connect(krunner, &KRunnerService::openRequested, window, [activateWindow]() { activateWindow(); });
+#endif
 
         // The tray menu's Statistics / Settings entries: show the window on that page.
         QObject::connect(tray, &TrayController::openPageRequested, window, [window, activateWindow](const QString &page) {
@@ -320,15 +513,18 @@ int main(int argc, char *argv[])
     // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
     // is an engine singleton, the runner a child of `services`), then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
+#ifndef Q_OS_MACOS
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
+#endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
     if (smokeTest && status == EXIT_SUCCESS && smokeWarnings > 0) {
         qCritical() << "The smoke test produced" << smokeWarnings << "QML warning(s)";
         return 30;
     }
-    // "Restart to update": the updated AppImage starts once this process has ended.
+    // "Restart to update": the updated AppImage, or the new Sugo.app put in place now, starts once
+    // this process has ended (on macOS a plain quit also puts it in place).
     if (updates) {
         updates->launchUpdated();
     }

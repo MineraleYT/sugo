@@ -4,12 +4,24 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QtGlobal>
 
 namespace Settings
 {
 QString defaultPath()
 {
+    // Tests and smoke runs: one directory for the database and the settings (QStandardPaths
+    // ignores the XDG_* variables on macOS).
+    const QString dataDir = qEnvironmentVariable("SUGO_DATA_DIR");
+    if (!dataDir.isEmpty()) {
+        return dataDir + QStringLiteral("/sugo.conf");
+    }
+#ifdef Q_OS_MACOS
+    // Next to the database in ~/Library/Application Support: ~/Library/Preferences is for plists.
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/sugo/sugo.conf");
+#else
     return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) + QStringLiteral("/sugo/sugo.conf");
+#endif
 }
 
 Ptr open(const QString &path)

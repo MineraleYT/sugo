@@ -10,12 +10,23 @@
 #include "FreedesktopNotifier.h"
 #endif
 
+#ifdef Q_OS_MACOS
+#include "MacNotifier.h"
+#endif
+
 std::unique_ptr<Notifier> createNotifier(std::function<QSystemTrayIcon *()> trayIcon, QObject *parent)
 {
 #ifdef Q_OS_LINUX
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (bus.isConnected()) {
         return std::make_unique<FreedesktopNotifier>(bus, QGuiApplication::applicationDisplayName(), QGuiApplication::desktopFileName(), parent);
+    }
+#endif
+#ifdef Q_OS_MACOS
+    // The Notification Center needs an application bundle; while notifications are not
+    // allowed, MacNotifier hands them to the menu bar icon.
+    if (MacNotifier::isSupported()) {
+        return std::make_unique<MacNotifier>(std::make_unique<TrayNotifier>(std::move(trayIcon)), parent);
     }
 #endif
     return std::make_unique<TrayNotifier>(std::move(trayIcon), parent);

@@ -1,0 +1,448 @@
+{
+  "_comment": [
+    "What every screen of Sugo offers on Linux and on macOS (tests/check_platform_parity.py, ctest tst_platform_parity).",
+    "Entries come from the smoke run SUGO_SMOKE_PAGE=inventory (src/qml/components/FeatureInventory.qml), with Linux's wording.",
+    "common: on both platforms. linux / macos: on that platform only, with the reason. updateInstall: only in builds that install updates (AppImage, Sugo.app).",
+    "macosNames: macOS wording of an entry, mapped to the Linux one.",
+    "A new control on one platform only must be added here with its reason; one on both goes in common."
+  ],
+  "capabilities": {
+    "autostart": {
+      "linux": true,
+      "macos": true
+    },
+    "externalControl": {
+      "linux": true,
+      "macos": true
+    },
+    "nativeTitleBar": {
+      "linux": false,
+      "macos": true
+    }
+  },
+  "macosNames": {
+    "settings/general": {
+      "row: Show an icon in the menu bar": "row: Show an icon in the system tray",
+      "row: Start hidden in the menu bar": "row: Start minimized to the system tray"
+    },
+    "welcome/2": {
+      "row: Show an icon in the menu bar": "row: Show an icon in the tray"
+    },
+    "settings/advanced": {
+      "button: Show in Finder": "button: Open folder",
+      "row: Links": "row: D-Bus commands"
+    },
+    "timer-page": {
+      "button: Set Up…": "switch: Silence notifications while working"
+    },
+    "new-timer": {
+      "button: Set Up…": "switch: Silence notifications while working"
+    }
+  },
+  "screens": {
+    "timer": {
+      "common": [
+        "button: Skip",
+        "button: Start",
+        "button: Stop"
+      ]
+    },
+    "timer-page": {
+      "common": [
+        "button: 15 minutes",
+        "button: 25 minutes",
+        "button: 45 minutes",
+        "button: 50 minutes",
+        "button: Duplicate",
+        "button: Icon",
+        "button: Reset to Defaults",
+        "button: Start",
+        "button: The default timer cannot be deleted",
+        "choice: Start automatically",
+        "field: Category",
+        "field: Long break",
+        "field: Long break after",
+        "field: Name",
+        "field: Short break",
+        "field: Work",
+        "row: Long break",
+        "row: Long break after",
+        "row: Play a sound when a phase ends",
+        "row: Short break",
+        "row: Show a notification when a phase ends",
+        "row: Silence notifications while working",
+        "row: Start automatically",
+        "row: Work",
+        "switch: Play a sound when a phase ends",
+        "switch: Show a notification when a phase ends",
+        "switch: Silence notifications while working"
+      ]
+    },
+    "new-timer": {
+      "common": [
+        "button: 15 minutes",
+        "button: 25 minutes",
+        "button: 45 minutes",
+        "button: 50 minutes",
+        "button: Cancel",
+        "button: Create Timer",
+        "button: Icon",
+        "choice: Start automatically",
+        "field: Category",
+        "field: Long break",
+        "field: Long break after",
+        "field: Name",
+        "field: Short break",
+        "field: Work",
+        "row: Long break",
+        "row: Long break after",
+        "row: Play a sound when a phase ends",
+        "row: Short break",
+        "row: Show a notification when a phase ends",
+        "row: Silence notifications while working",
+        "row: Start automatically",
+        "row: Work",
+        "switch: Play a sound when a phase ends",
+        "switch: Show a notification when a phase ends",
+        "switch: Silence notifications while working"
+      ]
+    },
+    "stats": {
+      "common": [
+        "button: Category",
+        "button: Day",
+        "button: Month",
+        "button: Next",
+        "button: Previous",
+        "button: Task",
+        "button: Timer",
+        "button: Week",
+        "button: Year"
+      ]
+    },
+    "about": {
+      "common": [
+        "button: Check for Updates",
+        "button: Project website",
+        "button: Report a bug"
+      ]
+    },
+    "settings/general": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Sounds",
+        "choice: Badge style",
+        "choice: Color scheme",
+        "row: Badge style",
+        "row: Color scheme",
+        "row: Show an icon in the system tray",
+        "row: Start Sugo automatically when I log in",
+        "row: Start minimized to the system tray",
+        "setting: showTrayIcon",
+        "setting: startAtLogin",
+        "setting: startMinimized"
+      ],
+      "linux": {
+        "row: Keep running in the tray when the window is closed": "macOS: closing the window always leaves Sugo running (Dock and menu bar).",
+        "setting: closeToTray": "macOS: closing the window always leaves Sugo running (Dock and menu bar)."
+      },
+      "macos": {
+        "row: Hide the Dock icon while the window is hidden": "The Dock exists only on macOS.",
+        "row: Show the minutes left on the Dock icon": "The Dock exists only on macOS.",
+        "setting: hideDockIcon": "The Dock exists only on macOS.",
+        "setting: showDockBadge": "The Dock exists only on macOS."
+      },
+      "updateInstall": [
+        "row: Check for updates automatically",
+        "setting: autoCheckUpdates"
+      ]
+    },
+    "settings/sounds": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Preview",
+        "button: Sounds",
+        "button: Test",
+        "choice: Focus sound",
+        "choice: Phase sound",
+        "choice: Pre-alarm sound",
+        "row: Alert volume",
+        "row: Focus sound",
+        "row: Focus sound volume",
+        "row: Phase sound",
+        "row: Play a warning one minute before a phase ends",
+        "row: Pre-alarm sound",
+        "setting: preAlarmEnabled",
+        "slider: Alert volume",
+        "slider: Focus sound volume"
+      ]
+    },
+    "settings/focus": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Sounds",
+        "row: Keep the screen awake during work sessions",
+        "row: Pause timer when screen is locked",
+        "row: Prompt for a task note when a work session finishes",
+        "row: Protect daily streak over weekends",
+        "setting: autoPauseOnScreenLock",
+        "setting: keepScreenAwake",
+        "setting: promptTaskNote",
+        "setting: protectWeekendStreak"
+      ],
+      "macos": {
+        "button: Install Shortcuts": "macOS lets apps silence notifications only through Shortcuts; Linux asks the notification server directly, with nothing to set up.",
+        "row: Silence notifications with a Focus": "macOS lets apps silence notifications only through Shortcuts; Linux asks the notification server directly, with nothing to set up."
+      }
+    },
+    "settings/calendar": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Log in",
+        "button: Sounds",
+        "choice: Calendar service",
+        "field: Server address",
+        "row: Add an event to your calendar each time you finish a work session.",
+        "row: Calendar service",
+        "row: Include the task note in the event description",
+        "row: Server address",
+        "switch: Add an event to your calendar each time you finish a work session.",
+        "switch: Include the task note in the event description"
+      ]
+    },
+    "settings/advanced": {
+      "common": [
+        "button: Advanced",
+        "button: Back up…",
+        "button: Calendar",
+        "button: Clear history…",
+        "button: Copy command",
+        "button: Copy to Clipboard",
+        "button: Export Diagnostics…",
+        "button: Export…",
+        "button: Focus",
+        "button: General",
+        "button: Open folder",
+        "button: Reset Settings…",
+        "button: Restore…",
+        "button: Show the Welcome Tour",
+        "button: Sounds",
+        "button: View Report…",
+        "choice: Sessions to remove",
+        "row: Allow other programs to control the timer",
+        "row: Backup and restore",
+        "row: D-Bus commands",
+        "row: Database",
+        "row: Diagnostic report",
+        "row: Export history",
+        "row: Reset settings",
+        "row: Session history",
+        "row: Verbose logging",
+        "row: Welcome tour",
+        "setting: allowExternalControl",
+        "setting: verboseLogging"
+      ],
+      "updateInstall": [
+        "button: Nightly",
+        "button: Stable",
+        "row: Update channel"
+      ]
+    },
+    "welcome/0": {
+      "common": [
+        "button: Next",
+        "button: Skip Tour"
+      ]
+    },
+    "welcome/1": {
+      "common": [
+        "button: Back",
+        "button: Next",
+        "button: Skip Tour"
+      ]
+    },
+    "welcome/2": {
+      "common": [
+        "button: Back",
+        "button: Next",
+        "button: Skip Tour",
+        "row: Protect weekend streaks",
+        "row: Show an icon in the tray",
+        "row: Start at login",
+        "setting: protectWeekendStreak",
+        "setting: showTrayIcon",
+        "setting: startAtLogin"
+      ],
+      "linux": {
+        "row: Keep running in the tray": "macOS: closing the window always leaves Sugo running (Dock and menu bar).",
+        "setting: closeToTray": "macOS: closing the window always leaves Sugo running (Dock and menu bar)."
+      },
+      "macos": {
+        "button: Install Focus Shortcuts": "macOS lets apps silence notifications only through Shortcuts; Linux asks the notification server directly, with nothing to set up.",
+        "row: Silence notifications with a Focus": "macOS lets apps silence notifications only through Shortcuts; Linux asks the notification server directly, with nothing to set up."
+      }
+    },
+    "welcome/3": {
+      "common": [
+        "button: Back",
+        "button: Start"
+      ]
+    },
+    "search": {
+      "common": [
+        "command: About",
+        "command: Focus (shortcut)",
+        "command: New timer (shortcut)",
+        "command: Pomodoro (shortcut)",
+        "command: Settings (shortcut)",
+        "command: Start the timer (shortcut)",
+        "command: Statistics (shortcut)"
+      ]
+    }
+  },
+  "tests": {
+    "_comment": "Each platform feature has its own tests on each platform: tst_platform_parity checks they are registered.",
+    "Notifications": {
+      "linux": [
+        "tst_freedesktopnotifier",
+        "tst_traynotifier",
+        "tst_phasenotifier"
+      ],
+      "macos": [
+        "tst_macnotificationmapping",
+        "tst_traynotifier",
+        "tst_phasenotifier"
+      ]
+    },
+    "Silence notifications while working": {
+      "linux": [
+        "tst_freedesktopinhibitor",
+        "tst_silence"
+      ],
+      "macos": [
+        "tst_shortcutsfocusinhibitor",
+        "tst_shortcutsfocusinstaller",
+        "tst_silence"
+      ]
+    },
+    "Keep the screen awake": {
+      "linux": [
+        "tst_powerinhibitor"
+      ],
+      "macos": [
+        "tst_macpowerassertion"
+      ]
+    },
+    "Pause when the screen locks": {
+      "linux": [
+        "tst_screenlockwatcher"
+      ],
+      "macos": [
+        "tst_screenlockwatcher"
+      ]
+    },
+    "Start at login": {
+      "linux": [
+        "tst_autostart"
+      ],
+      "macos": [
+        "tst_launchagentautostart"
+      ]
+    },
+    "Calendar password in the keyring": {
+      "linux": [
+        "tst_secretstore",
+        "tst_calendarsync"
+      ],
+      "macos": [
+        "tst_mackeychainstore",
+        "tst_calendarsync"
+      ]
+    },
+    "One instance at a time": {
+      "linux": [
+        "tst_singleinstance"
+      ],
+      "macos": [
+        "tst_localsingleinstance"
+      ]
+    },
+    "Control from other programs": {
+      "linux": [
+        "tst_dbustimerservice",
+        "tst_krunnerservice"
+      ],
+      "macos": [
+        "tst_timercommands"
+      ]
+    },
+    "Tray / menu bar icon": {
+      "linux": [
+        "tst_traycontroller",
+        "tst_traypresenter"
+      ],
+      "macos": [
+        "tst_traycontroller",
+        "tst_traypresenter",
+        "tst_dockcontroller"
+      ]
+    },
+    "Updates": {
+      "linux": [
+        "tst_updatechecker"
+      ],
+      "macos": [
+        "tst_updatechecker"
+      ]
+    },
+    "Focus sounds": {
+      "linux": [
+        "tst_focussoundcontroller"
+      ],
+      "macos": [
+        "tst_focussoundcontroller"
+      ]
+    },
+    "Clean quit": {
+      "linux": [
+        "tst_app_shutdown",
+        "tst_app_quit"
+      ],
+      "macos": [
+        "tst_app_quit"
+      ]
+    },
+    "Every screen": {
+      "linux": [
+        "tst_app_startup",
+        "tst_timer_page_ui",
+        "tst_presets_page_ui",
+        "tst_stats_page_ui",
+        "tst_settings_page_ui",
+        "tst_about_page_ui",
+        "tst_welcome_page_ui"
+      ],
+      "macos": [
+        "tst_app_startup",
+        "tst_timer_page_ui",
+        "tst_presets_page_ui",
+        "tst_stats_page_ui",
+        "tst_settings_page_ui",
+        "tst_about_page_ui",
+        "tst_welcome_page_ui"
+      ]
+    }
+  }
+}

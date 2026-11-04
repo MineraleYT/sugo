@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -12,6 +13,10 @@
 
 #include "AppSettings.h"
 #include "Autostart.h"
+#include "FakeShortcutTools.h"
+#include "FakeShortcuts.h"
+#include "ShortcutsFocusInhibitor.h"
+#include "ShortcutsFocusInstaller.h"
 
 namespace
 {
@@ -98,6 +103,8 @@ private Q_SLOTS:
         QVERIFY(settings->trayAvailable());
         QVERIFY(settings->autostartSupported());
         QCOMPARE(settings->trayBadgeStyle(), 0);
+        QVERIFY(settings->showDockBadge());
+        QVERIFY(!settings->hideDockIcon());
         QCOMPARE(settings->soundTheme(), QStringLiteral("alarm-clock-elapsed"));
         QVERIFY(settings->protectWeekendStreak());
         QCOMPARE(settings->soundVolume(), 80);
@@ -116,6 +123,8 @@ private Q_SLOTS:
             settings->setCloseToTray(false);
             settings->setStartMinimized(false);
             settings->setTrayBadgeStyle(1);
+            settings->setShowDockBadge(false);
+            settings->setHideDockIcon(true);
             settings->setSoundTheme(QStringLiteral("complete"));
             settings->setSoundVolume(12);
             settings->setProtectWeekendStreak(false);
@@ -124,6 +133,8 @@ private Q_SLOTS:
         QCOMPARE(stored("CloseToTray"), QStringLiteral("false"));
         QCOMPARE(stored("StartMinimized"), QStringLiteral("false"));
         QCOMPARE(stored("TrayBadgeStyle"), QStringLiteral("1"));
+        QCOMPARE(stored("ShowDockBadge"), QStringLiteral("false"));
+        QCOMPARE(stored("HideDockIcon"), QStringLiteral("true"));
         QCOMPARE(stored("SoundTheme"), QStringLiteral("complete"));
         QCOMPARE(stored("SoundVolume"), QStringLiteral("12"));
         QCOMPARE(stored("ProtectWeekendStreak"), QStringLiteral("false"));
@@ -133,9 +144,59 @@ private Q_SLOTS:
         QVERIFY(!reloaded->closeToTray());
         QVERIFY(!reloaded->startMinimized());
         QCOMPARE(reloaded->trayBadgeStyle(), 1);
+        QVERIFY(!reloaded->showDockBadge());
+        QVERIFY(reloaded->hideDockIcon());
         QCOMPARE(reloaded->soundTheme(), QStringLiteral("complete"));
         QCOMPARE(reloaded->soundVolume(), 12);
         QVERIFY(!reloaded->protectWeekendStreak());
+    }
+
+    void installingFocusShortcutsWithoutAnInstallerFails()
+    {
+        auto settings = make();
+        QVERIFY(!settings->focusShortcutsInstallable());
+        QSignalSpy changed(settings.get(), &AppSettings::focusShortcutsInstallChanged);
+        settings->installFocusShortcuts();
+        QCOMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("failed"));
+        QVERIFY(!settings->focusShortcutsInstallDetail().isEmpty());
+        QCOMPARE(changed.count(), 1);
+    }
+
+    void installingFocusShortcutsReportsAndUsesTheShippedNames()
+    {
+        FakeShortcutTools tools;
+        QVERIFY(tools.isValid());
+        FakeShortcuts shortcuts;
+        QVERIFY(shortcuts.isValid());
+        ShortcutsFocusInstaller installer(tools.programs(), tools.directory());
+        installer.setTimingForTesting(20, 2000, 2000);
+        ShortcutsFocusInhibitor inhibitor(shortcuts.program());
+        auto settings = make();
+        settings->attachFocusShortcuts(&inhibitor);
+        settings->attachFocusShortcutsInstaller(&installer);
+        QVERIFY(settings->focusShortcutsInstallable());
+        QTRY_VERIFY(!shortcuts.calls().isEmpty()); // the first list
+        // Other names give way to those of the shipped shortcuts.
+        settings->setFocusOnShortcut(QStringLiteral("My Focus"));
+        QTRY_VERIFY(shortcuts.calls().size() >= 2);
+        shortcuts.setList({QStringLiteral("Sugo Focus On"), QStringLiteral("Sugo Focus Off")});
+
+        QStringList statuses;
+        connect(settings.get(), &AppSettings::focusShortcutsInstallChanged, this, [&]() { statuses.append(settings->focusShortcutsInstallStatus()); });
+        settings->installFocusShortcuts();
+        QCOMPARE(settings->focusOnShortcut(), QStringLiteral("Sugo Focus On"));
+        QCOMPARE(settings->focusOffShortcut(), QStringLiteral("Sugo Focus Off"));
+        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("done"));
+        QCOMPARE(statuses, (QStringList{QStringLiteral("installing"), QStringLiteral("waitingOn"), QStringLiteral("waitingOff"), QStringLiteral("done")}));
+        QVERIFY(settings->focusShortcutsInstallDetail().isEmpty());
+        // Done: the inhibitor reads its list again and finds both.
+        QTRY_VERIFY(inhibitor.isAvailable());
+
+        // A failure carries its detail.
+        tools.setFails(QStringLiteral("shortcuts"), "broken");
+        settings->installFocusShortcuts();
+        QTRY_COMPARE(settings->focusShortcutsInstallStatus(), QStringLiteral("failed"));
+        QVERIFY(settings->focusShortcutsInstallDetail().contains(QStringLiteral("broken")));
     }
 
     void focusAudioAndPowerSettingsPersistAndClamp()
@@ -322,6 +383,22 @@ private Q_SLOTS:
         QCOMPARE(state->repairCalls, 1);
     }
 
+    // A test run or a build being tried (SUGO_DATA_DIR) must not point the user's login entry at itself.
+    void anIsolatedRunLeavesTheLoginEntryAlone()
+    {
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        const bool wasSet = qEnvironmentVariableIsSet("SUGO_DATA_DIR");
+        QTemporaryDir dir;
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dir.path()));
+        make();
+        if (wasSet) {
+            qputenv("SUGO_DATA_DIR", saved);
+        } else {
+            qunsetenv("SUGO_DATA_DIR");
+        }
+        QCOMPARE(state->repairCalls, 0);
+    }
+
     void unsupportedPlatformsAreReported()
     {
         state->supported = false;
@@ -484,6 +561,8 @@ private Q_SLOTS:
         settings->setStartAtLogin(true);
         settings->setStartMinimized(false);
         settings->setTrayBadgeStyle(2);
+        settings->setShowDockBadge(false);
+        settings->setHideDockIcon(true);
         settings->setSoundTheme(QStringLiteral("bell"));
         settings->setSoundVolume(10);
         settings->setPreAlarmEnabled(false);
@@ -499,6 +578,8 @@ private Q_SLOTS:
         settings->setUpdateChannel(QStringLiteral("nightly"));
         settings->setAutoCheckUpdates(false);
         settings->setVerboseLogging(true);
+        settings->setFocusOnShortcut(QStringLiteral("Mine On"));
+        settings->setFocusOffShortcut(QStringLiteral("Mine Off"));
 
         QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
         QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
@@ -515,6 +596,8 @@ private Q_SLOTS:
         QVERIFY(settings->allowExternalControl());
         QVERIFY(settings->startMinimized());
         QCOMPARE(settings->trayBadgeStyle(), 0);
+        QVERIFY(settings->showDockBadge());
+        QVERIFY(!settings->hideDockIcon());
         QCOMPARE(settings->soundTheme(), QStringLiteral("alarm-clock-elapsed"));
         QCOMPARE(settings->soundVolume(), 80);
         QVERIFY(settings->preAlarmEnabled());
@@ -606,6 +689,20 @@ private Q_SLOTS:
         QStandardPaths::setTestModeEnabled(false);
     }
 
+    void dataDirVariableReplacesDefaultLocation()
+    {
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        const bool wasSet = qEnvironmentVariableIsSet("SUGO_DATA_DIR");
+        QTemporaryDir dir;
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dir.path()));
+        QCOMPARE(Settings::defaultPath(), dir.filePath(QStringLiteral("sugo.conf")));
+        qunsetenv("SUGO_DATA_DIR");
+        QVERIFY(Settings::defaultPath().endsWith(QLatin1String("/sugo/sugo.conf")));
+        if (wasSet) {
+            qputenv("SUGO_DATA_DIR", saved);
+        }
+    }
+
     void onlySoundNamesAndAbsolutePathsArePlayed()
     {
         for (const QString &good : {QStringLiteral("complete"), QStringLiteral("alarm-clock-elapsed"), QStringLiteral("bell.window"),
@@ -654,6 +751,64 @@ private Q_SLOTS:
         // The duration is not known yet: only the fade-in applies.
         QCOMPARE(AppSettings::alertFadeGain(150, 0), 0.5);
         QCOMPARE(AppSettings::alertFadeGain(5000, 0), 1.0);
+    }
+    void soundsAreFoundUnderTheGivenRootsInThemeOrder()
+    {
+        QTemporaryDir first;
+        QTemporaryDir second;
+        QVERIFY(first.isValid() && second.isValid());
+        const auto touch = [](const QString &file) {
+            QVERIFY(QDir().mkpath(QFileInfo(file).absolutePath()));
+            QFile f(file);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+        };
+        touch(first.filePath(QStringLiteral("sounds/freedesktop/stereo/bell.oga")));
+        touch(second.filePath(QStringLiteral("sounds/ocean/stereo/bell.wav")));
+        touch(second.filePath(QStringLiteral("sounds/freedesktop/stereo/complete.oga")));
+        const QStringList roots = {first.path(), second.path()};
+
+        // Any theme's file in Ocean comes before freedesktop's, whatever root holds it.
+        QCOMPARE(AppSettings::findSoundFile(QStringLiteral("bell"), roots), second.filePath(QStringLiteral("sounds/ocean/stereo/bell.wav")));
+        QCOMPARE(AppSettings::findSoundFile(QStringLiteral("complete"), roots),
+                 second.filePath(QStringLiteral("sounds/freedesktop/stereo/complete.oga")));
+        QVERIFY(AppSettings::findSoundFile(QStringLiteral("missing"), roots).isEmpty());
+        QVERIFY(AppSettings::findSoundFile(QStringLiteral("bell"), {}).isEmpty());
+        // An absolute path is used as is, if it is a file.
+        const QString absolute = first.filePath(QStringLiteral("sounds/freedesktop/stereo/bell.oga"));
+        QCOMPARE(AppSettings::findSoundFile(absolute, {}), absolute);
+        QVERIFY(AppSettings::findSoundFile(first.filePath(QStringLiteral("nothing.oga")), {}).isEmpty());
+    }
+
+    void theSearchRootsIncludeTheSystemSounds()
+    {
+        const QStringList roots = AppSettings::soundSearchRoots();
+        QVERIFY(roots.contains(QStringLiteral("/usr/share")));
+        QVERIFY(roots.contains(QStringLiteral("/run/host/usr/share")));
+    }
+
+    void everyOfferedSoundIsBundled()
+    {
+        // The names in the two sound lists of AppSettingsPage.qml; macOS has only these files.
+        for (const char *name : {"alarm-clock-elapsed", "complete", "message-new-instant", "dialog-information", "bell",
+                                 "completion-success", "service-login", "window-attention", "phone-incoming-call", "message"}) {
+            const QString file = AppSettings::findSoundFile(QLatin1String(name), {QStringLiteral(SUGO_BUNDLED_SOUNDS_ROOT)});
+            QVERIFY2(!file.isEmpty(), name);
+            QVERIFY2(QFileInfo::exists(file + QStringLiteral(".license")), name);
+        }
+    }
+
+    void afplayGetsOnlyFormatsItReads()
+    {
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.wav")));
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.AIFF")));
+        QVERIFY(AppSettings::afplayCanPlay(QStringLiteral("/x/bell.caf")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell.oga")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell.ogg")));
+        QVERIFY(!AppSettings::afplayCanPlay(QStringLiteral("/x/bell")));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), 80),
+                 (QStringList{QStringLiteral("-v"), QStringLiteral("0.80"), QStringLiteral("/x/bell.wav")}));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), 150).at(1), QStringLiteral("1.00"));
+        QCOMPARE(AppSettings::afplayArguments(QStringLiteral("/x/bell.wav"), -5).at(1), QStringLiteral("0.00"));
     }
 };
 

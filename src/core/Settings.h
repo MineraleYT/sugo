@@ -17,7 +17,7 @@ namespace Settings
 {
 using Ptr = std::shared_ptr<QSettings>;
 
-/// <config dir>/sugo/sugo.conf.
+/// <config dir>/sugo/sugo.conf (on macOS <data dir>/sugo/sugo.conf); $SUGO_DATA_DIR/sugo.conf when set.
 QString defaultPath();
 /// The settings of the program, shared by everyone who asks.
 Ptr openDefault();

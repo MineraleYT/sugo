@@ -6,7 +6,7 @@ import io.github.mineraleyt.sugo
 
 /**
  * The tour of the first start, in four steps: the logo comes in and says what Sugo is; how a
- * timer works; a few first choices (weekends, tray, login); ready. Finishing or skipping it marks
+ * timer works; a few first choices (weekends, tray, login; on macOS the Focus shortcuts); ready. Finishing or skipping it marks
  * the first run as done and opens the focus page. The arrow keys move between the steps.
  */
 QQC2.Page {
@@ -26,6 +26,10 @@ QQC2.Page {
     /// The tour starts once the window is on screen and the start-up work is over, so that the
     /// logo's entrance is not spent before anyone can see it.
     property bool started: false
+    /// macOS: the user's shortcuts, as last read, and whether both Focus shortcuts are there.
+    property var focusShortcutNames: AppSettings.focusShortcutNames()
+    readonly property bool focusShortcutsFound: focusShortcutNames.indexOf(AppSettings.focusOnShortcut) >= 0
+                                                && focusShortcutNames.indexOf(AppSettings.focusOffShortcut) >= 0
 
     Timer {
         interval: Theme.durationShort
@@ -71,6 +75,9 @@ QQC2.Page {
         }
         function onStartAtLoginChanged() {
             page.autostartError = "";
+        }
+        function onFocusShortcutNamesChanged() {
+            page.focusShortcutNames = AppSettings.focusShortcutNames();
         }
     }
 
@@ -377,7 +384,10 @@ QQC2.Page {
                 step: timersStep
                 eyebrow: i18n("Timers")
                 title: i18n("Work in rounds, rest in between")
-                text: i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
+                // macOS does not let applications silence notifications (Focus modes do that).
+                text: DesktopStyle.macos
+                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the sidebar.")
+                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
             }
 
             Panel {
@@ -540,8 +550,8 @@ QQC2.Page {
                 rowSpacing: Theme.spaceMd + Theme.spaceXs
 
                 Feature {
-                    title: i18n("Live tray icon")
-                    text: i18n("The minutes left, right in the panel.")
+                    title: DesktopStyle.macos ? i18n("Live menu bar icon") : i18n("Live tray icon")
+                    text: DesktopStyle.macos ? i18n("The minutes left, right in the menu bar.") : i18n("The minutes left, right in the panel.")
                     opacity: timersStep.reveal(7)
                     transform: Translate { y: timersStep.rise(7) }
 
@@ -597,6 +607,7 @@ QQC2.Page {
             }
 
             Panel {
+                objectName: "welcomeSetupPanel"
                 Layout.topMargin: Theme.spaceXl
                 implicitHeight: settingsColumn.implicitHeight
 
@@ -620,7 +631,7 @@ QQC2.Page {
                     FormRow {
                         id: trayRow
                         visible: AppSettings.trayAvailable
-                        title: i18n("Show an icon in the tray")
+                        title: DesktopStyle.macos ? i18n("Show an icon in the menu bar") : i18n("Show an icon in the tray")
                         description: i18n("While a timer runs, it shows the phase and the minutes left.")
                         opacity: setupStep.reveal(4)
                         transform: Translate { y: setupStep.rise(4) }
@@ -628,7 +639,8 @@ QQC2.Page {
                     }
                     FormRow {
                         id: closeRow
-                        visible: AppSettings.trayAvailable
+                        // On macOS closing the window always hides it.
+                        visible: AppSettings.trayAvailable && !DesktopStyle.nativeChrome
                         enabled: AppSettings.showTrayIcon
                         title: i18n("Keep running in the tray")
                         description: i18n("Closing the window leaves the timer running.")
@@ -645,13 +657,40 @@ QQC2.Page {
                         transform: Translate { y: setupStep.rise(6) }
                         SettingSwitch { setting: "startAtLogin"; row: loginRow }
                     }
+                    // macOS: the two shortcuts that turn Do Not Disturb on and off while working.
+                    // Optional: the tour goes on without them.
+                    FormRow {
+                        id: focusRow
+                        visible: DesktopStyle.macos
+                        title: i18n("Silence notifications with a Focus")
+                        description: focusStatus.description(AppSettings.focusShortcutsSupported)
+                        // Every state's text: the row keeps the height of the tallest.
+                        descriptionVariants: focusStatus.descriptionVariants(AppSettings.focusShortcutsSupported)
+                        opacity: setupStep.reveal(7)
+                        transform: Translate { y: setupStep.rise(7) }
+                        SButton {
+                            objectName: "welcomeInstallFocusShortcuts"
+                            text: i18n("Install Focus Shortcuts")
+                            enabled: AppSettings.focusShortcutsInstallable && !page.focusShortcutsFound && !focusStatus.busy
+                            Accessible.description: focusRow.description
+                            onClicked: AppSettings.installFocusShortcuts()
+                        }
+                    }
                 }
             }
 
-            Banner {
+            FocusShortcutsStatus {
+                id: focusStatus
+                found: page.focusShortcutsFound
+            }
+
+            // The login entry's error: in a place of its own below the card, so the step does not
+            // move when it comes or goes.
+            MessageSlot {
+                objectName: "welcomeSetupMessage"
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spaceMd
-                visible: page.autostartError.length > 0
+                shown: page.autostartError.length > 0
                 tone: "danger"
                 text: page.autostartError
             }
@@ -740,7 +779,7 @@ QQC2.Page {
                     color: Theme.subtle
                     font.pixelSize: Theme.fontCaption
                 }
-                Kbd { text: i18nc("keyboard shortcut", "Ctrl K") }
+                Kbd { text: DesktopStyle.shortcutText("Ctrl+K") }
                 Text {
                     text: i18n("finds anything")
                     color: Theme.subtle
