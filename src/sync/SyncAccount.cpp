@@ -46,6 +46,9 @@ SyncAccount::SyncAccount(SyncApi *api, SyncSecrets *secrets, Settings::Ptr setti
     , m_settings(std::move(settings))
 {
     m_pollTimer.setSingleShot(true);
+    // The server answers slow_down (and widens the interval by 5 s) to a poll that comes even a
+    // little before the interval; a coarse timer may fire up to 5 % early.
+    m_pollTimer.setTimerType(Qt::PreciseTimer);
     connect(&m_pollTimer, &QTimer::timeout, this, &SyncAccount::pollToken);
     m_keyTimer.setSingleShot(true);
     connect(&m_keyTimer, &QTimer::timeout, this, [this]() { runKeyStep(m_keyStep); });
