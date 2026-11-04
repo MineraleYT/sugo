@@ -171,6 +171,29 @@ private Q_SLOTS:
         QVERIFY(!QFile::exists(copiedPath + QStringLiteral("-shm")));
     }
 
+    void restoreWaitsForTheTimerToStop()
+    {
+        QVERIFY(sessions->insert(sampleRecord(QStringLiteral("In the backup"))));
+        const QUrl backup = QUrl::fromLocalFile(dir.filePath(QStringLiteral("backup.db")));
+        QVERIFY(manager->backupDatabase(backup));
+        QVERIFY(manager->clearHistory());
+
+        FakeClock clock;
+        TimerEngine engine(&clock, nullptr);
+        manager->setTimerActiveProvider([&engine]() { return engine.isActive(); });
+        engine.start();
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+        QVERIFY(!manager->restoreDatabase(backup));
+        QCOMPARE(failed.count(), 1);
+        QCOMPARE(failed.first().first().toString(), i18n("Stop the active timer before restoring a backup."));
+        QCOMPARE(manager->sessionCount(), 0);
+
+        engine.stop();
+        QVERIFY(manager->restoreDatabase(backup));
+        QCOMPARE(manager->sessionCount(), 1);
+        manager->setTimerActiveProvider(nullptr);
+    }
+
     void invalidBackupAndActiveDatabaseAreRejectedWithoutDataLoss()
     {
         SessionRecord record;

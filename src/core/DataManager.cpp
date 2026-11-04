@@ -183,6 +183,11 @@ void DataManager::setNowProvider(std::function<QDateTime()> provider)
     m_now = std::move(provider);
 }
 
+void DataManager::setTimerActiveProvider(std::function<bool()> provider)
+{
+    m_timerActive = std::move(provider);
+}
+
 bool DataManager::clearHistoryOlderThan(int months)
 {
     if (!m_sessions || months < 1) {
@@ -373,6 +378,12 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
 
 bool DataManager::restoreDatabase(const QUrl &fileUrl)
 {
+    // The settings page asks for this too, but a timer can start (tray, D-Bus, shortcut) while
+    // its file and confirm dialogs are open.
+    if (m_timerActive && m_timerActive()) {
+        Q_EMIT operationFailed(i18n("Stop the active timer before restoring a backup."));
+        return false;
+    }
     const QString path = fileUrl.toLocalFile();
     if (path.isEmpty() || !m_database) {
         Q_EMIT operationFailed(i18n("Choose a local backup file."));
