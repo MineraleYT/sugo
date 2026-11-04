@@ -823,7 +823,11 @@ QVariantList SyncController::devices() const
 
 QString SyncController::deviceName() const
 {
-    const QString name = m_account->deviceName();
+    // Signed out: the name last signed in with, so signing in again keeps it.
+    QString name = m_account->deviceName();
+    if (name.isEmpty()) {
+        name = m_account->lastDeviceName();
+    }
     return name.isEmpty() ? QSysInfo::machineHostName() : name;
 }
 

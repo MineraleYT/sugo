@@ -681,6 +681,7 @@ private Q_SLOTS:
         QCOMPARE(signedOut.first().first().toBool(), true);
         QCOMPARE(a.sync->state(), SyncController::Off);
         QVERIFY(!a.settings->childGroups().contains(QStringLiteral("Sync")));
+        QCOMPARE(a.sync->deviceName(), QStringLiteral("A")); // offered again, not the host name
         const int before = server->requests.size();
         a.model->create({{QStringLiteral("name"), QStringLiteral("After sign-out")}});
         a.sync->windowActivated();

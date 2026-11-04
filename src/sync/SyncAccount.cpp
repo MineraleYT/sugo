@@ -23,6 +23,9 @@ const char kKeyConfirmed[] = "KeyConfirmed";
 /// updated_at of the recovery copy this device wrote last ("pending" while it writes one).
 const char kRecoveryUpdatedAt[] = "RecoveryUpdatedAt";
 const QLatin1String kPendingStamp("pending");
+/// The name this computer last signed in with, kept after sign-out (outside the group `Sync`,
+/// which goes) so that signing in again offers it.
+const QLatin1String kLastDeviceName("SyncSignIn/DeviceName");
 
 QString key(const char *name)
 {
@@ -80,6 +83,11 @@ QString SyncAccount::userId() const
 QString SyncAccount::deviceName() const
 {
     return m_settings->value(key(kDeviceName)).toString();
+}
+
+QString SyncAccount::lastDeviceName() const
+{
+    return m_settings->value(kLastDeviceName).toString();
 }
 
 QVariantMap SyncAccount::Device::toVariantMap() const
@@ -288,6 +296,7 @@ void SyncAccount::finishSignIn(const QJsonObject &json)
     writeSetting(kDeviceId, json.value(QLatin1String("device_id")).toString());
     writeSetting(kUserId, json.value(QLatin1String("user_id")).toString());
     writeSetting(kDeviceName, m_deviceName);
+    m_settings->setValue(kLastDeviceName, m_deviceName);
     Settings::sync(*m_settings);
     clearSignInCode();
     setDeviceLimitReached(false);

@@ -34,7 +34,8 @@ class SyncSecrets;
  *
  * Every "store X in the keyring" is a SyncSecrets write of the one `sync-secrets` item. The
  * Settings group `Sync` holds what is not secret: DeviceId, UserId, DeviceName, KeyConfirmed,
- * RecoveryUpdatedAt (the group is removed on sign-out, with whatever else others keep there).
+ * RecoveryUpdatedAt (the group is removed on sign-out, with whatever else others keep there);
+ * `SyncSignIn/DeviceName`, the name last signed in with, stays for the next sign-in.
  *
  * Rule S4: before sign-in sends anything, a test write proves the keyring can keep secrets;
  * without a keyring there is no sync (no file fallback), the same on every system.
@@ -83,6 +84,8 @@ public:
     QString deviceId() const;
     QString userId() const;
     QString deviceName() const;
+    /// The name this computer last signed in with, also after sign-out (empty if it never did).
+    QString lastDeviceName() const;
 
     /// This device's public key (empty when signed out).
     QByteArray publicKey() const { return m_publicKey; }

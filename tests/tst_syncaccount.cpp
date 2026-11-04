@@ -479,6 +479,9 @@ private Q_SLOTS:
         QCOMPARE(c.account->phase(), SyncAccount::Phase::SignedOut);
         QVERIFY(c.store.secrets->isEmpty());
         QVERIFY(!c.hasSyncGroup());
+        // The name stays for the next sign-in.
+        QVERIFY(c.account->deviceName().isEmpty());
+        QCOMPARE(c.account->lastDeviceName(), QStringLiteral("Desk"));
     }
 
     void signOutWithoutNetwork()

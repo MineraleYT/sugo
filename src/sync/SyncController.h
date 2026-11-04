@@ -138,7 +138,8 @@ public:
     QString verificationCode() const;
 
     QVariantList devices() const;
-    /// This device's name; while signed out, the name sign-in suggests (the host name).
+    /// This device's name; while signed out, the name sign-in suggests: the one last signed in
+    /// with, else the host name.
     QString deviceName() const;
     bool recoveryCodeShowable() const;
     /// The first device asking for the key: id, name, platform, verificationCode; empty if none.
