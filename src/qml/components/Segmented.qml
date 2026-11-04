@@ -14,7 +14,7 @@ Rectangle {
 
     implicitWidth: row.implicitWidth + Theme.hairline * 6
     implicitHeight: Theme.controlHeight + Theme.hairline * 2
-    radius: Theme.radius + 2
+    radius: Theme.radiusMd
     color: "transparent"
     border.width: Theme.hairline
     border.color: Theme.border

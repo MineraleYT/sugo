@@ -102,7 +102,7 @@ Rectangle {
             Text {
                 text: i18n("Sugo")
                 color: Theme.foreground
-                font.pixelSize: Theme.fontTitle + 2
+                font.pixelSize: Theme.fontTitleLg
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
             }
