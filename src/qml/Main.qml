@@ -855,6 +855,7 @@ QQC2.ApplicationWindow {
                                                      || activeFocusItem.hasOwnProperty("checkable")
                                                      || activeFocusItem.hasOwnProperty("popup"))
     readonly property bool dialogOpen: quitDialog.visible || taskNoteDialog.visible || screenLockResumeDialog.visible
+                                       || syncApprovalDialog.visible
 
     // Space starts, pauses or resumes the timer while the timer page is shown.
     Shortcut {
@@ -1230,6 +1231,82 @@ QQC2.ApplicationWindow {
         function onSignedOut(remoteDone) {
             if (!remoteDone) {
                 root.showPassiveNotification(i18n("Signed out on this computer, but Sugo Sync could not be reached. Disconnect this device on sugo.stream to free its place."), "long");
+            }
+        }
+        function onApprovalRequested() {
+            root.showSyncApproval();
+        }
+    }
+
+    /// The first device waiting for approval, in the dialog (unless it is already open: the next
+    /// one follows when it closes).
+    function showSyncApproval(): void {
+        const device = SyncController ? SyncController.pendingApproval : null;
+        if (syncApprovalDialog.visible || !device || !device.id) {
+            return;
+        }
+        syncApprovalDialog.device = device;
+        syncApprovalDialog.approved = false;
+        syncApprovalDialog.open();
+    }
+
+    // A new device asks for the timers' key. It gets it only from here, and only if the user sees
+    // the same verification code on both screens (a key sent to anyone else is refused there).
+    ConfirmDialog {
+        id: syncApprovalDialog
+        property var device: ({})
+        property bool approved: false
+        title: i18n("Approve “%1”?", device.name || "")
+        text: i18n("A new device wants to sync your timers. Approve it only if it is yours and shows the same code as here.")
+        confirmText: i18n("Approve")
+        cancelText: i18n("Not Now")
+        onConfirmed: {
+            approved = true;
+            syncApprovalDialog.close();
+        }
+        // Approve, Not Now or Escape: answered once it has closed, then the next device, if any.
+        onClosed: {
+            const id = device.id || "";
+            device = ({});
+            if (SyncController && id.length > 0) {
+                if (approved) {
+                    SyncController.approveDevice(id);
+                } else {
+                    SyncController.ignoreDevice(id);
+                }
+            }
+            Qt.callLater(root.showSyncApproval);
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: approvalCode.implicitHeight + approvalCaption.implicitHeight + Theme.spaceXs + Theme.spaceLg * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            Column {
+                anchors.centerIn: parent
+                spacing: Theme.spaceXs
+                Text {
+                    id: approvalCaption
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: i18n("Verification code")
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                }
+                Text {
+                    id: approvalCode
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: syncApprovalDialog.device.verificationCode || ""
+                    color: Theme.foreground
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.fontDisplay
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: Theme.letterSpacingCaps * 2
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: i18n("Verification code") + " " + text
+                }
             }
         }
     }
