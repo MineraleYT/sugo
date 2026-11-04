@@ -148,6 +148,15 @@ bool Database::connect(bool *corrupt)
         }
         return false;
     }
+    // Deleted rows (cleared history, private notes) are overwritten rather than left readable in
+    // free pages. Like foreign_keys, a setting of the connection: it writes nothing by itself.
+    if (!query.exec(QStringLiteral("PRAGMA secure_delete = ON"))) {
+        m_error = query.lastError().text();
+        if (corrupt) {
+            *corrupt = isCorruptionError(query.lastError().nativeErrorCode());
+        }
+        return false;
+    }
     return true;
 }
 

@@ -525,6 +525,38 @@ private Q_SLOTS:
         QVERIFY(!damaged.lastError().isEmpty());
         QFile::remove(damaged.movedAsidePath());
     }
+
+    void clearedNotesDoNotStayInTheFile()
+    {
+        const QByteArray marker("private-note-7f3a91");
+        SessionRecord record = sampleRecord();
+        record.note = QString::fromLatin1(marker);
+        QVERIFY(sessions->insert(record));
+
+        const QString path = database->path();
+        const auto fileBytes = [&path]() {
+            QByteArray bytes;
+            for (const QString &suffix : {QString(), QStringLiteral("-wal")}) {
+                QFile file(path + suffix);
+                if (file.open(QIODevice::ReadOnly)) {
+                    bytes += file.readAll();
+                }
+            }
+            return bytes;
+        };
+        // Folds the write-ahead log into the file and empties it, as SQLite does in time.
+        const auto checkpoint = [this]() {
+            QSqlQuery query(QSqlDatabase::database(database->connectionName()));
+            return query.exec(QStringLiteral("PRAGMA wal_checkpoint(TRUNCATE)")) && query.next()
+                && query.value(0).toInt() == 0;
+        };
+        QVERIFY(checkpoint());
+        QVERIFY(fileBytes().contains(marker));
+
+        QVERIFY(manager->clearHistory());
+        QVERIFY(checkpoint());
+        QVERIFY2(!fileBytes().contains(marker), "a cleared note is still readable in the database file");
+    }
 };
 
 QTEST_GUILESS_MAIN(DataManagerTest)
