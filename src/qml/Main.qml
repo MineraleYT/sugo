@@ -60,10 +60,13 @@ QQC2.ApplicationWindow {
         if (!TimerEngine.active) {
             return i18n("Sugo");
         }
-        const m = Math.floor(TimerEngine.remainingSeconds / 60);
-        const s = TimerEngine.remainingSeconds % 60;
+        // As the top bar shows it: h:mm:ss past an hour, else mm:ss.
+        const total = TimerEngine.remainingSeconds;
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
         const pad = n => String(n).padStart(2, "0");
-        const timeStr = pad(m) + ":" + pad(s);
+        const timeStr = h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
         let phaseStr = i18n("Work");
         if (TimerEngine.phase === TimerEngine.Phase.ShortBreak) {
             phaseStr = i18n("Short break");
