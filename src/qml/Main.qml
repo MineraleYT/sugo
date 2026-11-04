@@ -60,10 +60,13 @@ QQC2.ApplicationWindow {
         if (!TimerEngine.active) {
             return i18n("Sugo");
         }
-        const m = Math.floor(TimerEngine.remainingSeconds / 60);
-        const s = TimerEngine.remainingSeconds % 60;
+        // As the top bar shows it: h:mm:ss past an hour, else mm:ss.
+        const total = TimerEngine.remainingSeconds;
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
         const pad = n => String(n).padStart(2, "0");
-        const timeStr = pad(m) + ":" + pad(s);
+        const timeStr = h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
         let phaseStr = i18n("Work");
         if (TimerEngine.phase === TimerEngine.Phase.ShortBreak) {
             phaseStr = i18n("Short break");
@@ -171,6 +174,14 @@ QQC2.ApplicationWindow {
         if (!(id > 0)) {
             return;
         }
+        // One at a time: a note being typed stays with its own session, and this one is asked
+        // for once the dialog closes.
+        if (taskNoteDialog.visible) {
+            if (id !== taskNoteDialog.sessionId) {
+                root.pendingTaskNote = { presetName: presetName || "", sessionId: id };
+            }
+            return;
+        }
         taskNoteDialog.presetName = presetName || "";
         taskNoteDialog.sessionId = id;
         taskNoteDialog.open();
@@ -217,7 +228,8 @@ QQC2.ApplicationWindow {
     }
 
     // A work session that ends while the window is hidden: its note prompt waits for the window,
-    // unless the timer's end notification is on (it asks for the note itself).
+    // unless the timer's end notification is on (it asks for the note itself). Also one that ends
+    // while the note of another is being asked for: it waits for that dialog to close.
     property var pendingTaskNote: null
 
     function offerTaskNote(presetName: string, sessionId: var): void {
@@ -307,6 +319,9 @@ QQC2.ApplicationWindow {
         property bool paletteRan: false
         property real wideWidth: 0
         property real welcomePanelY: 0
+        // The stage at which the timer page's track check began (0: not yet).
+        property int trackCheckStage: 0
+        property bool longSetChecked: false
 
         function findItem(item: var, predicate: var): var {
             if (!item) {
@@ -379,6 +394,30 @@ QQC2.ApplicationWindow {
             if (!installButton || installButton.enabled) {
                 fail(45, "The Focus card's install button is missing, or on in a smoke run");
                 return;
+            }
+            // A calendar address still being typed (its field keeps the focus: a click on a
+            // button does not take it) is stored before Log in, Test or Find calendars use it.
+            if (CalendarSync) {
+                const serverField = findItem(page, item => item.objectName === "calendarServerField");
+                if (!serverField) {
+                    fail(53, "The calendar server field was not found");
+                    return;
+                }
+                page.category = "calendar";
+                CalendarSync.enabled = true;
+                serverField.forceActiveFocus();
+                const focused = serverField.activeFocus;
+                serverField.text = "https://cloud.example.org";
+                page.commitCalendarFields();
+                const stored = CalendarSync.serverUrl;
+                CalendarSync.serverUrl = "";
+                CalendarSync.enabled = false;
+                page.category = "general";
+                if (!focused || stored !== "https://cloud.example.org") {
+                    fail(53, "The typed calendar address was not stored before the action: focused=" + focused
+                         + " stored=" + stored);
+                    return;
+                }
             }
             // Disconnecting the calendar asks first.
             page.requestDisconnect();
@@ -498,7 +537,7 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 // Work under way asks before it is cut short.
-                page.confirmAfterSeconds = 0;
+                root.confirmAfterSeconds = 0;
                 TimerEngine.start();
                 page.requestSkip();
                 if (!TimerEngine.active || !page.endConfirming) {
@@ -506,6 +545,17 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 TimerEngine.stop();
+                // Stop from the search asks where it is, without leaving the page.
+                root.navigate("stats");
+                TimerEngine.start();
+                root.requestEndPhase(false);
+                if (root.currentDestination !== "stats" || !TimerEngine.active || !root.endPhaseConfirming) {
+                    fail(48, "Stopping work under way away from the timer page did not ask there");
+                    return true;
+                }
+                TimerEngine.stop();
+                root.confirmAfterSeconds = 60;
+                root.navigate("timer");
                 // A note for a session that ended while the window was hidden waits for it.
                 PresetModel.setOption(PresetModel.currentUuid, "notifyOnEnd", false);
                 root.hide();
@@ -519,15 +569,67 @@ QQC2.ApplicationWindow {
                 return false;
             }
             default:
-                if (!root.active && stage < 31) {
-                    return false; // wait for the window to be active again
+                if (trackCheckStage === 0) {
+                    if (!root.active && stage < 31) {
+                        return false; // wait for the window to be active again
+                    }
+                    root.showPendingTaskNote();
+                    if (root.active && (root.pendingTaskNote || !root.taskNoteOpen)) {
+                        fail(43, "The kept task note did not open with the window");
+                        return true;
+                    }
+                    taskNoteDialog.close();
+                    // A work phase of one second, then (Manual mode) the break waits for Start.
+                    PresetModel.setOption(PresetModel.currentUuid, "autoStartMode", 0);
+                    PresetModel.setOption(PresetModel.currentUuid, "soundOnEnd", false);
+                    TimerEngine.startCustomWork(1);
+                    trackCheckStage = stage;
+                    return false;
                 }
-                root.showPendingTaskNote();
-                if (root.active && (root.pendingTaskNote || !root.taskNoteOpen)) {
-                    fail(43, "The kept task note did not open with the window");
+                return checkTimerTrack(page);
+            }
+        }
+
+        // The cycle track of the timer page: what is done stays done while the next phase waits
+        // for Start, and nothing is done once stopped.
+        function checkTimerTrack(page: var): bool {
+            if (TimerEngine.active) {
+                if (stage - trackCheckStage < 30) {
+                    return false;
+                }
+                fail(49, "A work phase of one second did not end");
+                return true;
+            }
+            if (longSetChecked) {
+                const track = findItem(page, item => item.objectName === "cycleTrack");
+                const row = findItem(page, item => item.objectName === "cycleSegments");
+                if (!track || !row || row.childrenRect.width > track.width + 1) {
+                    fail(52, "The track of a long set runs past its place: "
+                         + (row ? row.childrenRect.width : "missing") + " > " + (track ? track.width : "missing"));
                 }
                 return true;
             }
+            const first = findItem(page, item => item.objectName === "cycleSegment-0");
+            const second = findItem(page, item => item.objectName === "cycleSegment-1");
+            if (!first || !second) {
+                fail(49, "The segments of the cycle track are missing");
+                return true;
+            }
+            if (TimerEngine.phase !== TimerEngine.Phase.ShortBreak || !first.done || !second.current) {
+                fail(49, "The work just done emptied the track while the break waits: phase " + TimerEngine.phase
+                     + ", first done " + first.done + ", second current " + second.current);
+                return true;
+            }
+            TimerEngine.start();
+            TimerEngine.stop();
+            if (first.done || !first.current) {
+                fail(49, "The track still shows work done after Stop");
+                return true;
+            }
+            // The longest set: its track lays out on the next tick.
+            PresetModel.update(PresetModel.currentUuid, { cyclesBeforeLong: PresetModel.maxCycles });
+            longSetChecked = true;
+            return false;
         }
 
         // A timer's page: one stage per tick, so bindings and Qt.callLater() run in between.
@@ -641,6 +743,48 @@ QQC2.ApplicationWindow {
                 editor.requestReset();
                 if (root.pageStack.currentItem !== editor || !editor.confirming || JSON.stringify(PresetModel.get(builtinUuid)) !== before) {
                     fail(27, "Reset to defaults did not ask first");
+                    return true;
+                }
+                // A timer stored without breaks (0 minutes: no break).
+                editor.leaving = true;
+                userUuid = PresetModel.create({ name: "Smoke", shortBreakSeconds: 0, longBreakSeconds: 0 });
+                root.openTimer(userUuid);
+                editor = root.pageStack.currentItem;
+                return false;
+            }
+            case 5: {
+                // Its page shows no break, and does not count that as a change.
+                const shortField = findItem(editor, item => item.objectName === "shortBreakField");
+                const longField = findItem(editor, item => item.objectName === "longBreakField");
+                if (!shortField || !longField || shortField.value !== 0 || longField.value !== 0 || editor.modified) {
+                    fail(50, "A timer without breaks opened with breaks, or as changed: "
+                         + (shortField ? shortField.value : "missing") + ", " + (longField ? longField.value : "missing")
+                         + ", modified " + editor.modified);
+                    return true;
+                }
+                // The longest set: its preview lays out on the next tick.
+                const cyclesField = findItem(editor, item => item.objectName === "cyclesField");
+                if (!cyclesField) {
+                    fail(52, "The field of the cycles is missing");
+                    return true;
+                }
+                cyclesField.setValue(PresetModel.maxCycles);
+                return false;
+            }
+            case 6: {
+                // The preview of the longest set stays within its box.
+                const preview = findItem(editor, item => item.objectName === "cyclePreview");
+                const blocks = findItem(editor, item => item.objectName === "cycleBlocks");
+                if (!preview || !blocks || blocks.childrenRect.width > preview.width + 1) {
+                    fail(52, "The preview of a long set runs past its box: "
+                         + (blocks ? blocks.childrenRect.width : "missing") + " > " + (preview ? preview.width : "missing"));
+                    return true;
+                }
+                // Duplicate with unsaved changes asks first, and makes no copy meanwhile.
+                const count = PresetModel.count;
+                editor.duplicate();
+                if (root.pageStack.currentItem !== editor || !editor.confirming || PresetModel.count !== count) {
+                    fail(51, "Duplicate with unsaved changes did not ask first, or copied before the answer");
                     return true;
                 }
                 return true;
@@ -761,8 +905,12 @@ QQC2.ApplicationWindow {
     /// Shows a destination; "preset" with the timer's `uuid`. `reload` builds the page afresh.
     function navigate(name: string, uuid: var, reload: var): void {
         const target = uuid ?? "";
-        // A page with unsaved changes (a timer's page) asks before it is left.
+        // A page with unsaved changes (a timer's page) asks before it is left. A number still
+        // being typed counts, even one that did not change the value yet ("0", out of range).
         const top = pageStack.currentItem;
+        if (top && typeof top.commitFields === "function") {
+            top.commitFields();
+        }
         if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
             top.requestClose(() => root.navigate(name, uuid, reload));
             return;
@@ -809,6 +957,9 @@ QQC2.ApplicationWindow {
     /// A timer chosen in the sidebar: it becomes the one in use (unless a phase runs) and its page opens.
     function chooseTimer(uuid: string): void {
         const top = pageStack.currentItem;
+        if (top && typeof top.commitFields === "function") {
+            top.commitFields();
+        }
         if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
             top.requestClose(() => root.chooseTimer(uuid));
             return;
@@ -817,6 +968,63 @@ QQC2.ApplicationWindow {
             PresetModel.currentUuid = uuid;
         }
         openTimer(uuid);
+    }
+
+    // Stop and Skip end the phase at once, unless that would cut short a work session that has
+    // already run for a while: then they ask first. A quick mis-start stays one click away. The
+    // question is asked here, over whatever page is shown, so the timer page, the S key, the search
+    // and the menu bar ask the same without leaving the page (unsaved changes, the welcome tour).
+    property int confirmAfterSeconds: 60
+    readonly property bool workUnderWay: TimerEngine.active && TimerEngine.phase === TimerEngine.Phase.Work
+        && TimerEngine.totalSeconds - TimerEngine.remainingSeconds >= confirmAfterSeconds
+    readonly property bool endPhaseConfirming: endPhaseDialog.visible
+
+    /// Stops the phase (or skips to the next one with `skipping`), asking first when work under
+    /// way would be cut short.
+    function requestEndPhase(skipping: bool): void {
+        if (!TimerEngine.active) {
+            return;
+        }
+        if (workUnderWay) {
+            endPhaseDialog.skipping = skipping;
+            endPhaseDialog.open();
+        } else if (skipping) {
+            TimerEngine.skip();
+        } else {
+            TimerEngine.stop();
+        }
+    }
+
+    ConfirmDialog {
+        id: endPhaseDialog
+        property bool skipping: false
+        // The question is about the work session it was asked for: once that ends some other
+        // way (elapsed, tray, shortcut), confirming late must not stop or skip the next phase.
+        Connections {
+            target: TimerEngine
+            function onPhaseChanged() {
+                endPhaseDialog.close();
+            }
+            function onStateChanged() {
+                if (!TimerEngine.active) {
+                    endPhaseDialog.close();
+                }
+            }
+        }
+        title: skipping ? i18n("Skip This Work Session?") : i18n("Stop This Work Session?")
+        text: skipping ? i18n("The rest of this work session is skipped and it is saved as interrupted.")
+                       : i18n("The work session ends now and is saved as interrupted.")
+        confirmText: skipping ? i18n("Skip") : i18n("Stop")
+        confirmKind: "danger"
+        cancelText: i18n("Keep Working")
+        onConfirmed: {
+            endPhaseDialog.close();
+            if (skipping) {
+                TimerEngine.skip();
+            } else {
+                TimerEngine.stop();
+            }
+        }
     }
 
     /// What the search (Ctrl+K) offers.
@@ -832,8 +1040,8 @@ QQC2.ApplicationWindow {
             { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
-            list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => TimerEngine.stop() });
-            list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => TimerEngine.skip() });
+            list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => root.requestEndPhase(false) });
+            list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => root.requestEndPhase(true) });
         }
         for (let i = 0; i < PresetModel.count; ++i) {
             const uuid = PresetModel.uuidAt(i);
@@ -894,6 +1102,7 @@ QQC2.ApplicationWindow {
                                                      || activeFocusItem.hasOwnProperty("checkable")
                                                      || activeFocusItem.hasOwnProperty("popup"))
     readonly property bool dialogOpen: quitDialog.visible || taskNoteDialog.visible || screenLockResumeDialog.visible
+                                     || endPhaseDialog.visible
 
     // Space starts, pauses or resumes the timer while the timer page is shown.
     Shortcut {
@@ -936,6 +1145,8 @@ QQC2.ApplicationWindow {
         sequences: [StandardKey.Preferences, "Ctrl+,"]
         enabled: !root.menuBarShortcuts && !root.isWelcomeActive && !root.dialogOpen
         onActivated: root.navigate("settings")
+        // A platform theme whose Preferences key is Ctrl+, too lists it twice: still settings.
+        onActivatedAmbiguously: root.navigate("settings")
     }
 
     RowLayout {
@@ -1048,6 +1259,8 @@ QQC2.ApplicationWindow {
         background: Item {}
         Sidebar {
             anchors.fill: parent
+            // The window buttons stay in the top bar, which is the frame of a narrow window.
+            showWindowButtons: false
             current: root.currentDestination
             openTimer: root.openTimerUuid
             onNavigateRequested: name => {
@@ -1215,6 +1428,8 @@ QQC2.ApplicationWindow {
             recentRepeater.model = DataManager.recentTaskNotes(5);
             taskNoteField.forceActiveFocus();
         }
+        // A session that ended while this one's note was asked for.
+        onClosed: Qt.callLater(root.showPendingTaskNote)
     }
 
     // The resume prompt waits while the window is hidden (e.g. in the tray) and appears once the

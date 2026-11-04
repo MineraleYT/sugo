@@ -130,6 +130,13 @@ void TimerMenuActions::rebuildTimerMenu()
             m_timerGroup->addAction(action);
             const QString uuid = preset.uuid;
             connect(action, &QAction::triggered, this, [this, uuid]() {
+                // Locking the submenu does not disable its entries, and a copy of the menu shown before
+                // the phase started (Dock menu, desktop tray menu) can still trigger them: switching
+                // timers would reset the engine and end the running session.
+                if (m_engine->isActive()) {
+                    syncTimerChecks();
+                    return;
+                }
                 m_presets->setCurrentUuid(uuid);
                 // If the choice was refused the clicked entry must not stay ticked.
                 syncTimerChecks();

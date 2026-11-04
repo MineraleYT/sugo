@@ -29,6 +29,7 @@
 #include "Localization.h"
 #include "Settings.h"
 #include <algorithm>
+#include <cmath>
 
 
 namespace
@@ -304,16 +305,27 @@ void AppSettings::setStartAtLogin(bool enabled)
     if (!m_autostart) {
         return;
     }
-    if (enabled != startAtLogin() && !m_autostart->setEnabled(enabled)) {
-        Q_EMIT autostartFailed(enabled ? i18n("Could not set up starting Sugo at login.")
-                                       : i18n("Could not remove the entry that starts Sugo at login."));
-    } else if (!enabled) {
+    QString failure;
+    if (enabled != startAtLogin()) {
+        if (enabled && m_autostart->runsFromTemporaryLocation()) {
+            // Opened from the disk image (or a copy macOS moved aside): it is gone at the next login.
+            failure = i18n("To start Sugo at login, move it to the Applications folder and open it from there.");
+        } else if (!m_autostart->setEnabled(enabled)) {
+            failure = enabled ? i18n("Could not set up starting Sugo at login.")
+                              : i18n("Could not remove the entry that starts Sugo at login.");
+        }
+    }
+    if (failure.isEmpty() && !enabled) {
         // "Start minimized" only means something for the start at login: switched off with it,
         // it never stays on unseen behind the disabled row.
         setStartMinimized(false);
     }
-    // Always announced: after a failure this makes views show the real state again.
+    // Always announced: after a failure this makes views show the real state again. Before the
+    // failure, so a view that clears its message on a change (the welcome tour) keeps this one.
     Q_EMIT startAtLoginChanged();
+    if (!failure.isEmpty()) {
+        Q_EMIT autostartFailed(failure);
+    }
 }
 
 void AppSettings::setStartMinimized(bool minimized)
@@ -655,9 +667,13 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
     }
     const QString file = findSoundFile(soundName, soundSearchRoots());
     if (file.isEmpty()) {
-        // Not a file we can find: let libcanberra resolve the event sound name.
+        // Not a file we can find: let libcanberra resolve the event sound name. Its volume is in
+        // decibels, and none is low enough for silence: a muted alert is not played at all.
+        if (vol == 0) {
+            return;
+        }
         if (QStandardPaths::findExecutable(QStringLiteral("canberra-gtk-play")).isEmpty()
-            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName))) {
+            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName, vol))) {
             qWarning() << "Sound" << soundName << "not found and canberra-gtk-play is unavailable";
         }
         return;
@@ -737,9 +753,13 @@ bool AppSettings::isUsableSoundName(const QString &soundName)
     return name.match(soundName).hasMatch() && !soundName.contains(QStringLiteral(".."));
 }
 
-QStringList AppSettings::canberraArguments(const QString &soundName)
+QStringList AppSettings::canberraArguments(const QString &soundName, int volume)
 {
-    return {QStringLiteral("--id=") + soundName};
+    // canberra-gtk-play takes the volume as a gain in dB: 100 % is 0 dB, 50 % about -6 dB. It sets
+    // the user's locale and libcanberra reads the value with strtod, which in a locale with a
+    // decimal comma rejects "-6.0" and plays nothing: whole decibels read the same everywhere.
+    const double gainDb = 20.0 * std::log10(std::clamp(volume, 1, 100) / 100.0);
+    return {QStringLiteral("--id=") + soundName, QStringLiteral("--volume=") + QString::number(qRound(gainDb))};
 }
 
 void AppSettings::openShortcutsSettings()

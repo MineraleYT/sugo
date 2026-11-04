@@ -29,7 +29,8 @@ public:
 
     virtual ~UpdateInstaller() = default;
 
-    /// True when this copy can replace itself (it exists, in a folder the user can write to).
+    /// True when this copy can replace itself (it exists, in a folder the user can write to; an
+    /// AppImage must also be writable itself).
     virtual bool canInstall() const = 0;
     /// The feed object that describes this package's download ("macos"), or empty for the
     /// feed's top-level keys (the AppImage's).

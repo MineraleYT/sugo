@@ -80,6 +80,9 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         return matches;
     }
     const QString subCommand = keywordMatch.captured(1).trimmed().toLower();
+    if (!m_timer) {
+        return matches; // not attached yet
+    }
 
     if (!controlAllowed()) {
         RemoteMatch info = commandMatch(kControlDisabledId, i18n("Sugo: control from other programs is turned off"),
@@ -223,8 +226,8 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
         Q_EMIT openRequested();
         return;
     }
-    if (!controlAllowed()) {
-        return; // a match, or a button, from before the setting changed
+    if (!m_timer || !controlAllowed()) {
+        return; // not attached yet, or a match (or a button) from before the setting changed
     }
     // A button on a match runs that button's command, not the match's own one.
     if (!actionId.isEmpty()) {
@@ -244,8 +247,15 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
     } else if (id.startsWith(QStringLiteral("preset:"))) {
         const QString uuid = id.mid(7);
         if (m_presets && m_presets->indexOf(uuid) >= 0) {
+            // Choosing the current preset changes nothing, so a paused phase of it would stay
+            // paused: "Start preset" resumes it. Another preset resets the timer, which starts.
+            const bool alreadyCurrent = uuid == m_presets->currentUuid();
             m_presets->setCurrentUuid(uuid);
-            m_timer->start();
+            if (alreadyCurrent && m_timer->isPaused()) {
+                m_timer->resume();
+            } else {
+                m_timer->start();
+            }
         }
     } else {
         runCommand(id);

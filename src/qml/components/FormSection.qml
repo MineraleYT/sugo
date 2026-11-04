@@ -23,7 +23,7 @@ ColumnLayout {
         Text {
             text: section.title
             color: Theme.foreground
-            font.pixelSize: Theme.fontHeading - 3
+            font.pixelSize: Theme.fontSection
             font.weight: Font.DemiBold
         }
         Item {

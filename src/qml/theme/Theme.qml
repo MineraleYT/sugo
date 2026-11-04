@@ -85,6 +85,8 @@ QtObject {
 
     readonly property int radiusSm: 5
     readonly property int radius: 8
+    /// Larger surfaces: popups, segmented controls, cards inside cards.
+    readonly property int radiusMd: 10
     readonly property int radiusLg: 12
 
     readonly property int iconSm: 14
@@ -116,7 +118,13 @@ QtObject {
     readonly property int fontCaption: 12
     readonly property int fontBody: 13
     readonly property int fontTitle: 14
+    /// The name of the application in the sidebar.
+    readonly property int fontTitleLg: 16
+    /// The title of a section inside a page.
+    readonly property int fontSection: 17
     readonly property int fontHeading: 20
+    /// The figures of the statistics.
+    readonly property int fontFigure: 22
     readonly property int fontDisplay: 26
     /// The name of the application in the welcome tour.
     readonly property int fontHero: 36

@@ -7,6 +7,8 @@
 
 #include "Localization.h"
 
+#include <QTimer>
+
 SilenceController::SilenceController(QObject *parent)
     : QObject(parent)
 {
@@ -20,6 +22,22 @@ void SilenceController::attach(TimerEngine *engine, PresetModel *presets, Notifi
     m_inhibitor = inhibitor;
 
     connect(engine, &TimerEngine::stateChanged, this, &SilenceController::update);
+    // A phase that elapses emits sessionEnded(completed) first, then starts what follows (an
+    // auto-started Work phase changes the state), and only then phaseFinished, which announces
+    // the end. Silencing at the state change would send Inhibit before that announcement, and
+    // the desktop would swallow it: the silencing waits for the next event-loop turn instead.
+    connect(engine, &TimerEngine::sessionEnded, this,
+            [this](TimerEngine::Phase, const QDateTime &, const QDateTime &, qint64, qint64, bool completed) {
+                m_phaseEnding = completed;
+            });
+    connect(engine, &TimerEngine::phaseFinished, this, [this]() {
+        m_phaseEnding = false;
+        if (m_silenceDeferred) {
+            m_silenceDeferred = false;
+            // Queued, not called: the announcement's own phaseFinished slot may still be to come.
+            QTimer::singleShot(0, this, &SilenceController::update);
+        }
+    });
     // `active` follows what the desktop actually granted (or lost).
     connect(inhibitor, &NotificationInhibitor::inhibitedChanged, this, &SilenceController::update);
     // The shortcuts of a macOS Focus can be created, renamed or chosen at any time.
@@ -52,6 +70,12 @@ void SilenceController::update()
 
     const bool wanted = m_engine->state() == TimerEngine::State::Working
         && m_presets->currentPreset().boolOption(PresetOption::SilenceWhileWorking);
+
+    if (wanted && m_phaseEnding && !(m_decided && m_wanted)) {
+        // Announce first, silence after (see attach()). Releasing is never put off.
+        m_silenceDeferred = true;
+        return;
+    }
 
     // Ask the desktop only when the decision changes (e.g. not on every edit of the timer).
     if (!m_decided || wanted != m_wanted) {

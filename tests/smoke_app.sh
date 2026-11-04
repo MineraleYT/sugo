@@ -52,6 +52,20 @@ run_with_timeout() {
 mkdir -p "$runtime_dir/data/sugo"
 isolation="SUGO_DATA_DIR=$runtime_dir/data/sugo"
 
+# The output of the quit and startup runs, where main.cpp does not count QML warnings itself:
+# the script looks for them there, with the pattern of shutdown_app.sh.
+log=$runtime_dir/out.log
+show_log() {
+    cat "$log" >&2
+}
+check_qml_output() {
+    if grep -E "TypeError|ReferenceError|Cannot read property|QML .* (warning|error)|\.qml:[0-9]+" "$log" >/dev/null; then
+        echo "QML errors or warnings in the $mode smoke test:" >&2
+        show_log
+        exit 1
+    fi
+}
+
 set +e
 # Quit: started normally, then ended with SIGTERM (as the system does at logout): it must quit
 # by itself, cleanly (exit status 0, no QML warnings), within 10 seconds. Works without D-Bus,
@@ -62,12 +76,13 @@ if [[ $mode == quit ]]; then
         "$isolation" \
         XDG_DATA_HOME="$runtime_dir/data" \
         XDG_CONFIG_HOME="$runtime_dir/config" \
-        "$app" &
+        "$app" >"$log" 2>&1 &
     pid=$!
     sleep 4
     if ! kill -0 "$pid" 2>/dev/null; then
         wait "$pid"
         echo "Sugo ended by itself with status $? before it was asked to quit" >&2
+        show_log
         exit 1
     fi
     kill -TERM "$pid"
@@ -79,14 +94,17 @@ if [[ $mode == quit ]]; then
     if kill -0 "$pid" 2>/dev/null; then
         kill -KILL "$pid" 2>/dev/null
         echo "Sugo did not quit within 10 seconds of SIGTERM" >&2
+        show_log
         exit 1
     fi
     wait "$pid"
     status=$?
     if [[ $status -ne 0 ]]; then
         echo "Sugo quit with status $status after SIGTERM (expected 0)" >&2
+        show_log
         exit 1
     fi
+    check_qml_output
     exit 0
 fi
 
@@ -122,12 +140,14 @@ run_with_timeout 8 env QT_QPA_PLATFORM=offscreen \
     "$isolation" \
     XDG_DATA_HOME="$runtime_dir/data" \
     XDG_CONFIG_HOME="$runtime_dir/config" \
-    "$app"
+    "$app" >"$log" 2>&1
 status=$?
 set -e
 
 # The timeout is expected: the GUI must initialize and remain alive until stopped.
 if [[ $status -ne 124 ]]; then
     echo "Sugo startup smoke test exited with status $status (expected timeout status 124)" >&2
+    show_log
     exit 1
 fi
+check_qml_output

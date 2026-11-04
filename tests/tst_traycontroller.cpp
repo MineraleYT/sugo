@@ -2,6 +2,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QSystemTrayIcon>
 #include <QTemporaryDir>
@@ -239,6 +240,42 @@ private Q_SLOTS:
         QCOMPARE(show.count(), 2);
 #endif
         tray->setWindow(nullptr);
+    }
+
+    void quitAsksTheWindow()
+    {
+        // Quit leaves the decision to the window (main.cpp), which asks first while a phase runs:
+        // the tray itself neither quits nor ends the phase.
+        QSignalSpy quit(tray.get(), &TrayController::quitRequested);
+        engine->start();
+        openMenu();
+        QAction *action = actionNamed(menu(), QStringLiteral("Quit"));
+        QVERIFY(action);
+        action->trigger();
+        QCOMPARE(quit.count(), 1);
+        QVERIFY(engine->isActive());
+        QVERIFY(tray->isVisible());
+    }
+
+    void iconGoesBeforeItsMenu()
+    {
+        // Removed by the setting, and with the controller: the icon never outlives its menu.
+        for (const bool byController : {false, true}) {
+            QPointer<QMenu> owned = menu();
+            QVERIFY(owned);
+            bool menuThereWhenIconWent = false;
+            connect(tray->icon(), &QObject::destroyed, this, [&menuThereWhenIconWent, &owned]() {
+                menuThereWhenIconWent = !owned.isNull();
+            });
+            if (byController) {
+                tray.reset();
+            } else {
+                settings->setShowTrayIcon(false);
+                settings->setShowTrayIcon(true);
+            }
+            QVERIFY(menuThereWhenIconWent);
+            QVERIFY(owned.isNull());
+        }
     }
 };
 

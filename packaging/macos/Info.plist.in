@@ -50,6 +50,11 @@
             </array>
         </dict>
     </array>
+    <!-- Notifications stay on screen as alerts, with their actions (Start break, Skip) and the
+         task-note reply visible, rather than banners that go after a few seconds. Only the
+         default: the user can still choose banners in System Settings. -->
+    <key>NSUserNotificationAlertStyle</key>
+    <string>alert</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Sugo contributors. GPL-3.0-or-later.</string>
 </dict>

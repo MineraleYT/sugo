@@ -14,18 +14,18 @@ on:
     branches: [testing]
   workflow_dispatch:
 
-# A newer change makes the build of an older one pointless.
-concurrency:
-  group: nightly
-  cancel-in-progress: true
-
+# A newer change makes the build of an older one pointless: the build jobs of an older run are
+# cancelled (their publish job is then skipped). The publish job itself is never cancelled once
+# it runs: "gh release upload --clobber" deletes the old nightly.json before uploading the new
+# one, and a cancel in between would leave the nightly channel without a feed.
 permissions:
   contents: read
 
 jobs:
   version:
     name: Version of this build
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Only the branch testing becomes a nightly, also when the run is started by hand.
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -45,9 +45,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           base=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" >/dev/null 2>&1; then
+          # Only a 404 means "not released": any other failure (rate limit, server error) would
+          # give a version below the release, which no nightly user would update to.
+          if error=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" 2>&1 >/dev/null); then
             IFS=. read -r major minor patch <<< "$base"
             base="$major.$minor.$((patch + 1))"
+          elif ! grep -q '(HTTP 404)' <<< "$error"; then
+            echo "::error::Cannot tell whether v$base is released: $error"
+            exit 1
           fi
           date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d)
           echo "version=$base-nightly.$date.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
@@ -55,6 +60,9 @@ jobs:
 
   appimage:
     needs: version
+    concurrency:
+      group: nightly-appimage
+      cancel-in-progress: true
     uses: ./.github/workflows/appimage.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -63,6 +71,9 @@ jobs:
   # Not blocking yet: the nightly build is published without it when it fails.
   macos:
     needs: version
+    concurrency:
+      group: nightly-macos
+      cancel-in-progress: true
     uses: ./.github/workflows/macos.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -71,8 +82,12 @@ jobs:
   publish:
     name: Publish the nightly build
     needs: [version, appimage, macos]
-    # Waits for the macOS build but does not need it.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' }}
+    # Waits for the macOS build but does not need it; a build cancelled by a newer run skips it.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' && needs.macos.result != 'cancelled' }}
+    # One publish at a time, in the order the runs reach it, each running to its end.
+    concurrency:
+      group: nightly-publish
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -120,7 +135,7 @@ jobs:
             if [ -f Sugo-macOS-universal.dmg ]; then
               echo
               cat <<'EOF'
-          On macOS 13 or later (Apple Silicon or Intel), open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS reports new versions but does not install them.
+          On macOS 13 or later (Apple Silicon or Intel), open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS installs its updates by itself too (the Nightly channel in Settings → Updates) when it is in a folder it can write to (Applications for an administrator).
           EOF
             fi
             if [ -n "$highlights" ]; then printf '\n## Highlights\n%s\n' "$highlights"; fi

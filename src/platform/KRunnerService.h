@@ -86,6 +86,13 @@ public:
     /// Asked before matching or running anything; without one, everything is allowed. When it
     /// says no, KRunner only offers to open Sugo (where the setting is).
     void setControlAllowed(std::function<bool()> allowed) { m_allowed = std::move(allowed); }
+    /// For a runner created (and registered) before the timer exists, with null pointers: until
+    /// then it matches nothing and runs nothing.
+    void attach(TimerEngine *timer, PresetModel *presets)
+    {
+        m_timer = timer;
+        m_presets = presets;
+    }
 
 public Q_SLOTS:
     QList<RemoteAction> Actions();
