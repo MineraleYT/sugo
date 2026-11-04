@@ -599,6 +599,32 @@ private Q_SLOTS:
         QVERIFY(CalendarSync::parseCalendars("<not xml", QUrl(QStringLiteral("https://x.org/"))).isEmpty());
     }
 
+    void parseCalendarsSkipsPropertiesTheServerDoesNotHave()
+    {
+        // Properties asked for but not defined come back in a propstat of their own, with status
+        // 404. An empty component set there says nothing: absent means any component (RFC 4791).
+        const QByteArray xml =
+            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">"
+            "<d:response><d:href>/dav/cal/home/</d:href>"
+            "<d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype>"
+            // (A status line with more than one space between its words is still read.)
+            "<d:displayname>Home</d:displayname></d:prop><d:status>HTTP/1.1  200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><c:supported-calendar-component-set/><d:displayname>Not this</d:displayname></d:prop>"
+            "<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>"
+            "</d:response>"
+            // Only a failed propstat says it is a calendar: it is not one.
+            "<d:response><d:href>/dav/cal/other/</d:href>"
+            "<d:propstat><d:prop><d:displayname>Other</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><d:resourcetype><c:calendar/></d:resourcetype></d:prop>"
+            "<d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat>"
+            "</d:response>"
+            "</d:multistatus>";
+        const auto cals = CalendarSync::parseCalendars(xml, QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).name, QStringLiteral("Home"));
+        QCOMPARE(cals.at(0).url, QStringLiteral("https://dav.example.net/dav/cal/home"));
+    }
+
     void discoveryNextcloud()
     {
         m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);

@@ -257,19 +257,25 @@ QString CalendarSync::normalizeUrl(const QString &input, QString *error)
 
 QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray &data, const QUrl &requestUrl)
 {
-    struct Response {
-        QString href;
+    struct Properties {
         QString name;
         QString color;
         bool isCalendar = false;
         bool hasComponentSet = false;
         bool vevent = false;
     };
+    struct Response {
+        QString href;
+        Properties props;
+    };
 
     QList<CalendarInfo> result;
     QXmlStreamReader xml(data);
     Response cur;
+    Properties stat; ///< Of the propstat being read; kept only if its status is a success.
     bool inResponse = false;
+    bool inPropstat = false;
+    bool statOk = true;
     bool inResourceType = false;
     bool inComponentSet = false;
 
@@ -280,27 +286,36 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
         xml.readNext();
         if (xml.isStartElement()) {
             const QString name = xml.name().toString();
+            Properties &props = inPropstat ? stat : cur.props;
             if (name == QLatin1String("response")) {
                 cur = Response();
                 inResponse = true;
             } else if (!inResponse) {
                 continue;
+            } else if (name == QLatin1String("propstat")) {
+                stat = Properties();
+                statOk = true; // a server that leaves out the status means success
+                inPropstat = true;
+            } else if (name == QLatin1String("status") && inPropstat) {
+                // "HTTP/1.1 404 Not Found": a property asked for that the collection does not have.
+                const QString statusLine = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                statOk = isSuccess(statusLine.section(QLatin1Char(' '), 1, 1, QString::SectionSkipEmpty).toInt());
             } else if (name == QLatin1String("href") && cur.href.isEmpty()) {
                 cur.href = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("displayname")) {
-                cur.name = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                props.name = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("calendar-color")) {
-                cur.color = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                props.color = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("resourcetype")) {
                 inResourceType = true;
             } else if (name == QLatin1String("calendar") && inResourceType) {
-                cur.isCalendar = true;
+                props.isCalendar = true;
             } else if (name == QLatin1String("supported-calendar-component-set")) {
-                cur.hasComponentSet = true;
+                props.hasComponentSet = true;
                 inComponentSet = true;
             } else if (name == QLatin1String("comp") && inComponentSet) {
                 if (xml.attributes().value(QLatin1String("name")).compare(QLatin1String("VEVENT"), Qt::CaseInsensitive) == 0) {
-                    cur.vevent = true;
+                    props.vevent = true;
                 }
             }
         } else if (xml.isEndElement()) {
@@ -309,9 +324,25 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 inResourceType = false;
             } else if (name == QLatin1String("supported-calendar-component-set")) {
                 inComponentSet = false;
+            } else if (name == QLatin1String("propstat") && inPropstat) {
+                inPropstat = false;
+                if (statOk) {
+                    Properties &props = cur.props;
+                    if (!stat.name.isEmpty()) {
+                        props.name = stat.name;
+                    }
+                    if (!stat.color.isEmpty()) {
+                        props.color = stat.color;
+                    }
+                    props.isCalendar = props.isCalendar || stat.isCalendar;
+                    props.hasComponentSet = props.hasComponentSet || stat.hasComponentSet;
+                    props.vevent = props.vevent || stat.vevent;
+                }
             } else if (name == QLatin1String("response") && inResponse) {
                 inResponse = false;
-                if (!cur.isCalendar || (cur.hasComponentSet && !cur.vevent) || cur.href.isEmpty()) {
+                inPropstat = false;
+                const Properties &props = cur.props;
+                if (!props.isCalendar || (props.hasComponentSet && !props.vevent) || cur.href.isEmpty()) {
                     continue;
                 }
                 const QUrl resolved = requestUrl.resolved(QUrl(cur.href));
@@ -326,8 +357,8 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 }
                 CalendarInfo info;
                 info.url = url;
-                info.name = cur.name.isEmpty() ? segment : cur.name;
-                info.color = cur.color;
+                info.name = props.name.isEmpty() ? segment : props.name;
+                info.color = props.color;
                 result.append(info);
             }
         }
