@@ -595,7 +595,7 @@ void AppSettings::installFocusShortcuts()
 {
     if (!m_focusInstaller) {
         m_focusInstallStatus = QStringLiteral("failed");
-        m_focusInstallDetail = QStringLiteral("not supported on this system");
+        m_focusInstallDetail = i18nc("why the Focus shortcuts could not be installed", "not supported on this system");
         Q_EMIT focusShortcutsInstallChanged();
         return;
     }
