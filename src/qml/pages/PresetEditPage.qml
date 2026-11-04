@@ -280,6 +280,9 @@ QQC2.Page {
         width: Theme.space4xl * 6.5
         padding: Theme.spaceMd
         focus: true
+        // A press on the tile is left to the tile, which toggles the popup: closing on the press
+        // would have the click open it again.
+        closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
         background: Rectangle {
             radius: Theme.radiusLg
             color: Theme.raised
