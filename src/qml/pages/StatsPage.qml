@@ -235,8 +235,8 @@ QQC2.Page {
                     value: StatsModel.formatDuration(StatsModel.breakSeconds)
                     label: i18n("Breaks")
                 }
+                // Always there ("—" until there is a best one), so the figures beside it stay put.
                 Figure {
-                    visible: StatsModel.period !== StatsModel.Period.Day || page.bestBucket.length > 0
                     value: page.bestBucket.length > 0 ? page.bestBucket : "—"
                     label: page.bestLabel
                 }
