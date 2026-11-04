@@ -29,6 +29,7 @@ Item {
             Platform.MenuItem {
                 text: i18nc("@action:inmenu", "About Sugo")
                 role: Platform.MenuItem.AboutRole
+                enabled: menus.navigable
                 onTriggered: menus.app.navigate("about")
             }
             Platform.MenuItem {
