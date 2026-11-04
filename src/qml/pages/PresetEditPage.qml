@@ -57,7 +57,16 @@ QQC2.Page {
     /// Save does something: a new timer, or changes to store.
     readonly property bool canSave: valid && (isNew || modified)
 
+    /// Takes the numbers still being typed: clicking a button or a shortcut leaves the focus in the field.
+    function commitFields(): void {
+        workBox.commit();
+        shortBox.commit();
+        longBox.commit();
+        cyclesBox.commit();
+    }
+
     function save(): void {
+        commitFields();
         if (!canSave) {
             return;
         }
@@ -94,6 +103,7 @@ QQC2.Page {
 
     /// Escape and the sidebar: unsaved changes are only thrown away once confirmed.
     function requestClose(then: var): void {
+        commitFields();
         discardDialog.then = then ?? null;
         if (modified) {
             discardDialog.open();
@@ -107,7 +117,9 @@ QQC2.Page {
     }
 
     function start(): void {
-        if (TimerEngine.active) {
+        commitFields();
+        // Changes are saved first (Start is disabled meanwhile).
+        if (TimerEngine.active || modified) {
             return;
         }
         PresetModel.currentUuid = uuid;

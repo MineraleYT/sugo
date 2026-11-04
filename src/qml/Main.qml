@@ -722,8 +722,12 @@ QQC2.ApplicationWindow {
     /// Shows a destination; "preset" with the timer's `uuid`. `reload` builds the page afresh.
     function navigate(name: string, uuid: var, reload: var): void {
         const target = uuid ?? "";
-        // A page with unsaved changes (a timer's page) asks before it is left.
+        // A page with unsaved changes (a timer's page) asks before it is left. A number still
+        // being typed counts, even one that did not change the value yet ("0", out of range).
         const top = pageStack.currentItem;
+        if (top && typeof top.commitFields === "function") {
+            top.commitFields();
+        }
         if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
             top.requestClose(() => root.navigate(name, uuid, reload));
             return;
@@ -770,6 +774,9 @@ QQC2.ApplicationWindow {
     /// A timer chosen in the sidebar: it becomes the one in use (unless a phase runs) and its page opens.
     function chooseTimer(uuid: string): void {
         const top = pageStack.currentItem;
+        if (top && typeof top.commitFields === "function") {
+            top.commitFields();
+        }
         if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
             top.requestClose(() => root.chooseTimer(uuid));
             return;
