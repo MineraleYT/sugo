@@ -4,6 +4,7 @@
 #include <QByteArray>
 #include <QJsonObject>
 #include <QList>
+#include <QMetaType>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -58,6 +59,8 @@ struct SyncError {
     static SyncError fromResponse(int http, const QByteArray &body, const QString &networkError = QString());
     static Kind kindForCode(const QString &code, int http);
 };
+
+Q_DECLARE_METATYPE(SyncError)
 
 /// An answer of the server.
 struct SyncReply {

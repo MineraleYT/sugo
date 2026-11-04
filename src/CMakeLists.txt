@@ -141,6 +141,8 @@ target_sources(sugo_core PRIVATE
     sync/SyncSecrets.cpp
     sync/SyncApi.h
     sync/SyncApi.cpp
+    sync/SyncAccount.h
+    sync/SyncAccount.cpp
 )
 target_include_directories(sugo_core PUBLIC core db platform stats sync)
 # Qt's resource and QML cache objects share these include paths but may compile before moc has
