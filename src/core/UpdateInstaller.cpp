@@ -31,9 +31,15 @@ QString firstLine(const QString &output)
 
 // --- AppImage ---------------------------------------------------------------------------------
 
-AppImageInstaller::AppImageInstaller(const QString &appImage)
+AppImageInstaller::AppImageInstaller(const QString &appImage, SetPermissions setPermissions)
     : m_path(appImage)
+    , m_setPermissions(std::move(setPermissions))
 {
+}
+
+bool AppImageInstaller::setPermissions(QFileDevice &file, QFileDevice::Permissions permissions) const
+{
+    return m_setPermissions ? m_setPermissions(file, permissions) : file.setPermissions(permissions);
 }
 
 bool AppImageInstaller::canInstall() const
@@ -55,7 +61,8 @@ void AppImageInstaller::install(QSaveFile &download, Done done)
         done(i18n("Cannot install the update: %1", download.errorString()));
         return;
     }
-    QFile::setPermissions(m_path, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QFile appImage(m_path);
+    setPermissions(appImage, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     done(QString());
 }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include <QFileDevice>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -52,7 +53,10 @@ public:
 class AppImageInstaller : public UpdateInstaller
 {
 public:
-    explicit AppImageInstaller(const QString &appImage);
+    /// Sets the mode of the new AppImage; tests make it fail. Empty for QFileDevice::setPermissions().
+    using SetPermissions = std::function<bool(QFileDevice &file, QFileDevice::Permissions permissions)>;
+
+    explicit AppImageInstaller(const QString &appImage, SetPermissions setPermissions = {});
 
     bool canInstall() const override;
     QString feedKey() const override { return QString(); }
@@ -62,7 +66,10 @@ public:
     bool finish(bool launch, qint64 pid) override;
 
 private:
+    bool setPermissions(QFileDevice &file, QFileDevice::Permissions permissions) const;
+
     QString m_path;
+    SetPermissions m_setPermissions;
 };
 
 /// The programs MacBundleInstaller uses; tests put stand-ins in their place.
