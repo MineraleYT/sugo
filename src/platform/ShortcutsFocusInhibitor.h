@@ -23,13 +23,17 @@
  *
  * Like FreedesktopInhibitor, a small asynchronous state machine: it remembers what is wanted
  * and, one `shortcuts run` at a time, makes the Focus match. A run that fails leaves the state
- * as it was (logged) and is not retried until the next inhibit() or a new list; one that
+ * as it was (logged) and is not retried until the next inhibit(), new names or a list that
+ * changed (the same list read again does not count); one that
  * times out is killed. An "on" whose outcome is unknown (timed out)
  * counts as on, so the release still runs the "off" shortcut: turning a Focus off twice is
  * harmless, leaving it on is not. Killing the `shortcuts` client may not stop the shortcut
  * inside the Shortcuts app, so after a timeout the next run waits retryDelayMs (a late "on"
  * must not land after the "off"). An "off" that times out is run once more after that pause,
  * and then given up on: no retry loop, and quitting waits at most releaseTimeoutMs().
+ *
+ * The release runs the "off" shortcut that was set when the "on" ran, even if the names have
+ * changed since: a new "off" may not exist yet, and failing to run it would leave the Focus on.
  *
  * Unlike the freedesktop inhibition, nothing ties the Focus to our process: if Sugo crashes
  * while working, the Focus stays on until the user turns it off. Quitting releases it
@@ -91,6 +95,7 @@ private:
     QString m_program;
     QString m_onShortcut;
     QString m_offShortcut;
+    QString m_releaseShortcut; ///< The "off" paired with the "on" that last ran; the release runs it.
     QStringList m_list;
     bool m_listing = false;      ///< `shortcuts list` is running.
     bool m_listAgain = false;    ///< Asked for a refresh while one was running.
