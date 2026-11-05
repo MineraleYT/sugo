@@ -272,6 +272,37 @@ private Q_SLOTS:
         QVERIFY(c.account->dataKey().isEmpty());
     }
 
+    void signedOutAccountWaitsForTheRecoveryCode()
+    {
+        // The only device signs out: K and its recovery copy stay on the account.
+        Client a(*server);
+        QSignalSpy created(a.account.get(), &SyncAccount::recoveryCodeCreated);
+        signIn(a, SyncAccount::Phase::Ready, QStringLiteral("A"));
+        const QString code = created.first().first().toString();
+        const QByteArray dataKey = a.account->dataKey().toBase64();
+        QSignalSpy out(a.account.get(), &SyncAccount::signedOut);
+        a.account->signOut();
+        QVERIFY(out.wait(5000));
+
+        // The next device does not make a new K (the server would refuse it, over and over): it waits.
+        const int checks = server->count("GET", "/v1/recovery");
+        Client b(*server);
+        QSignalSpy bCreated(b.account.get(), &SyncAccount::recoveryCodeCreated);
+        signIn(b, SyncAccount::Phase::WaitingForKey, QStringLiteral("B"));
+        QTRY_VERIFY(server->count("GET", "/v1/recovery") > checks);
+        QTest::qWait(kUnitMs * 70); // two retries of 30 "seconds"
+        QVERIFY(server->count("GET", "/v1/recovery") <= checks + 3);
+        QCOMPARE(server->count("PUT", "/v1/recovery"), 1); // A's
+        QVERIFY(bCreated.isEmpty());
+        QVERIFY(!b.item().contains(QLatin1String("dataKey")));
+        QVERIFY(b.account->verificationCode().isEmpty());
+
+        QSignalSpy ready(b.account.get(), &SyncAccount::keyReady);
+        b.account->useRecoveryCode(code);
+        QVERIFY(ready.wait(5000));
+        QCOMPARE(b.account->dataKey().toBase64(), dataKey);
+    }
+
     void secondDeviceGetsTheKeyWithTheSameCode()
     {
         Client a(*server);
@@ -382,7 +413,8 @@ private Q_SLOTS:
         QSignalSpy wrong(b.account.get(), &SyncAccount::recoveryCodeWrong);
         b.account->useRecoveryCode(QStringLiteral("not a code"));
         QCOMPARE(wrong.size(), 1);
-        QCOMPARE(server->count("GET", "/v1/recovery"), 1); // A's own check after creating it
+        // A's check before creating K (none yet), then its own check after creating it.
+        QCOMPARE(server->count("GET", "/v1/recovery"), 2);
 
         b.account->useRecoveryCode(SyncCrypto::formatRecoveryCode(SyncCrypto::newRecoveryCode()));
         QVERIFY(wrong.wait(5000));

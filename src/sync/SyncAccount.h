@@ -230,6 +230,7 @@ private:
     void scheduleKeyStep(KeyStep step, int seconds);
     void retryKeyStep(KeyStep step, const SyncError &error);
     void chooseApprover();
+    void createDataKeyUnlessRecovery();
     void createDataKey();
     void uploadRecovery();
     void pollKey();

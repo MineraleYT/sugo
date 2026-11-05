@@ -597,7 +597,8 @@ private:
                 for (const Device &d : devicesOf(userId)) {
                     anyReady = anyReady || d.ready;
                 }
-                if (anyReady && !me->ready) {
+                // As the Worker: a device without K may only create it, as the very first one.
+                if ((anyReady || !account.recovery.isEmpty()) && !me->ready) {
                     error(s, 409, "key_exists");
                     return;
                 }

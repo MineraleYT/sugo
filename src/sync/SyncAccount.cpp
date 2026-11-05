@@ -459,17 +459,38 @@ void SyncAccount::chooseApprover()
     for (const Device &d : std::as_const(m_devices)) {
         anyReady = anyReady || (!d.current && !d.pending);
     }
-    if (!anyReady) {
-        createDataKey();
-        return;
-    }
     m_approver = approver ? *approver : Device();
     const QString code = approver ? SyncCrypto::verificationCode(m_publicKey, approver->publicKey) : QString();
     if (code != m_verificationCode) {
         m_verificationCode = code;
         Q_EMIT verificationCodeChanged(code);
     }
+    if (!anyReady) {
+        createDataKeyUnlessRecovery();
+        return;
+    }
     pollKey();
+}
+
+void SyncAccount::createDataKeyUnlessRecovery()
+{
+    // No other device holds K. The first device of the account creates it; but when the account has a
+    // recovery copy (its devices signed out or were disconnected), K exists and only the recovery code
+    // opens it: the server would refuse a new one, and a new one would not open the synced timers.
+    m_api->getRecovery([this](const SyncReply &reply) {
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (reply.error.kind == SyncError::Kind::NotFound) {
+            createDataKey();
+            return;
+        }
+        if (!reply.ok()) {
+            retryKeyStep(KeyStep::List, reply.error);
+            return;
+        }
+        scheduleKeyStep(KeyStep::List, kRetrySeconds); // for the recovery code, or a device that gets K
+    });
 }
 
 void SyncAccount::createDataKey()
