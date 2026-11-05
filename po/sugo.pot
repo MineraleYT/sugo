@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: sugo\n"
 "Report-Msgid-Bugs-To: https://github.com/MineraleYT/sugo/issues\n"
-"POT-Creation-Date: 2026-11-05 01:42+0000\n"
+"POT-Creation-Date: 2026-11-05 12:55+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,296 +18,317 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: src/core/AppSettings.cpp:321
+#: src/core/AppSettings.cpp:388
 msgid ""
 "To start Sugo at login, move it to the Applications folder and open it from "
 "there."
 msgstr ""
 
-#: src/core/AppSettings.cpp:323
+#: src/core/AppSettings.cpp:390
 msgid "Could not set up starting Sugo at login."
 msgstr ""
 
-#: src/core/AppSettings.cpp:324
+#: src/core/AppSettings.cpp:391
 msgid "Could not remove the entry that starts Sugo at login."
 msgstr ""
 
-#: src/core/AppSettings.cpp:610
+#: src/core/AppSettings.cpp:677
 msgctxt "why the Focus shortcuts could not be installed"
 msgid "not supported on this system"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:228
-msgid "Focus session"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:261
-msgid ""
-"Plain %1 addresses are not allowed because the password would be sent "
-"unencrypted. Use an %2 address."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:263
-msgid "This is not a valid %1 address."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:278
-msgid "Please type the full address, starting with %1"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:285
-msgid "This is not a valid web address."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:291
-msgid ""
-"Do not put the user name or password in the address; enter them in their own "
-"fields."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:840 src/core/CalendarSync.cpp:1398
-msgid "Choose a calendar first."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:999 src/core/CalendarSync.cpp:1017
-msgid "Login rejected: check username and app password"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1002 src/core/CalendarSync.cpp:1659
-msgid "Signed in as %1. Choose a calendar to finish."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1004
-msgid "Not configured"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1007
-msgid "Could not send events to the calendar; trying again later"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1009
-msgid "Connected as %1"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1019
-msgid "Calendar not found"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1021
-msgid "Server answered HTTP %1"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1023
-msgid "The server could not be reached"
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1164
-msgid "The calendar must be on the Nextcloud server you signed in to."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1187
-msgid ""
-"Too many calendar events are waiting to be sent: the oldest one was dropped."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1354
-msgid "The server refused an event (HTTP %1); it was skipped."
-msgstr ""
-
-#: src/core/CalendarSync.cpp:1363
+#: src/core/CalendarSync.cpp:163
 msgid ""
 "This calendar does not accept new events (HTTP 403): check that you can "
 "write to it, or choose another calendar."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1407
+#: src/core/CalendarSync.cpp:176
+msgid ""
+"Sending paused: the server refused %1 times in a row (HTTP 403). Either this "
+"calendar does not accept new events, or the server rejects the username and "
+"app password this way. Check both, then test the connection."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:251
+msgid "Focus session"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:284
+msgid ""
+"Plain %1 addresses are not allowed because the password would be sent "
+"unencrypted. Use an %2 address."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:286
+msgid "This is not a valid %1 address."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:301
+msgid "Please type the full address, starting with %1"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:308
+msgid "This is not a valid web address."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:314
+msgid ""
+"Do not put the user name or password in the address; enter them in their own "
+"fields."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:863 src/core/CalendarSync.cpp:1443
+msgid "Choose a calendar first."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1025 src/core/CalendarSync.cpp:1045
+msgid "Login rejected: check username and app password"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1028 src/core/CalendarSync.cpp:1742
+msgid "Signed in as %1. Choose a calendar to finish."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1030
+msgid "Not configured"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1033
+msgid "Could not send events to the calendar; trying again later"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1035
+msgid "Connected as %1"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1047
+msgid "Calendar not found"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1049
+msgid "Calendar not found (HTTP 409): it may have been deleted or renamed"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1051
+msgid "The calendar is locked by another client (HTTP 423)"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1053
+msgid "Server answered HTTP %1"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1055
+msgid "The server could not be reached"
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1196
+msgid "The calendar must be on the Nextcloud server you signed in to."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1219
+msgid ""
+"Too many calendar events are waiting to be sent: the oldest one was dropped."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1401
+msgid "The server refused an event (HTTP %1); it was skipped."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1452
 msgid "Testing the connection…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1413
+#: src/core/CalendarSync.cpp:1458
 msgid "Sugo connection test"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1473
+#: src/core/CalendarSync.cpp:1533
 msgid ""
 "The connection works, but the test event could not be removed yet (%1). Sugo "
 "will try again later."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1476
+#: src/core/CalendarSync.cpp:1536
 msgid "Connection test succeeded"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1486
+#: src/core/CalendarSync.cpp:1546
 msgid "Enter the server address, user name and password first."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1493
+#: src/core/CalendarSync.cpp:1553
 msgid "Looking for calendars…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1616 src/core/CalendarSync.cpp:1657
+#: src/core/CalendarSync.cpp:1679
+msgid ""
+"The server does not let this account list the calendars at this address "
+"(HTTP 403): check the address."
+msgstr ""
+
+#: src/core/CalendarSync.cpp:1699 src/core/CalendarSync.cpp:1740
 msgid "No calendars were found at this address."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1672
+#: src/core/CalendarSync.cpp:1755
 msgid "Enter the Nextcloud address first, for example %1"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1679
+#: src/core/CalendarSync.cpp:1762
 msgid "Contacting the server…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1697
+#: src/core/CalendarSync.cpp:1780
 msgid "This does not look like a Nextcloud server."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1706 src/core/CalendarSync.cpp:1808
+#: src/core/CalendarSync.cpp:1789 src/core/CalendarSync.cpp:1891
 msgid "The server gave an unexpected answer to the login request."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1718
+#: src/core/CalendarSync.cpp:1801
 msgid "The server redirected the login to a different host; it was refused."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1727
+#: src/core/CalendarSync.cpp:1810
 msgid "Waiting for you to authorize Sugo in the browser…"
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1763
+#: src/core/CalendarSync.cpp:1846
 msgid "The login was not completed in time. Please try again."
 msgstr ""
 
-#: src/core/CalendarSync.cpp:1802
+#: src/core/CalendarSync.cpp:1885
 msgid ""
 "The server returned an address that does not match the one you entered; the "
 "login was refused."
 msgstr ""
 
-#: src/core/DataManager.cpp:182 src/core/DataManager.cpp:205
-#: src/core/DataManager.cpp:211
+#: src/core/DataManager.cpp:188 src/core/DataManager.cpp:211
+#: src/core/DataManager.cpp:217
 msgid "Could not clear session history."
 msgstr ""
 
-#: src/core/DataManager.cpp:188
+#: src/core/DataManager.cpp:194
 msgid "Session history cleared."
 msgstr ""
 
-#: src/core/DataManager.cpp:215
+#: src/core/DataManager.cpp:221
 msgid "There were no sessions to remove."
 msgstr ""
 
-#: src/core/DataManager.cpp:222
+#: src/core/DataManager.cpp:228
 msgid "%1 session removed."
 msgid_plural "%1 sessions removed."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/core/DataManager.cpp:230
+#: src/core/DataManager.cpp:236
 msgid "Choose a local file for the export."
 msgstr ""
 
-#: src/core/DataManager.cpp:236
+#: src/core/DataManager.cpp:242
 msgid "Name the file with the ending .csv or .json."
 msgstr ""
 
-#: src/core/DataManager.cpp:245
+#: src/core/DataManager.cpp:251
 msgid "Could not read the session history."
 msgstr ""
 
-#: src/core/DataManager.cpp:292
+#: src/core/DataManager.cpp:298
 msgid "Could not write the export file."
 msgstr ""
 
-#: src/core/DataManager.cpp:295
+#: src/core/DataManager.cpp:301
 msgid "Exported %1 session."
 msgid_plural "Exported %1 sessions."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/core/DataManager.cpp:311
+#: src/core/DataManager.cpp:317
 msgid "Choose a local file for the backup."
 msgstr ""
 
-#: src/core/DataManager.cpp:315 src/core/DataManager.cpp:410
+#: src/core/DataManager.cpp:321 src/core/DataManager.cpp:419
 msgid "Choose a backup file other than the active database."
 msgstr ""
 
-#: src/core/DataManager.cpp:322
+#: src/core/DataManager.cpp:328
 msgid "Could not prepare the database for backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:332
+#: src/core/DataManager.cpp:338
 msgid "Could not create the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:340
+#: src/core/DataManager.cpp:346
 msgid "Could not create the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:347
+#: src/core/DataManager.cpp:353
 msgid "Could not replace the selected backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:353
+#: src/core/DataManager.cpp:359
 msgid "Could not finish writing the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:357
+#: src/core/DataManager.cpp:363
 msgid "Database backup created."
 msgstr ""
 
-#: src/core/DataManager.cpp:364 src/core/DataManager.cpp:383
-#: src/core/DataManager.cpp:415 src/core/DataManager.cpp:447
+#: src/core/DataManager.cpp:370 src/core/DataManager.cpp:392
+#: src/core/DataManager.cpp:424 src/core/DataManager.cpp:456
 msgid "This file is not a Sugo database."
 msgstr ""
 
-#: src/core/DataManager.cpp:385
+#: src/core/DataManager.cpp:394
 msgid "This backup was created by a newer version of Sugo."
 msgstr ""
 
-#: src/core/DataManager.cpp:401
+#: src/core/DataManager.cpp:410
 msgid "Stop the active timer before restoring a backup."
 msgstr ""
 
-#: src/core/DataManager.cpp:406
+#: src/core/DataManager.cpp:415
 msgid "Choose a local backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:415 src/core/DataManager.cpp:436
-#: src/core/DataManager.cpp:449 src/core/DataManager.cpp:523
+#: src/core/DataManager.cpp:424 src/core/DataManager.cpp:445
+#: src/core/DataManager.cpp:458 src/core/DataManager.cpp:535
 msgid "Could not restore the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:428
+#: src/core/DataManager.cpp:437
 msgid "Could not read the backup file."
 msgstr ""
 
-#: src/core/DataManager.cpp:446
+#: src/core/DataManager.cpp:455
 msgid "The backup is damaged."
 msgstr ""
 
-#: src/core/DataManager.cpp:459 src/core/DataManager.cpp:471
+#: src/core/DataManager.cpp:468 src/core/DataManager.cpp:480
 msgid "Could not open the backup: %1"
 msgstr ""
 
-#: src/core/DataManager.cpp:508
+#: src/core/DataManager.cpp:520
 msgid "The restored timers could not be read."
 msgstr ""
 
-#: src/core/DataManager.cpp:534
+#: src/core/DataManager.cpp:546
 msgid "Backup restored."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:389
+#: src/core/Diagnostics.cpp:429
 msgid "The report can only be saved to a local file."
 msgstr ""
 
-#: src/core/Diagnostics.cpp:397
+#: src/core/Diagnostics.cpp:437
 msgid "Could not open %1 for writing: %2"
 msgstr ""
 
-#: src/core/Diagnostics.cpp:402
+#: src/core/Diagnostics.cpp:442
 msgid "Could not write %1: %2"
 msgstr ""
 
@@ -375,8 +396,8 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: src/core/PhaseNotifier.cpp:129 src/core/TimerMenuActions.cpp:61
-#: src/platform/KRunnerService.cpp:66
+#: src/core/PhaseNotifier.cpp:129 src/core/TimerMenuActions.cpp:62
+#: src/platform/KRunnerService.cpp:67
 msgid "Skip"
 msgstr ""
 
@@ -413,7 +434,7 @@ msgid "Pomodoro"
 msgstr ""
 
 #: src/core/PresetModel.cpp:110 src/core/TrayPresenter.cpp:24
-#: src/platform/KRunnerService.cpp:98
+#: src/platform/KRunnerService.cpp:99
 msgid "Work"
 msgstr ""
 
@@ -507,7 +528,7 @@ msgstr ""
 msgid "Control by other programs is turned off in Sugo's settings."
 msgstr ""
 
-#: src/core/TimerCommands.cpp:96
+#: src/core/TimerCommands.cpp:96 src/platform/KRunnerService.cpp:168
 msgid "A timer is running. Stop it before choosing another timer."
 msgstr ""
 
@@ -519,55 +540,55 @@ msgstr ""
 msgid "Sugo does not know this link."
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:55
+#: src/core/TimerMenuActions.cpp:56
 msgid "Timer"
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:58 src/platform/KRunnerService.cpp:67
+#: src/core/TimerMenuActions.cpp:59 src/platform/KRunnerService.cpp:68
 msgid "Stop"
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:76 src/platform/KRunnerService.cpp:65
+#: src/core/TimerMenuActions.cpp:77 src/platform/KRunnerService.cpp:66
 msgid "Resume"
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:78 src/platform/KRunnerService.cpp:63
+#: src/core/TimerMenuActions.cpp:79 src/platform/KRunnerService.cpp:64
 msgid "Start"
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:78
+#: src/core/TimerMenuActions.cpp:79
 msgid "Start break"
 msgstr ""
 
-#: src/core/TimerMenuActions.cpp:80 src/platform/KRunnerService.cpp:64
+#: src/core/TimerMenuActions.cpp:81 src/platform/KRunnerService.cpp:65
 msgid "Pause"
 msgstr ""
 
-#: src/core/TrayController.cpp:255 src/core/TrayController.cpp:296
+#: src/core/TrayController.cpp:256 src/core/TrayController.cpp:297
 msgid "Hide Window"
 msgstr ""
 
-#: src/core/TrayController.cpp:255 src/core/TrayController.cpp:296
+#: src/core/TrayController.cpp:256 src/core/TrayController.cpp:297
 msgid "Show Window"
 msgstr ""
 
-#: src/core/TrayController.cpp:287
+#: src/core/TrayController.cpp:288
 msgid "Statistics"
 msgstr ""
 
-#: src/core/TrayController.cpp:290
+#: src/core/TrayController.cpp:291
 msgid "Settings"
 msgstr ""
 
-#: src/core/TrayController.cpp:293
+#: src/core/TrayController.cpp:294
 msgid "Quit"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:26 src/platform/KRunnerService.cpp:100
+#: src/core/TrayPresenter.cpp:26 src/platform/KRunnerService.cpp:101
 msgid "Short break"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:28 src/platform/KRunnerService.cpp:102
+#: src/core/TrayPresenter.cpp:28 src/platform/KRunnerService.cpp:103
 msgid "Long break"
 msgstr ""
 
@@ -581,7 +602,7 @@ msgid ""
 "%3"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:46 src/core/TrayPresenter.cpp:63
+#: src/core/TrayPresenter.cpp:46 src/core/TrayPresenter.cpp:69
 msgid "%1 (paused)"
 msgstr ""
 
@@ -591,11 +612,11 @@ msgid ""
 "%2"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:65 src/main.cpp:177 src/main.cpp:181
+#: src/core/TrayPresenter.cpp:71 src/main.cpp:200 src/main.cpp:204
 msgid "Sugo"
 msgstr ""
 
-#: src/core/TrayPresenter.cpp:68
+#: src/core/TrayPresenter.cpp:74
 msgctxt ""
 "@item:inmenu Tray menu status line: %1 is the phase (e.g. Work), %2 the time "
 "left (e.g. 12:30), %3 the name of the timer"
@@ -626,7 +647,7 @@ msgstr ""
 msgid "The update is larger than announced."
 msgstr ""
 
-#: src/core/UpdateChecker.cpp:524 src/core/UpdateInstaller.cpp:201
+#: src/core/UpdateChecker.cpp:524 src/core/UpdateInstaller.cpp:215
 msgid "Cannot write the update: %1"
 msgstr ""
 
@@ -638,157 +659,161 @@ msgstr ""
 msgid "The downloaded update is damaged; it was not installed."
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:54
+#: src/core/UpdateInstaller.cpp:65 src/core/UpdateInstaller.cpp:69
 msgid "Cannot install the update: %1"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:176
+#: src/core/UpdateInstaller.cpp:190
 msgid "it did not finish in time"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:207
+#: src/core/UpdateInstaller.cpp:221
 msgid "Cannot open the update: %1"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:218
+#: src/core/UpdateInstaller.cpp:232
 msgid "Cannot open the downloaded disk image: %1"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:230
+#: src/core/UpdateInstaller.cpp:244
 msgid "The downloaded disk image does not contain Sugo."
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:236
+#: src/core/UpdateInstaller.cpp:250
 msgid "The signature of the downloaded Sugo is not valid: %1"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:247
+#: src/core/UpdateInstaller.cpp:261
 msgid "Cannot remove the earlier update at %1."
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:252 src/core/UpdateInstaller.cpp:265
+#: src/core/UpdateInstaller.cpp:266 src/core/UpdateInstaller.cpp:279
 msgid "Cannot copy the update next to %1: %2"
 msgstr ""
 
-#: src/core/UpdateInstaller.cpp:265
+#: src/core/UpdateInstaller.cpp:279
 msgid "the copy is incomplete"
 msgstr ""
 
-#: src/main.cpp:183
+#: src/main.cpp:206
 msgid "A Pomodoro timer with time statistics"
 msgstr ""
 
-#: src/main.cpp:184
+#: src/main.cpp:207
 msgid "© 2026 Sugo contributors"
 msgstr ""
 
-#: src/main.cpp:193
+#: src/main.cpp:216
 msgid "Start hidden in the menu bar (used by the login item)"
 msgstr ""
 
-#: src/main.cpp:196
+#: src/main.cpp:219
 msgid "Start hidden in the system tray (used by the login entry)"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:88
+#: src/platform/KRunnerService.cpp:89
 msgid "Sugo: control from other programs is turned off"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:89
+#: src/platform/KRunnerService.cpp:90
 msgid "Open Sugo to change this in its settings"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:108
+#: src/platform/KRunnerService.cpp:109
 msgid "Start Pomodoro Timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:108 src/platform/KRunnerService.cpp:209
+#: src/platform/KRunnerService.cpp:109 src/platform/KRunnerService.cpp:215
 msgid "Preset: %1"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:113
+#: src/platform/KRunnerService.cpp:114
 msgid "Pause Pomodoro Timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:113 src/platform/KRunnerService.cpp:118
+#: src/platform/KRunnerService.cpp:114 src/platform/KRunnerService.cpp:119
 msgid "%1 remaining"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:118
+#: src/platform/KRunnerService.cpp:119
 msgid "Resume Pomodoro Timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:123
+#: src/platform/KRunnerService.cpp:124
 msgid "Stop Pomodoro Timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:123
+#: src/platform/KRunnerService.cpp:124
 msgid "Reset session"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:128
+#: src/platform/KRunnerService.cpp:129
 msgid "Skip to Next Phase"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:129
+#: src/platform/KRunnerService.cpp:130
 msgid "Advance to the next work or break phase"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:141
+#: src/platform/KRunnerService.cpp:142
 msgid "Start %1-minute timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:142
+#: src/platform/KRunnerService.cpp:143
 msgid "Start custom focus session"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:145
+#: src/platform/KRunnerService.cpp:146
 msgid "Choose between 1 and %1 minutes"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:146
+#: src/platform/KRunnerService.cpp:147
 msgid "A custom focus session lasts 1 to %1 minutes."
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:162
+#: src/platform/KRunnerService.cpp:167
+msgid "Preset %1"
+msgstr ""
+
+#: src/platform/KRunnerService.cpp:167
 msgid "Start preset %1"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:163
+#: src/platform/KRunnerService.cpp:169
 msgid "%1 minute of work"
 msgid_plural "%1 minutes of work"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/platform/KRunnerService.cpp:183
+#: src/platform/KRunnerService.cpp:189
 msgid "Sugo: Paused (%1 left)"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:184
+#: src/platform/KRunnerService.cpp:190
 msgid "Click to resume %1"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:189
+#: src/platform/KRunnerService.cpp:195
 msgid "Sugo: %1 (%2 left)"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:190
+#: src/platform/KRunnerService.cpp:196
 msgid "Click to pause timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:196
+#: src/platform/KRunnerService.cpp:202
 msgid "Skip to next phase"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:202
+#: src/platform/KRunnerService.cpp:208
 msgid "Stop timer"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:208
+#: src/platform/KRunnerService.cpp:214
 msgid "Start Pomodoro (%1 min)"
 msgstr ""
 
-#: src/platform/KRunnerService.cpp:214
+#: src/platform/KRunnerService.cpp:220
 msgid "Open Sugo Window"
 msgstr ""
 
@@ -908,11 +933,11 @@ msgstr ""
 msgid "%1s"
 msgstr ""
 
-#: src/sync/SyncController.cpp:143 src/sync/SyncController.cpp:730
+#: src/sync/SyncController.cpp:143 src/sync/SyncController.cpp:742
 msgid "Sugo Sync needs the system keyring."
 msgstr ""
 
-#: src/sync/SyncController.cpp:145 src/sync/SyncController.cpp:773
+#: src/sync/SyncController.cpp:145 src/sync/SyncController.cpp:785
 msgid "Sugo could not store the Sugo Sync keys in the system keyring."
 msgstr ""
 
@@ -928,8 +953,8 @@ msgstr ""
 msgid "Sign-in did not succeed. Try again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:165 src/sync/SyncController.cpp:727
-#: src/sync/SyncController.cpp:779
+#: src/sync/SyncController.cpp:165 src/sync/SyncController.cpp:739
+#: src/sync/SyncController.cpp:793
 msgid "This device was disconnected. Sign in again."
 msgstr ""
 
@@ -963,86 +988,91 @@ msgstr ""
 msgid "Sugo Sync lost this device's keys. Sign in again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:732
+#: src/sync/SyncController.cpp:744
 msgid "Not signed in."
 msgstr ""
 
-#: src/sync/SyncController.cpp:735
+#: src/sync/SyncController.cpp:747
 msgid ""
 "Your account has as many devices as it can. Disconnect one on sugo.stream."
 msgstr ""
 
-#: src/sync/SyncController.cpp:738
+#: src/sync/SyncController.cpp:750
 msgid "Asking for a code…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:740
+#: src/sync/SyncController.cpp:752
 msgid "Enter this code on sugo.stream."
 msgstr ""
 
-#: src/sync/SyncController.cpp:743
+#: src/sync/SyncController.cpp:755
 msgid ""
 "Waiting for another device to approve this one, or for the recovery code."
 msgstr ""
 
-#: src/sync/SyncController.cpp:745
+#: src/sync/SyncController.cpp:757
 msgid ""
 "Check that your other device shows the same code, then approve it there."
 msgstr ""
 
-#: src/sync/SyncController.cpp:747
+#: src/sync/SyncController.cpp:759
 msgid "Up to date."
 msgstr ""
 
-#: src/sync/SyncController.cpp:750
+#: src/sync/SyncController.cpp:762
 msgid "Waiting for the keyring…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:752
+#: src/sync/SyncController.cpp:764
 msgid "Syncing…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:763
+#: src/sync/SyncController.cpp:775
 msgid "Cannot reach Sugo Sync. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:765
+#: src/sync/SyncController.cpp:777
 msgid "Update Sugo to keep syncing."
 msgstr ""
 
-#: src/sync/SyncController.cpp:767
+#: src/sync/SyncController.cpp:779
 msgid "The synced timers do not open with this device's key."
 msgstr ""
 
-#: src/sync/SyncController.cpp:769
+#: src/sync/SyncController.cpp:781
 msgid "The timers are too large to sync."
 msgstr ""
 
-#: src/sync/SyncController.cpp:771
+#: src/sync/SyncController.cpp:783
 msgid ""
 "The system keyring did not answer. Sugo tries again when you return to the "
 "window."
 msgstr ""
 
-#: src/sync/SyncController.cpp:775
+#: src/sync/SyncController.cpp:787
 msgid "Sugo Sync is busy. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:777
+#: src/sync/SyncController.cpp:789
 msgid "Sugo Sync could not save the timers. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:981
+#: src/sync/SyncController.cpp:791
+msgid ""
+"Sugo could not save the synced timers on this device. Trying again later."
+msgstr ""
+
+#: src/sync/SyncController.cpp:995
 msgid "New device wants to sync"
 msgstr ""
 
-#: src/sync/SyncController.cpp:982
+#: src/sync/SyncController.cpp:996
 msgid ""
 "%1 asks for your timers. Open Sugo to compare the verification code and "
 "approve it."
 msgstr ""
 
-#: src/sync/SyncController.cpp:985 src/sync/SyncController.cpp:986
+#: src/sync/SyncController.cpp:999 src/sync/SyncController.cpp:1000
 msgid "Review"
 msgstr ""
 
@@ -1054,212 +1084,218 @@ msgstr ""
 msgid "[%1] %2 — Sugo"
 msgstr ""
 
-#: src/qml/Main.qml:152
+#: src/qml/Main.qml:153
 msgid "Restart Sugo?"
 msgstr ""
 
-#: src/qml/Main.qml:152
+#: src/qml/Main.qml:153
 msgid "Quit Sugo?"
 msgstr ""
 
-#: src/qml/Main.qml:155
+#: src/qml/Main.qml:156
 msgid ""
 "A work session is in progress. Restarting ends it now, and it is saved as "
 "interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:156
+#: src/qml/Main.qml:157
 msgid "A break is in progress. Restarting ends it now."
 msgstr ""
 
-#: src/qml/Main.qml:158
+#: src/qml/Main.qml:159
 msgid ""
 "A work session is in progress. Quitting ends it now, and it is saved as "
 "interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:159
+#: src/qml/Main.qml:160
 msgid "A break is in progress. Quitting ends it now."
 msgstr ""
 
-#: src/qml/Main.qml:160
+#: src/qml/Main.qml:161
 msgid "Restart"
 msgstr ""
 
-#: src/qml/Main.qml:162
+#: src/qml/Main.qml:163
 msgid "Keep Running"
 msgstr ""
 
-#: src/qml/Main.qml:215
+#: src/qml/Main.qml:216
 msgid "name"
 msgstr ""
 
-#: src/qml/Main.qml:216
+#: src/qml/Main.qml:217
 msgid "category"
 msgstr ""
 
-#: src/qml/Main.qml:217
+#: src/qml/Main.qml:218
 msgid "work duration"
 msgstr ""
 
-#: src/qml/Main.qml:218
+#: src/qml/Main.qml:219
 msgid "short break"
 msgstr ""
 
-#: src/qml/Main.qml:219 src/qml/pages/WelcomePage.qml:453
+#: src/qml/Main.qml:220 src/qml/pages/WelcomePage.qml:461
 msgid "long break"
 msgstr ""
 
-#: src/qml/Main.qml:220
+#: src/qml/Main.qml:221
 msgid "work sessions before the long break"
 msgstr ""
 
-#: src/qml/Main.qml:223
+#: src/qml/Main.qml:224
 msgid "This value of “%2” was outside the allowed range and was adjusted: %3."
 msgid_plural ""
 "These values of “%2” were outside the allowed range and were adjusted: %3."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/qml/Main.qml:1064
+#: src/qml/Main.qml:1093
 msgid "Skip This Work Session?"
 msgstr ""
 
-#: src/qml/Main.qml:1064
+#: src/qml/Main.qml:1093
 msgid "Stop This Work Session?"
 msgstr ""
 
-#: src/qml/Main.qml:1065
+#: src/qml/Main.qml:1094
 msgid ""
 "The rest of this work session is skipped and it is saved as interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:1066
+#: src/qml/Main.qml:1095
 msgid "The work session ends now and is saved as interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:1069
+#: src/qml/Main.qml:1098
 msgid "Keep Working"
 msgstr ""
 
-#: src/qml/Main.qml:1083 src/qml/components/Sidebar.qml:153
+#: src/qml/Main.qml:1112 src/qml/components/Sidebar.qml:153
 #: src/qml/pages/AppSettingsPage.qml:20 src/qml/pages/TimerPage.qml:13
 msgid "Focus"
 msgstr ""
 
-#: src/qml/Main.qml:1086 src/qml/components/Sidebar.qml:254
+#: src/qml/Main.qml:1115 src/qml/components/Sidebar.qml:254
 #: src/qml/pages/AboutPage.qml:10
 msgid "About"
 msgstr ""
 
-#: src/qml/Main.qml:1087
+#: src/qml/Main.qml:1116
 msgid "Resume the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1087
+#: src/qml/Main.qml:1116
 msgid "Pause the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1087
+#: src/qml/Main.qml:1116
 msgid "Start the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1088 src/qml/pages/TimerPage.qml:377
-#: src/qml/pages/WelcomePage.qml:777
+#: src/qml/Main.qml:1117 src/qml/pages/TimerPage.qml:377
+#: src/qml/pages/WelcomePage.qml:788
 msgctxt "keyboard key"
 msgid "Space"
 msgstr ""
 
-#: src/qml/Main.qml:1090 src/qml/components/Sidebar.qml:215
+#: src/qml/Main.qml:1119 src/qml/components/Sidebar.qml:215
 msgid "New timer"
 msgstr ""
 
-#: src/qml/Main.qml:1093
+#: src/qml/Main.qml:1122
 msgid "Stop the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1094
+#: src/qml/Main.qml:1123
 msgid "Skip to the next phase"
 msgstr ""
 
-#: src/qml/Main.qml:1100 src/qml/components/Sidebar.qml:205
+#: src/qml/Main.qml:1129 src/qml/components/Sidebar.qml:205
 msgctxt "minutes, short"
 msgid "%1m"
 msgstr ""
 
-#: src/qml/Main.qml:1303
+#: src/qml/Main.qml:1332
 msgid ""
 "Your data cannot be saved: the database could not be opened. Sugo is using a "
 "temporary database."
 msgstr ""
 
-#: src/qml/Main.qml:1306
+#: src/qml/Main.qml:1335
 msgid ""
 "Your latest sessions or timer changes could not be saved yet. Sugo keeps "
 "them and tries again; do not quit until this message is gone."
 msgstr ""
 
-#: src/qml/Main.qml:1309
+#: src/qml/Main.qml:1338
 msgid ""
 "Your database was damaged, so Sugo started a new one. The old file is kept "
 "as %1."
 msgstr ""
 
-#: src/qml/Main.qml:1310
+#: src/qml/Main.qml:1339
 msgid ""
 "The database file did not belong to Sugo, so Sugo started a new one. That "
 "file is kept as %1."
 msgstr ""
 
-#: src/qml/Main.qml:1314 src/qml/pages/AppSettingsPage.qml:1892
+#: src/qml/Main.qml:1343 src/qml/pages/AppSettingsPage.qml:1892
 msgid "Show in Finder"
 msgstr ""
 
-#: src/qml/Main.qml:1314 src/qml/pages/AppSettingsPage.qml:1892
+#: src/qml/Main.qml:1343 src/qml/pages/AppSettingsPage.qml:1892
 msgid "Open folder"
 msgstr ""
 
-#: src/qml/Main.qml:1322 src/qml/pages/AboutPage.qml:230
+#: src/qml/Main.qml:1351 src/qml/pages/AboutPage.qml:230
 #: src/qml/pages/TimerPage.qml:431
 msgid "Dismiss"
 msgstr ""
 
-#: src/qml/Main.qml:1451
+#: src/qml/Main.qml:1464
+msgid ""
+"Your timers and history from Sugo 1.0.0 are back. The empty database that "
+"had replaced them is kept as %1."
+msgstr ""
+
+#: src/qml/Main.qml:1485
 msgid "Work Session Finished"
 msgstr ""
 
-#: src/qml/Main.qml:1453
+#: src/qml/Main.qml:1487
 msgid "What did you accomplish during “%1”?"
 msgstr ""
 
-#: src/qml/Main.qml:1454
+#: src/qml/Main.qml:1488
 msgid "What did you accomplish during this session?"
 msgstr ""
 
-#: src/qml/Main.qml:1455
+#: src/qml/Main.qml:1489
 msgid "Save Note"
 msgstr ""
 
-#: src/qml/Main.qml:1463
+#: src/qml/Main.qml:1497
 msgid "e.g. Refactored auth module, wrote tests…"
 msgstr ""
 
-#: src/qml/Main.qml:1487
+#: src/qml/Main.qml:1521
 msgctxt "@action:button use a recent note"
 msgid "Use “%1”"
 msgstr ""
 
-#: src/qml/Main.qml:1583
+#: src/qml/Main.qml:1617
 msgid ""
 "Signed out on this computer, but Sugo Sync could not be reached. Disconnect "
 "this device on sugo.stream to free its place."
 msgstr ""
 
-#: src/qml/Main.qml:1621
+#: src/qml/Main.qml:1655
 msgid "Keep your recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1622
+#: src/qml/Main.qml:1656
 msgid ""
 "With this code a new device opens your synced timers when none of your other "
 "devices is at hand. If you lose all your devices and this code, the synced "
@@ -1267,85 +1303,85 @@ msgid ""
 "manager."
 msgstr ""
 
-#: src/qml/Main.qml:1623
+#: src/qml/Main.qml:1657
 msgid "Done"
 msgstr ""
 
-#: src/qml/Main.qml:1624
+#: src/qml/Main.qml:1658
 msgid "Later"
 msgstr ""
 
-#: src/qml/Main.qml:1628
+#: src/qml/Main.qml:1662
 msgid "Recovery code checked. Keep it somewhere safe."
 msgstr ""
 
-#: src/qml/Main.qml:1660 src/qml/pages/AppSettingsPage.qml:280
+#: src/qml/Main.qml:1694 src/qml/pages/AppSettingsPage.qml:280
 #: src/qml/pages/AppSettingsPage.qml:315 src/qml/pages/AppSettingsPage.qml:1705
 #: src/qml/pages/AppSettingsPage.qml:1825
 msgid "Recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1670
+#: src/qml/Main.qml:1704
 msgid "Copy recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1675 src/qml/pages/AppSettingsPage.qml:289
+#: src/qml/Main.qml:1709 src/qml/pages/AppSettingsPage.qml:289
 msgid "Recovery code copied to the clipboard."
 msgstr ""
 
-#: src/qml/Main.qml:1681
+#: src/qml/Main.qml:1715
 msgid "To check that you have kept it, type group %1 of %2."
 msgstr ""
 
-#: src/qml/Main.qml:1692
+#: src/qml/Main.qml:1726
 msgid "Group %1"
 msgstr ""
 
-#: src/qml/Main.qml:1694
+#: src/qml/Main.qml:1728
 msgid "Group %1 of the recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1726
+#: src/qml/Main.qml:1760
 msgid "Approve “%1”?"
 msgstr ""
 
-#: src/qml/Main.qml:1727
+#: src/qml/Main.qml:1761
 msgid ""
 "A new device wants to sync your timers. Approve it only if it is yours and "
 "shows the same code as here."
 msgstr ""
 
-#: src/qml/Main.qml:1728
+#: src/qml/Main.qml:1762
 msgid "Approve"
 msgstr ""
 
-#: src/qml/Main.qml:1729
+#: src/qml/Main.qml:1763
 msgid "Not Now"
 msgstr ""
 
-#: src/qml/Main.qml:1761 src/qml/Main.qml:1775
+#: src/qml/Main.qml:1797 src/qml/Main.qml:1815
 msgid "Verification code"
 msgstr ""
 
-#: src/qml/Main.qml:1783
+#: src/qml/Main.qml:1823
 msgid "Welcome Back"
 msgstr ""
 
-#: src/qml/Main.qml:1783
+#: src/qml/Main.qml:1823
 msgid "Screen Unlocked"
 msgstr ""
 
-#: src/qml/Main.qml:1785
+#: src/qml/Main.qml:1825
 msgid ""
 "The timer was paused while the computer was asleep. Would you like to resume?"
 msgstr ""
 
-#: src/qml/Main.qml:1786
+#: src/qml/Main.qml:1826
 msgid ""
 "The timer was paused while your screen was locked. Would you like to resume?"
 msgstr ""
 
-#: src/qml/Main.qml:1788
+#: src/qml/Main.qml:1828
 msgid "Keep Paused"
 msgstr ""
 
@@ -1516,7 +1552,7 @@ msgid "Sugo"
 msgstr ""
 
 #: src/qml/components/Sidebar.qml:167 src/qml/pages/AppSettingsPage.qml:1737
-#: src/qml/pages/PresetEditPage.qml:49 src/qml/pages/WelcomePage.qml:387
+#: src/qml/pages/PresetEditPage.qml:49 src/qml/pages/WelcomePage.qml:395
 msgid "Timers"
 msgstr ""
 
@@ -1563,7 +1599,7 @@ msgstr ""
 msgid "Menu"
 msgstr ""
 
-#: src/qml/components/TopBar.qml:105 src/qml/pages/WelcomePage.qml:886
+#: src/qml/components/TopBar.qml:105 src/qml/pages/WelcomePage.qml:897
 msgid "Back"
 msgstr ""
 
@@ -2006,7 +2042,7 @@ msgid ""
 "available and closing the window quits Sugo."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:881 src/qml/pages/WelcomePage.qml:636
+#: src/qml/pages/AppSettingsPage.qml:881 src/qml/pages/WelcomePage.qml:644
 msgid "Show an icon in the menu bar"
 msgstr ""
 
@@ -2222,7 +2258,7 @@ msgstr ""
 msgid "Focus while working"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1162 src/qml/pages/WelcomePage.qml:671
+#: src/qml/pages/AppSettingsPage.qml:1162 src/qml/pages/WelcomePage.qml:682
 msgid "Silence notifications with a Focus"
 msgstr ""
 
@@ -3105,7 +3141,7 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
-#: src/qml/pages/StatsPage.qml:184 src/qml/pages/WelcomePage.qml:907
+#: src/qml/pages/StatsPage.qml:184 src/qml/pages/WelcomePage.qml:918
 msgid "Next"
 msgstr ""
 
@@ -3235,149 +3271,149 @@ msgstr ""
 msgid "Welcome"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:328
+#: src/qml/pages/WelcomePage.qml:336
 msgid ""
 "A calm Pomodoro timer. Focus in rounds, rest in between, and see where your "
 "time goes."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:340
+#: src/qml/pages/WelcomePage.qml:348
 msgid "No account, no tracking: everything stays on this computer."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:382
+#: src/qml/pages/WelcomePage.qml:390
 msgctxt "a duration in minutes"
 msgid "%1 min"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:388
+#: src/qml/pages/WelcomePage.qml:396
 msgid "Work in rounds, rest in between"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:391
+#: src/qml/pages/WelcomePage.qml:399
 msgid ""
 "A timer alternates focus and short breaks, with a longer break every few "
 "rounds. You start with a classic Pomodoro; add your own from the sidebar."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:392
+#: src/qml/pages/WelcomePage.qml:400
 msgid ""
 "A timer alternates focus and short breaks, with a longer break every few "
 "rounds. You start with a classic Pomodoro that keeps notifications quiet "
 "while you work; add your own from the sidebar."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:416
+#: src/qml/pages/WelcomePage.qml:424
 msgid "The cycle of the timer in use"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:450
+#: src/qml/pages/WelcomePage.qml:458
 msgid "focus"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:451
+#: src/qml/pages/WelcomePage.qml:459
 msgid "break"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:536
+#: src/qml/pages/WelcomePage.qml:544
 msgctxt "work and break minutes of a timer"
 msgid "%1 / %2 min"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:555
+#: src/qml/pages/WelcomePage.qml:563
 msgid "Live menu bar icon"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:555
+#: src/qml/pages/WelcomePage.qml:563
 msgid "Live tray icon"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:556
+#: src/qml/pages/WelcomePage.qml:564
 msgid "The minutes left, right in the menu bar."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:556
+#: src/qml/pages/WelcomePage.qml:564
 msgid "The minutes left, right in the panel."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:578
+#: src/qml/pages/WelcomePage.qml:586
 msgid "Quiet while you work"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:579
+#: src/qml/pages/WelcomePage.qml:587
 msgid "Notifications can wait for the break."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:606
+#: src/qml/pages/WelcomePage.qml:614
 msgid "Set up"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:607
+#: src/qml/pages/WelcomePage.qml:615
 msgid "Make it yours"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:608
+#: src/qml/pages/WelcomePage.qml:616
 msgid ""
 "A few choices to start with. You can change all of them later in Settings."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:627
+#: src/qml/pages/WelcomePage.qml:635
 msgid "Protect weekend streaks"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:628
+#: src/qml/pages/WelcomePage.qml:636
 msgid "A weekend without sessions does not end your streak."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:636
+#: src/qml/pages/WelcomePage.qml:644
 msgid "Show an icon in the tray"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:637
+#: src/qml/pages/WelcomePage.qml:645
 msgid "While a timer runs, it shows the phase and the minutes left."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:647
+#: src/qml/pages/WelcomePage.qml:655
 msgid "Keep running in the tray"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:648
+#: src/qml/pages/WelcomePage.qml:656
 msgid "Closing the window leaves the timer running."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:656
+#: src/qml/pages/WelcomePage.qml:664
 msgid "Start at login"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:657
+#: src/qml/pages/WelcomePage.qml:665
 msgid "Sugo is ready as soon as you log in."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:679
+#: src/qml/pages/WelcomePage.qml:690
 msgid "Install Focus Shortcuts"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:751
+#: src/qml/pages/WelcomePage.qml:762
 msgid "You're all set"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:763
+#: src/qml/pages/WelcomePage.qml:774
 msgid "Your timer is ready. Sessions and streaks will show up in Statistics."
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:779
+#: src/qml/pages/WelcomePage.qml:790
 msgid "starts and pauses"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:790
+#: src/qml/pages/WelcomePage.qml:801
 msgid "finds anything"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:823
+#: src/qml/pages/WelcomePage.qml:834
 msgid "Skip Tour"
 msgstr ""
 
-#: src/qml/pages/WelcomePage.qml:846
+#: src/qml/pages/WelcomePage.qml:857
 msgctxt "@action:button welcome tour"
 msgid "Step %1 of %2"
 msgstr ""
