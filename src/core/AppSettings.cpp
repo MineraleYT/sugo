@@ -83,6 +83,9 @@ int intSetting(const QSettings &settings, const char *key, int fallback)
 
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
+/// After the player stops, how long the end of the media or an error may take to be reported.
+constexpr int kAlertStoppedGraceMs = 1000;
+int alertPlayerLifetimeForTestingMs = 0;
 
 /// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
 /// backend; a file it cannot decode falls back to AppSettings::playWithPlayerProgram().
@@ -193,6 +196,31 @@ bool playWithFade(const QString &file, int vol, QObject *parent)
         player->deleteLater();
         AppSettings::playWithPlayerProgram(file, vol);
     });
+
+    // A backend that reports neither the end nor an error (a source that stalls, an audio device
+    // that goes away) would keep the player, and its fade timer, until Sugo quits: one per alert.
+    // It is released at the latest a little after the sound should have ended. A stopped player
+    // still has a moment for the end of the media or an error (the fallback) to be reported.
+    auto *expiry = new QTimer(player);
+    expiry->setSingleShot(true);
+    const auto lifetime = [](qint64 durationMs) {
+        return alertPlayerLifetimeForTestingMs > 0 ? alertPlayerLifetimeForTestingMs : int(AppSettings::alertPlayerLifetimeMs(durationMs));
+    };
+    QObject::connect(expiry, &QTimer::timeout, player, [player, file]() {
+        qWarning() << "The alert sound" << file << "did not end in time; its player is released";
+        player->disconnect();
+        player->deleteLater();
+    });
+    QObject::connect(player, &QMediaPlayer::durationChanged, expiry, [expiry, lifetime](qint64 durationMs) {
+        expiry->start(lifetime(durationMs));
+    });
+    QObject::connect(player, &QMediaPlayer::playbackStateChanged, expiry, [expiry](QMediaPlayer::PlaybackState state) {
+        if (state == QMediaPlayer::StoppedState && (!expiry->isActive() || expiry->remainingTime() > kAlertStoppedGraceMs)) {
+            expiry->start(kAlertStoppedGraceMs);
+        }
+    });
+    expiry->start(lifetime(0));
+
     player->setSource(QUrl::fromLocalFile(file));
     fade->start();
     player->play();
@@ -772,6 +800,16 @@ double AppSettings::alertFadeGain(qint64 positionMs, qint64 durationMs)
         }
     }
     return gain;
+}
+
+qint64 AppSettings::alertPlayerLifetimeMs(qint64 durationMs)
+{
+    return durationMs > 0 ? durationMs + kAlertPlayerGraceMs : kAlertPlayerUnknownDurationMs;
+}
+
+void AppSettings::setAlertPlayerLifetimeForTesting(int ms)
+{
+    alertPlayerLifetimeForTestingMs = ms;
 }
 
 QStringList AppSettings::soundSearchRoots()
