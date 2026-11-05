@@ -2155,17 +2155,6 @@ QQC2.Page {
                 iconName: "server-database"
                 SettingRow {
                     first: true
-                    title: i18n("Database")
-                    description: DataManager ? DataManager.databasePath : ""
-                    SButton {
-                        kind: "ghost"
-                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
-                        iconName: "external"
-                        visible: DataManager !== null && !DataManager.usingTemporaryDatabase
-                        onClicked: DataManager.openDatabaseFolder()
-                    }
-                }
-                SettingRow {
                     title: i18n("Backup and restore")
                     description: TimerEngine.active
                         ? i18n("Stop the active timer before restoring a backup.")
