@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QSet>
 #include <QTest>
 #include <QThread>
@@ -44,6 +45,7 @@ struct KeyringState {
     bool answerPrompts = true; ///< false: a prompt stays open until it is dismissed.
     int dismissals = 0;        ///< Prompt.Dismiss calls.
     int answerAfterMs = 20;    ///< How long the user takes to answer a prompt.
+    bool noDefaultCollection = false; ///< ReadAlias("default") answers "/": no keyring chosen as default.
 };
 
 class PromptObject : public QObject
@@ -239,7 +241,9 @@ public Q_SLOTS:
 
     QDBusObjectPath ReadAlias(const QString &name)
     {
-        return QDBusObjectPath(name == QLatin1String("default") ? kCollectionPath : QStringLiteral("/"));
+        QMutexLocker lock(&m_state->mutex);
+        const bool known = name == QLatin1String("default") && !m_state->noDefaultCollection;
+        return QDBusObjectPath(known ? kCollectionPath : QStringLiteral("/"));
     }
 
 private:
@@ -506,6 +510,17 @@ private Q_SLOTS:
         QVERIFY(!store.read(QStringLiteral("calendar-caldav")).has_value());
         QVERIFY(!store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
         m_keyring = std::make_unique<FakeKeyring>(m_bus.address()); // for cleanup()
+    }
+
+    void aKeyringWithoutDefaultCollectionSaysWhy()
+    {
+        // Some keyrings come without a "default" alias (none created yet, or none chosen): the
+        // password then goes to the settings file, and the log must say why.
+        m_keyring->state.noDefaultCollection = true;
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("has no default collection")));
+        QVERIFY(!store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        QVERIFY(m_keyring->state.items.isEmpty());
     }
 
     void aKeyringStartedLaterIsFoundOnALaterCall()

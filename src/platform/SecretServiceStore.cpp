@@ -270,7 +270,13 @@ bool SecretServiceStore::write(const QString &key, const QString &secret)
         return false;
     }
     const auto collection = qvariant_cast<QDBusObjectPath>(aliasReply.arguments().at(0));
-    if (collection.path() == kNoObject || !unlock({collection})) {
+    if (collection.path() == kNoObject) {
+        // No keyring set as the default one (none created yet, or none chosen): the caller keeps
+        // the secret elsewhere, and this says why.
+        qCWarning(lcSecretStore) << "The keyring has no default collection (the alias \"default\" is not set); the secret is not stored there";
+        return false;
+    }
+    if (!unlock({collection})) {
         return false;
     }
 
