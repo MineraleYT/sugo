@@ -1452,7 +1452,6 @@ QQC2.ApplicationWindow {
             fullScreen: root.visibility === Window.FullScreen
             onTabRequested: name => root.navigate(name)
             onSearchRequested: root.openSearch()
-            onRestartRequested: root.requestRestart()
             onMoveRequested: root.startSystemMove()
             onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
             onMinimizeRequested: root.showMinimized()

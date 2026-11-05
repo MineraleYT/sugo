@@ -19,13 +19,11 @@ Rectangle {
     /// Only the logo, the name and the window buttons (the welcome tour).
     property bool bare: false
     property bool maximized: false
-    /// A narrow window: the name is hidden, the tabs are tighter, the update button is an icon.
+    /// A narrow window: the name is hidden, the tabs are tighter.
     readonly property bool compact: width < Theme.compactBreakpoint
 
     signal tabRequested(string name)
     signal searchRequested()
-    /// "Restart to update": an update has been installed and waits for the restart.
-    signal restartRequested()
     // The window has no system title bar: this bar moves it and carries its buttons.
     signal moveRequested()
     signal toggleMaximizeRequested()
@@ -162,8 +160,10 @@ Rectangle {
         anchors.bottomMargin: Theme.hairline
         spacing: Theme.spaceXs
 
-        // The update of the AppImage or the macOS app, one step at a time: found, downloading,
-        // installed. As wide as its longest text, so it does not change size from one to the next.
+        // The update of the AppImage or the macOS app: a small icon beside search, with a dot in
+        // the accent, while one is found, downloading or waiting for the restart. It opens
+        // Settings › About, where the update is installed and Sugo restarted; its tooltip says
+        // what is going on.
         SButton {
             id: updateButton
             objectName: "titleBarUpdate"
@@ -171,20 +171,27 @@ Rectangle {
             readonly property bool downloading: UpdateChecker.status === UpdateChecker.Downloading
             readonly property bool installed: UpdateChecker.status === UpdateChecker.ReadyToRestart
             visible: !bar.bare && (found || downloading || installed)
-            enabled: !downloading
             kind: "ghost"
-            iconOnly: bar.compact
+            iconOnly: true
             implicitHeight: Theme.iconButton
             Layout.alignment: Qt.AlignVCenter
             iconName: installed ? "refresh" : "download"
-            text: installed ? i18n("Restart to update")
-                  : downloading ? i18n("Downloading update… %1%", Math.round(UpdateChecker.progress * 100))
-                  : i18n("Install update")
-            labels: [i18n("Install update"), i18n("Downloading update… %1%", 100), i18n("Restart to update")]
-            Accessible.description: !installed ? i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
-                                    : DesktopStyle.macos ? i18n("Sugo %1 is ready; it replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
-                                    : i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
-            onClicked: installed ? bar.restartRequested() : UpdateChecker.installUpdate()
+            text: installed ? (DesktopStyle.macos ? i18n("Sugo %1 is ready; it replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                                  : i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion))
+                  : downloading ? i18n("Downloading Sugo %1… %2%", UpdateChecker.latestVersion, Math.round(UpdateChecker.progress * 100))
+                  : i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+            onClicked: bar.tabRequested("about")
+
+            Rectangle {
+                width: Theme.badgeDot
+                height: Theme.badgeDot
+                radius: width / 2
+                color: Theme.accent
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: (parent.height - Theme.iconSm) / 2 - Theme.hairline
+                anchors.rightMargin: (parent.width - Theme.iconSm) / 2 - Theme.hairline
+            }
         }
 
         // Pages, timers and commands; the one shortcut the interface shows is in its tooltip.

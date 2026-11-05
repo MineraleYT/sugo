@@ -155,6 +155,8 @@ QtObject {
     readonly property int numberFieldWidth: 76
     readonly property int swatchSize: 14
     readonly property int phaseDot: 6
+    /// The dot on the title bar's update icon: something is waiting in Settings › About.
+    readonly property int badgeDot: 6
 
     // --- Title bar
     /// On macOS the bar takes the height of the system's title bar instead (TitleBar.qml).
