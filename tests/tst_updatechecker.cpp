@@ -163,6 +163,8 @@ struct LocalMacRelease {
              header
                  + "if [ \"$1\" = attach ]; then\n"
                    "  [ -e \"$d/attach-fails\" ] && { echo 'hdiutil: attach failed - no mountable file systems'; exit 1; }\n"
+                   // Attached, then stuck: only a kill ends it.
+                   "  [ -e \"$d/attach-hangs\" ] && { tar -xf \"$7\" -C \"$6\"; exec sleep 60; }\n"
                    "  tar -xf \"$7\" -C \"$6\" || exit 1\n"
                    "elif [ \"$1\" = detach ]; then\n"
                    "  rm -rf \"$2/Sugo.app\"\n"
@@ -997,6 +999,48 @@ private Q_SLOTS:
         QVERIFY(!checker.launchUpdated());
         QCOMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
         qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
+    void macAttachCutOffIsDetached_data()
+    {
+        QTest::addColumn<bool>("timesOut");
+        QTest::newRow("timed out") << true;
+        QTest::newRow("cancelled") << false;
+    }
+
+    void macAttachCutOffIsDetached()
+    {
+        // hdiutil attach killed (it took too long, or the install was cancelled) may have attached
+        // the image all the same: it is detached, not left mounted with its disk image deleted.
+        QFETCH(bool, timesOut);
+        LocalMacRelease release;
+        writeFile(release.tools + QStringLiteral("/attach-hangs"), QByteArray());
+        MacBundleInstaller::Tools tools = release.standIns();
+        tools.attachTimeoutMs = timesOut ? 1000 : 60000;
+        bool done = false;
+        QString error;
+        {
+            MacBundleInstaller installer(release.bundle, tools);
+            QSaveFile download(installer.downloadPath());
+            QVERIFY(download.open(QIODevice::WriteOnly));
+            download.write(release.dmgContent);
+            installer.install(download, [&](const QString &message) {
+                done = true;
+                error = message;
+            });
+            QTRY_VERIFY(!release.mountPoint().isEmpty());
+            QTRY_VERIFY(QFileInfo::exists(release.mountPoint() + QStringLiteral("/Sugo.app"))); // "attached"
+            if (timesOut) {
+                QTRY_VERIFY_WITH_TIMEOUT(done, 10000);
+                QVERIFY(!error.isEmpty());
+            }
+        } // a running install is cancelled with the installer
+        QCOMPARE(done, timesOut);
+        const QString mount = release.mountPoint();
+        QVERIFY2(release.calls().contains(QStringLiteral("hdiutil detach %1 -force").arg(mount)), qPrintable(release.calls().join(QLatin1Char('\n'))));
+        QVERIFY2(!QFileInfo::exists(mount), qPrintable(mount));
+        QVERIFY2(release.leftovers().isEmpty(), qPrintable(release.leftovers().join(QLatin1Char(' '))));
+        QCOMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
     }
 
     void macRealToolsInstall()
