@@ -231,6 +231,16 @@ private Q_SLOTS:
         QVERIFY(reading->isChecked());
     }
 
+    void timerNamesKeepTheirAmpersand()
+    {
+        // "&" marks a mnemonic in menu texts: "R&D" must not show as "RD".
+        presets->create({{QStringLiteral("name"), QStringLiteral("R&D")}});
+        QAction *timers = actionNamed(dock->menu(), QStringLiteral("Timer"));
+        QAction *entry = actionNamed(timers->menu(), QStringLiteral("R&&D"));
+        QVERIFY(entry);
+        QCOMPARE(entry->iconText(), QStringLiteral("R&D"));
+    }
+
     void menuKeepsTheTimerWhileAPhaseRuns()
     {
         const QString current = presets->currentUuid();

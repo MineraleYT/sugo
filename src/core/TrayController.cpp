@@ -306,8 +306,8 @@ void TrayController::updateTexts()
 void TrayController::updateStatusLine()
 {
     if (m_statusAction) {
-        const QString text = menuStatusLine(m_engine->state(), m_engine->phase(), m_engine->remainingSeconds(),
-                                            m_presets->currentPreset().name);
+        const QString text = menuText(menuStatusLine(m_engine->state(), m_engine->phase(), m_engine->remainingSeconds(),
+                                                     m_presets->currentPreset().name));
         if (m_statusAction->text() != text) {
             m_statusAction->setText(text);
         }
