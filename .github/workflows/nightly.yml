@@ -202,16 +202,19 @@ jobs:
           dmg=Sugo-$VERSION-macOS-universal.dmg
           tag="v$VERSION"
           files=("$file")
+          # The addresses in the feed keep the project's path from before it moved to sugoHQ:
+          # GitHub redirects it, and Sugo 1.0.2 and older download only from MineraleYT/sugo.
+          FEED_REPO=MineraleYT/sugo
           jq -n --arg version "$VERSION" \
-                --arg url "https://github.com/$REPO/releases/download/$tag/$file" \
+                --arg url "https://github.com/$FEED_REPO/releases/download/$tag/$file" \
                 --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
                 --argjson size "$(stat -c %s "$file")" \
-                --arg page "https://github.com/$REPO/releases/tag/$tag" \
+                --arg page "https://github.com/$FEED_REPO/releases/tag/$tag" \
                 '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > nightly.json
           # The disk image, when it was built, under its own key: the AppImages read only the others.
           if [ -f "$dmg" ]; then
             files+=("$dmg")
-            jq --arg url "https://github.com/$REPO/releases/download/$tag/$dmg" \
+            jq --arg url "https://github.com/$FEED_REPO/releases/download/$tag/$dmg" \
                --arg sha256 "$(sha256sum "$dmg" | cut -d' ' -f1)" \
                --argjson size "$(stat -c %s "$dmg")" \
                '. + {macos: {url: $url, sha256: $sha256, size: $size}}' nightly.json > nightly.json.new
