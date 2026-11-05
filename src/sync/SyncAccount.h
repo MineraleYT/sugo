@@ -142,8 +142,10 @@ public Q_SLOTS:
     void checkPendingDevices(int count);
     /// Sends K to a pending device, boxed for its public key by this device's key.
     void approveDevice(const QString &id);
-    /// Asks no more about this device until the program restarts.
+    /// Asks no more about this device until the program restarts, or askAgain().
     void ignoreDevice(const QString &id);
+    /// Asks about this pending device again (approvalRequested), even if it was ignored.
+    void askAgain(const QString &id);
 
     /// While waiting for the key: opens the server's recovery copy with `text` (recoveryCodeWrong()
     /// if it does not), stores K, confirms it.

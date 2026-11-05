@@ -303,6 +303,30 @@ private Q_SLOTS:
         QCOMPARE(b.account->dataKey().toBase64(), dataKey);
     }
 
+    void ignoredDeviceCanBeAskedAgain()
+    {
+        Client a(*server);
+        Client b(*server);
+        twoDevices(a, b);
+
+        QSignalSpy asked(a.account.get(), &SyncAccount::approvalRequested);
+        connect(a.api.get(), &SyncApi::pendingDevicesSeen, a.account.get(), &SyncAccount::checkPendingDevices);
+        a.api->getBlob(QByteArray(), [](const SyncReply &) {});
+        QVERIFY(asked.wait(5000));
+
+        // "Not Now": not asked again by itself...
+        a.account->ignoreDevice(b.account->deviceId());
+        a.account->checkPendingDevices(1);
+        QTest::qWait(50);
+        QCOMPARE(asked.size(), 1);
+
+        // ...but when the user asks for it, from the list of devices.
+        a.account->askAgain(b.account->deviceId());
+        QCOMPARE(asked.size(), 2);
+        QCOMPARE(asked.last().at(0).toString(), b.account->deviceId());
+        QCOMPARE(asked.last().at(3).toString(), b.account->verificationCode());
+    }
+
     void secondDeviceGetsTheKeyWithTheSameCode()
     {
         Client a(*server);

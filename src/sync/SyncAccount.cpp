@@ -699,6 +699,16 @@ void SyncAccount::ignoreDevice(const QString &id)
     m_ignored.insert(id);
 }
 
+void SyncAccount::askAgain(const QString &id)
+{
+    if (m_phase != Phase::Ready) {
+        return;
+    }
+    m_ignored.remove(id);
+    m_asked.remove(id);
+    askAboutPendingDevices();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Recovery code
 // ---------------------------------------------------------------------------------------------

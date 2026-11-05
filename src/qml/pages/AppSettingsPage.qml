@@ -1775,6 +1775,16 @@ QQC2.Page {
                             text: i18n("This device")
                             dotColor: Theme.positive
                         }
+                        // A device waiting for this one: the approval again, also after "Not Now"
+                        // (one that has never shown up yet has no code to compare).
+                        SButton {
+                            visible: !deviceRow.modelData.current && deviceRow.modelData.pending === true
+                                     && page.syncDate(deviceRow.modelData.lastSeen).length > 0
+                            kind: "primary"
+                            text: i18n("Approve…")
+                            Accessible.name: i18n("Approve %1", deviceRow.modelData.name)
+                            onClicked: SyncController.reviewDevice(deviceRow.modelData.id)
+                        }
                         SButton {
                             visible: !deviceRow.modelData.current
                             text: i18n("Disconnect…")

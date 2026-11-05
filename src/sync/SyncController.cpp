@@ -908,6 +908,11 @@ void SyncController::ignoreDevice(const QString &id)
     dropApproval(id);
 }
 
+void SyncController::reviewDevice(const QString &id)
+{
+    m_account->askAgain(id);
+}
+
 void SyncController::showNextApproval()
 {
     Q_EMIT pendingApprovalChanged();

@@ -170,6 +170,8 @@ public:
     // --- Devices ------------------------------------------------------------------------------
     Q_INVOKABLE void approveDevice(const QString &id);
     Q_INVOKABLE void ignoreDevice(const QString &id);
+    /// Asks about a device waiting for approval again, also after "Not Now".
+    Q_INVOKABLE void reviewDevice(const QString &id);
     Q_INVOKABLE void disconnectDevice(const QString &id);
     Q_INVOKABLE void refreshDevices();
 
