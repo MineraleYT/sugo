@@ -34,6 +34,21 @@
     <binary>sugo</binary>
   </provides>
   <releases>
+    <release version="1.0.2" date="2026-11-05">
+      <description>
+        <p>A new look: a title bar with the timer, statistics and settings, and a composer to choose the timer and start it.</p>
+        <ul>
+          <li>Choose an accent colour, used by the main buttons, switches, sliders and the cycle track</li>
+          <li>Settings in categories beside the page, with a Timers category listing every timer and an About page</li>
+          <li>Statistics with today's work time and sessions, the figures in one strip, quieter charts and the task notes of the shown period</li>
+          <li>The update shows as a small icon in the title bar, and the search has the look of the menus</li>
+          <li>Calendar sync finds Nextcloud calendars by itself, shows their colours, accepts an address without https:// and handles refused requests better</li>
+          <li>The screen lock is noticed on GNOME, Xfce, Cinnamon and MATE too, and work that starts by itself waits while the screen is locked</li>
+          <li>Backups made by Sugo 1.0.0 can be restored, and the 1.0.0 data that 1.0.1 moved aside is taken back</li>
+          <li>Many fixes to notifications, sounds, the keyring, the tray menu and the macOS app</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-11-04">
       <description>
         <p>Welcome macOS: Sugo now runs on macOS 13 or later, on Apple Silicon and Intel Macs.</p>

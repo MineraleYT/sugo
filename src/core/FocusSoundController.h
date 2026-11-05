@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
+#include <QStringList>
 #include <QTimer>
 
 #include <functional>
@@ -44,7 +45,9 @@ public:
         AudioSink ///< Qt Multimedia's QAudioSink, in push mode
     };
     /// The backend for a system on which programExists() tells which player programs there are:
-    /// QAudioSink on macOS; on Linux pw-play, else aplay, else QAudioSink.
+    /// QAudioSink on macOS; on Linux pw-play, else aplay, else QAudioSink. A player program that
+    /// cannot play on this system (pw-play with no PipeWire daemon: it exits right after starting)
+    /// is not chosen again in this session.
     static Backend chooseBackend(const std::function<bool(const QString &)> &programExists);
     /// Mono signed 16-bit PCM as a QAudioSink of another format takes it: the sample repeated on
     /// every channel, as 32-bit floats if floatSamples.
@@ -82,7 +85,11 @@ private:
     void startPlayback();
     void stopPlayback();
     void onPlayerStarted();
-    void onPlayerFailed();
+    /// unusableProgram: the player program that cannot play here, to move on from; empty when
+    /// the player may play again (it was killed, or had been playing).
+    void onPlayerFailed(const QString &unusableProgram);
+    /// Starts a player after delayMs, if the sound is still wanted by then.
+    void restartPlayback(int delayMs);
     void discardOutput();
     QByteArray generateChunk(int numSamples);
 
@@ -97,12 +104,14 @@ private:
 
     QPointer<FocusSoundOutput> m_output; ///< The current player, starting or running; null when stopped.
     std::optional<Backend> m_forcedBackend;
+    QStringList m_unusablePlayers; ///< Player programs that cannot play here (see chooseBackend()).
     int m_restarts = 0;           ///< Players restarted after a failure since the sound was last off.
     QTimer m_feedTimer;
     QTimer m_previewTimer;
     QTimer m_stopTimer;          ///< Kills the player once the faded-out audio has been played.
     bool m_stopping = false;     ///< Fading out, to be stopped.
-    int m_soundMode = 0;         ///< The sound being generated; kept through a fade-out to Off.
+    int m_soundMode = 0;         ///< The sound being generated; kept through a fade-out.
+    int m_soundVolume = 0;       ///< Its volume, 0..100; kept through a fade-out too.
     float m_gain = 0.0f;         ///< Fade level, 0..1.
 
     QElapsedTimer m_playClock;   ///< Started when the player started.

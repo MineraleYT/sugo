@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Localization.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
+#include <QScopeGuard>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -9,10 +13,16 @@
 #include "DataManager.h"
 #include "Database.h"
 #include "Diagnostics.h"
+#include "FakeSecretStore.h"
+#include "FakeSyncServer.h"
 #include "PresetModel.h"
+#include "PresetPersistence.h"
 #include "PresetRepository.h"
 #include "SessionRepository.h"
+#include "Settings.h"
 #include "StatsModel.h"
+#include "SyncAccount.h"
+#include "SyncController.h"
 
 class DiagnosticsTest : public QObject
 {
@@ -223,9 +233,27 @@ private Q_SLOTS:
 
         const QString user = qEnvironmentVariable("USER");
         if (user.length() > 2) {
-            const QString redacted = Diagnostics::redact(QStringLiteral("started by %1 today").arg(user));
-            QVERIFY(!redacted.contains(user));
+            // Compared whole: a user called "user" is still found inside the "<user>" placeholder.
+            QCOMPARE(Diagnostics::redact(QStringLiteral("started by %1 today").arg(user)), QStringLiteral("started by <user> today"));
         }
+    }
+
+    void testRedactionLeavesItsOwnPlaceholdersAlone()
+    {
+        // A user called "user" (the home folder /home/user): the word is redacted wherever it
+        // stands, but never inside the placeholders the other steps put in.
+        const QByteArray savedUser = qgetenv("USER");
+        const auto restoreUser = qScopeGuard([&savedUser] { qputenv("USER", savedUser); });
+        qputenv("USER", "user");
+        QCOMPARE(Diagnostics::redact(QStringLiteral("/home/john_doe/file by alice@host for user")),
+                 QStringLiteral("/home/<user>/file by <user>@host for <user>"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("token=abc")), QStringLiteral("token=<redacted>"));
+
+        // An account word that is also a placeholder's.
+        Diagnostics::setAccountRedactions({QStringLiteral("redacted"), QStringLiteral("account")});
+        QCOMPARE(Diagnostics::redact(QStringLiteral("token: abc\naccount redacted")),
+                 QStringLiteral("token: <redacted>\n<account> <account>"));
+        Diagnostics::setAccountRedactions({});
     }
 
     void testRedactsCalendarSecrets()
@@ -248,6 +276,47 @@ private Q_SLOTS:
                  QStringLiteral("Connected to https://cloud.example.org/x"));
     }
 
+    void testRedactsPrefixedSecretKeysAndBearerTokens()
+    {
+        // A key that only ends in a secret word is a secret too (the '_' or '-' before the word
+        // is no word boundary).
+        for (const QString &input : {QStringLiteral("access_token=hunter2pass"),
+                                     QStringLiteral("refresh_token: hunter2pass"),
+                                     QStringLiteral("client_secret=hunter2pass&x=1"),
+                                     QStringLiteral("{\"sync_token\": \"hunter2pass\"}"),
+                                     QStringLiteral("sync_password=hunter2pass"),
+                                     QStringLiteral("X-Auth-Token: hunter2pass"),
+                                     QStringLiteral("csrftoken=hunter2pass"),
+                                     QStringLiteral("GET /x with Bearer hunter2pass failed")}) {
+            const QString redacted = Diagnostics::redact(input);
+            QVERIFY2(!redacted.contains(QStringLiteral("hunter2pass")), qPrintable(redacted));
+            QVERIFY2(redacted.contains(QStringLiteral("<redacted>")), qPrintable(redacted));
+        }
+        QCOMPARE(Diagnostics::redact(QStringLiteral("access_token=abc")), QStringLiteral("access_token=<redacted>"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("sent Bearer abc.def-1 now")), QStringLiteral("sent Bearer <redacted> now"));
+
+        // Words that merely contain a secret word, and secret words not assigned anything, stay.
+        for (const QString &input : {QStringLiteral("tokens: 5"),
+                                     QStringLiteral("Tokenizer=fast"),
+                                     QStringLiteral("passwordless login: yes"),
+                                     QStringLiteral("token refresh scheduled")}) {
+            QCOMPARE(Diagnostics::redact(input), input);
+        }
+    }
+
+    void testHomePathIsRedactedOnlyAtAPathBoundary()
+    {
+        const QString home = QDir::homePath();
+        QVERIFY(!home.isEmpty() && home != QLatin1String("/"));
+        QCOMPARE(Diagnostics::redact(home + QStringLiteral("/notes.txt")), QStringLiteral("~/notes.txt"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("in ") + home), QStringLiteral("in ~"));
+        QCOMPARE(Diagnostics::redact(home + QStringLiteral(": ok")), QStringLiteral("~: ok"));
+        // A sibling folder whose name starts with the home folder's ("/home/alice" next to
+        // "/home/al") is not turned into "~ice".
+        const QString sibling = Diagnostics::redact(home + QStringLiteral("ice/notes.txt"));
+        QVERIFY2(!sibling.startsWith(QLatin1Char('~')), qPrintable(sibling));
+    }
+
     void testRedactsPasswordsWithSpacesAndTheCalendarAccount()
     {
         // A password with spaces is redacted whole, quoted or not.
@@ -267,6 +336,12 @@ private Q_SLOTS:
         QVERIFY(redacted.contains(QStringLiteral("/remote.php/dav/calendars/")));
         Diagnostics::setAccountRedactions({});
         QVERIFY(Diagnostics::redact(QStringLiteral("cloud.example.org")).contains(QStringLiteral("cloud.example.org")));
+
+        // An account word is redacted only where it stands on its own, in any case.
+        Diagnostics::setAccountRedactions({QStringLiteral("tim")});
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Timer for tim started")), QStringLiteral("Timer for <account> started"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Tim: login failed")), QStringLiteral("<account>: login failed"));
+        Diagnostics::setAccountRedactions({});
     }
 
     void testExportRejectsNonLocalUrls()
@@ -310,6 +385,95 @@ private Q_SLOTS:
         const QString report = diag.generateReport();
         QVERIFY(report.contains(QStringLiteral("Total Recorded Sessions: 0")));
         QVERIFY(report.contains(QStringLiteral("Sound Theme: ")));
+        QVERIFY(report.contains(QStringLiteral("- Sync: (Not attached)")));
+    }
+
+    // The Sync section says how things stand, never who or with what: no account or device id,
+    // device name, sign-in, verification or recovery code, token or etag.
+    void syncSectionHasNoPersonalData()
+    {
+        FakeSyncServer server;
+        server.interval = 1;
+        server.deviceLimit = 3;
+        QTemporaryDir dir;
+        Database db(dir.filePath(QStringLiteral("sugo.db")));
+        QVERIFY(db.open());
+        PresetRepository repo(db.connectionName());
+        PresetModel model;
+        PresetPersistence persistence(&model, &repo);
+        FakeSecretStore storeA;
+        FakeSecretStore storeB;
+        SyncController a(Settings::open(dir.filePath(QStringLiteral("a.conf"))), &storeA, QUrl(server.base()));
+        SyncController b(Settings::open(dir.filePath(QStringLiteral("b.conf"))), &storeB, QUrl(server.base()));
+        a.setTimeUnitMs(10);
+        b.setTimeUnitMs(10);
+        a.attach(&model, &persistence, &repo);
+
+        Diagnostics diag;
+        diag.attachSync(&a);
+        QString report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("## Sync\n- State: Off\n- Error: NoError\n- Keyring Available: Yes\n- Linked: No\n"
+                                               "- Last Sync: Never\n- Devices: 0\n- Server: custom\n")));
+
+        // A linked first device, a second one waiting with its codes, a recovery code.
+        QSignalSpy recovery(&a, &SyncController::recoveryCodeToConfirm);
+        a.signIn(QStringLiteral("Marios Secret Laptop"));
+        QTRY_VERIFY(!a.userCode().isEmpty());
+        const QString userCodeA = a.userCode();
+        QVERIFY(server.approve(userCodeA, QStringLiteral("usr_private_42")).startsWith(QLatin1String("dev_")));
+        QTRY_COMPARE_WITH_TIMEOUT(a.state(), SyncController::Idle, 5000);
+        QTRY_VERIFY(a.lastSync().isValid());
+        b.signIn(QStringLiteral("Marios Other Desktop"));
+        QTRY_VERIFY(!b.userCode().isEmpty());
+        const QString userCodeB = b.userCode();
+        QVERIFY(server.approve(userCodeB, QStringLiteral("usr_private_42")).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.verificationCode().isEmpty());
+        a.refreshDevices();
+        QTRY_COMPARE(a.devices().size(), 2);
+        QCOMPARE(recovery.size(), 1);
+
+        report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("- State: Idle\n")));
+        QVERIFY(report.contains(QStringLiteral("- Linked: Yes\n")));
+        QVERIFY(report.contains(QStringLiteral("- Devices: 2\n")));
+        QVERIFY(report.contains(QStringLiteral("- Last Sync: ") + a.lastSync().toUTC().toString(Qt::ISODate)));
+
+        QStringList secrets{QStringLiteral("Marios"), QStringLiteral("usr_private_42"), a.account()->deviceId(),
+                            b.account()->deviceId(), userCodeA, userCodeB, b.verificationCode(),
+                            recovery.first().first().toString(), a.recoveryCode()};
+        for (const QString &secret : storeA.secrets->values()) {
+            const QJsonObject values = QJsonDocument::fromJson(secret.toUtf8()).object();
+            for (auto it = values.begin(); it != values.end(); ++it) {
+                if (it.value().isString() && it.value().toString().size() > 6) {
+                    secrets << it.value().toString(); // refresh token, keys
+                }
+            }
+        }
+        const QString etag = QString::fromLatin1(server.accounts.value(QStringLiteral("usr_private_42")).etag);
+        QVERIFY(!etag.isEmpty());
+        secrets << etag;
+        for (const QString &secret : std::as_const(secrets)) {
+            QVERIFY2(!secret.isEmpty(), "a value to look for is empty");
+            QVERIFY2(!report.contains(secret, Qt::CaseInsensitive), qPrintable(QStringLiteral("The report shows ") + secret));
+        }
+        QVERIFY(!report.contains(QStringLiteral("dev_")));
+    }
+
+    void testReportRedactsSoundFilePaths()
+    {
+        QTemporaryDir configDir;
+        AppSettings settings(Settings::open(configDir.filePath(QStringLiteral("settings.conf"))), nullptr, false);
+        // Sounds may be files of the user's, given by their absolute path.
+        settings.setSoundTheme(QStringLiteral("/home/alice/Music/bell.oga"));
+        settings.setPreAlarmSound(QDir::homePath() + QStringLiteral("/Sounds/chime.ogg"));
+
+        Diagnostics diag;
+        diag.attach(&settings, nullptr);
+        const QString report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("Sound Theme: /home/<user>/Music/bell.oga")));
+        QVERIFY(!report.contains(QStringLiteral("alice")));
+        QVERIFY(report.contains(QStringLiteral("~/Sounds/chime.ogg")));
+        QVERIFY(!report.contains(QDir::homePath() + QStringLiteral("/Sounds")));
     }
 };
 

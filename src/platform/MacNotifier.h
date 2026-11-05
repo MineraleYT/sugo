@@ -14,11 +14,18 @@ class QSystemTrayIcon;
  * Actions become buttons and the reply field a text field (UNTextInputNotificationAction), so
  * the task note can be written in the notification. Notifications also show while Sugo is in
  * front. The handlers are found again by request identifier (MacNotificationRegistry) and run on
- * the Qt main thread.
+ * the Qt main thread. They are forgotten when the user answers or dismisses the notification, or
+ * when the same context shows a new one: that one replaces the earlier banners, which are taken
+ * out of the Notification Center. As the handlers live only as long as Sugo runs, its
+ * notifications leave the Notification Center when it quits, and those an earlier run left there
+ * (a crash) when it starts.
  *
  * The permission is asked for once, at construction. Before each notification the current
  * setting is read again (the user may change it in System Settings at any time): while
- * notifications are not allowed, they go to `fallback`, a message from the menu bar icon.
+ * notifications are not allowed, or when the Notification Center refuses one, they go to
+ * `fallback`, a message from the menu bar icon. While the question is unanswered, notifications
+ * wait for its answer (asked again only if no question is outstanding), a newer one of a
+ * context replacing the earlier one (MacPendingNotifications).
  *
  * Only for an application bundle: UNUserNotificationCenter needs a bundle identifier (see
  * isSupported()).

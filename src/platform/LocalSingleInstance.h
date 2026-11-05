@@ -18,7 +18,9 @@ class QLocalSocket;
  * died is taken over) and listens on `<directory>/<name>.sock`, reachable by the same user only.
  * A later launch finds the lock taken, connects to the socket, asks the first instance to show
  * itself and reports that it should exit. Under the lock, a socket file left behind by a crash
- * is removed before listening.
+ * is removed before listening. A socket path too long for the system (sun_path: 104 bytes on
+ * macOS) is replaced by `<temporary directory>/<name>/<name>-<hash of directory>.sock`, in a
+ * directory created for this user only (and refused if it is anyone else's).
  */
 class LocalSingleInstance : public QObject
 {
@@ -64,11 +66,22 @@ private:
     void onNewConnection();
     void onReadyRead(QLocalSocket *socket);
     void request(const QString &token);
-    /// Asks the first instance to come to the front. False if it could not be reached.
-    bool activateOther(const QString &token);
+    /// Whether the fallback directory of a too long socket path (if any) is this user's alone,
+    /// creating it if `create`.
+    bool socketDirectoryIsOurs(bool create) const;
+
+    enum class Reply {
+        Ok, ///< The first instance answered and will come to the front.
+        Unreachable, ///< No connection, or it closed without an answer: the instance may be gone.
+        NoAnswer, ///< Connected, but no answer in time: the instance is alive but busy or hung.
+    };
+    /// Asks the first instance to come to the front.
+    Reply activateOther(const QString &token);
 
     QString m_directory;
     QString m_name;
+    QString m_socketPath;
+    QString m_socketDirectory; ///< Set when the socket is not in m_directory (path too long).
     std::unique_ptr<QLockFile> m_lock;
     QLocalServer *m_server = nullptr;
     bool m_primary = false;

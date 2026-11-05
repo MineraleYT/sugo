@@ -11,13 +11,40 @@ class AppSettings;
 class MacSessionEvents;
 #else
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QHash>
+#include <QString>
+#include <QStringList>
+#include <QVariantMap>
 #endif
 class TimerEngine;
 
 /**
- * Listens for system screen lock/unlock signals via FreeDesktop ScreenSaver D-Bus.
- * Automatically pauses the active work phase when the screen is locked, and
- * signals when the user returns so they can resume or review their session.
+ * Listens for system screen lock/unlock signals on D-Bus: ActiveChanged of the screen saver names
+ * (org.freedesktop.ScreenSaver for Plasma, org.gnome.ScreenSaver, org.xfce.ScreenSaver,
+ * org.cinnamon.ScreenSaver, org.mate.ScreenSaver), and logind's view of the current session on the
+ * system bus: its LockedHint, set by Plasma, GNOME and lockers that know logind, and its Lock and
+ * Unlock signals, which `loginctl lock-session` or logind's IdleAction send to lockers such as
+ * xss-lock or swayidle that announce nothing themselves. The session is found asynchronously:
+ * GetSession of $XDG_SESSION_ID, else session/auto (the caller's session, or the user's graphical
+ * one when the caller belongs to none, as a Flatpak app's scope).
+ * All sources feed one locked state: a lock seen by several pauses once, and the first unlock
+ * reported by any of them is the one reported. A lock seen only by logind (the hint, or a Lock
+ * request, whose locker may never say it unlocked) is forgotten when the user sets the timer running
+ * again (resume, start, skip): they are back, and the next lock must count. A phase that ends and
+ * starts the next one by itself proves nothing, also when it ends while a lock is being handled.
+ * Automatically pauses the active work phase when the screen is locked, and also a work phase
+ * that starts by itself while it is locked (a break that ran on behind the lock screen ended),
+ * and signals when the user returns so they can resume or review their session.
+ *
+ * If the name that reported the lock loses its owner (the locker crashed or restarted), its
+ * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
+ * as a repeat. The locker going away most likely means the session is usable again, and a locker
+ * that comes back locked reports a new lock, which pauses nothing (the phase is already paused).
+ * Its unlock is then reported once more while the phase is still paused by the first lock: that
+ * one is the real return of the user, and the window shows a single resume prompt for both.
+ * A new owner of either name is also asked GetActive, in case it started with the screen locked
+ * without announcing it; only a "locked" answer counts, and only from the owner still in place.
  *
  * Also pauses whatever phase is running when the computer goes to sleep (logind's
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
@@ -61,6 +88,11 @@ public:
 
     Q_INVOKABLE void clearLockPauseNotice();
 
+#ifndef Q_OS_MACOS
+    /// The object path of the logind session whose lock state is followed, once it is known.
+    QString logindSession() const { return m_logindSession; }
+#endif
+
 public Q_SLOTS:
     void onActiveChanged(bool active);
     void onPrepareForSleep(bool start);
@@ -72,12 +104,40 @@ Q_SIGNALS:
     /// The computer woke up while the phase it paused is still paused.
     void wokeUpAfterPause();
 
+#ifndef Q_OS_MACOS
+private Q_SLOTS:
+    // ActiveChanged from the owner of a screen saver name (the message's interface is the name),
+    // which is remembered with the lock.
+    void onLockerActiveChanged(bool active, const QDBusMessage &message);
+    // logind's session: PropertiesChanged (LockedHint), and the Lock and Unlock requests.
+    void onLogindPropertiesChanged(const QString &interface, const QVariantMap &changed, const QStringList &invalidated);
+    void onLogindLockRequested();
+    void onLogindUnlockRequested();
+#endif
+
 private:
     void setPausedBySleep(bool paused);
+    /// `source`: the D-Bus name that reported the change, or empty (macOS, direct calls).
+    void setScreenLocked(bool locked, const QString &source);
+    /// Pauses the running Work and marks the pause as the lock's, so the unlock asks to resume.
+    void pauseForScreenLock();
 
 #ifndef Q_OS_MACOS
+    void onLockerGone(const QString &name);
+    void askLockerState(const QString &name, const QString &owner);
+    void findLogindSession();
+    /// `fromEnvironment`: the id is $XDG_SESSION_ID, and session/auto is asked if logind knows it not.
+    void askLogindSessionPath(const QString &id, bool fromEnvironment);
+    void askLogindAutoSessionId();
+    void followLogindSession(const QString &path);
+    void askLockedHint();
+
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
+    QString m_lockSource; // the name whose owner reported the current lock
+    QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
+    QString m_logindSession; // object path of the logind session followed, once found
+    bool m_phaseEnding = false; // a phase elapsed and the next one is starting by itself
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;

@@ -24,7 +24,7 @@ class QSaveFile;
  * "stable" with the newest release, "nightly" with the newest build of the branch testing
  * (.github/workflows/release.yml and nightly.yml write them):
  *
- *     { "version": "1.0.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/v1.0.1-nightly.20261031.42/Sugo-x86_64.AppImage",
+ *     { "version": "1.0.1-nightly.20261031.42", "url": "https://github.com/MineraleYT/sugo/releases/download/v1.0.1-nightly.20261031.42/Sugo-1.0.1-nightly.20261031.42-x86_64.AppImage",
  *       "sha256": "<64 hex digits>", "size": 45939192, "page": "https://github.com/MineraleYT/sugo/releases/tag/v1.0.1-nightly.20261031.42" }
  *
  * The feed is newer when its version is (compareVersions(); nightly versions are the next
@@ -36,7 +36,7 @@ class QSaveFile;
  * On macOS the feed's "macos" object ({ "url", "sha256", "size" }) describes the disk image
  * instead. An app bundle in a folder the user can write to (/Applications for an administrator)
  * downloads it next to itself, checks it the same way, then opens it and copies its Sugo.app,
- * once its identifier and signature are right, next to itself as "Sugo.app.new", which takes the
+ * once its identifier and signature are right, next to itself as ".Sugo.app.new" (hidden), which takes the
  * bundle's place when the program quits (MacBundleInstaller). A feed without "macos" is only
  * reported, as for the other packages.
  *
@@ -98,6 +98,8 @@ public:
     /// "stable" or "nightly"; anything else reads as "stable". Only a copy that installs updates
     /// follows nightly.
     QString channel() const;
+    /// A change of channel forgets what the old one found or is fetching, and gives up a download
+    /// of it (status Idle); an update already in place (ReadyToRestart) stays.
     void setChannel(const QString &channel);
     /// Look for updates by itself (only a copy that installs them); what it finds is installed
     /// only when asked.
@@ -141,6 +143,8 @@ public:
     void setInstallerForTesting(std::unique_ptr<UpdateInstaller> installer);
     void setFeedUrlForTesting(const QUrl &url) { m_feedUrlOverride = url; }
     void setDownloadPrefixForTesting(const QString &prefix) { m_downloadPrefix = prefix; }
+    /// Tests: the automatic checks with other delays (as attach() starts them).
+    void scheduleChecksForTesting(int firstDelayMs, int intervalMs);
 
 Q_SIGNALS:
     void statusChanged();
@@ -149,6 +153,11 @@ Q_SIGNALS:
 private:
     void setStatus(Status s);
     void fail(const QString &message);
+    /// Reads the feed again while an update is offered; a newer one replaces it.
+    void refreshFoundUpdate();
+    /// Fetches the channel's feed; `quiet` for refreshFoundUpdate().
+    void requestFeed(bool quiet);
+    void refreshed(QNetworkReply *reply);
     void handleFeed(const QByteArray &data);
     void finishDownload(QNetworkReply *reply);
     void abortDownload();
@@ -170,6 +179,8 @@ private:
     QUrl m_feedUrlOverride;
     QString m_downloadPrefix;
     QTimer m_scheduleTimer;
+    int m_firstCheckDelayMs;
+    int m_checkIntervalMs;
 
     // The update the last check found, and its download.
     QString m_downloadUrl;

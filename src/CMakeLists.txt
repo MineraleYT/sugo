@@ -17,20 +17,16 @@ qt6_add_qml_module(sugo_core
         qml/pages/StatsPage.qml
         qml/pages/PresetEditPage.qml
         qml/pages/AppSettingsPage.qml
-        qml/pages/AboutPage.qml
         qml/pages/WelcomePage.qml
         qml/components/ProgressRing.qml
         qml/theme/Theme.qml
         qml/components/LineIcon.qml
-        qml/components/Kbd.qml
         qml/components/SButton.qml
-        qml/components/NavItem.qml
-        qml/components/StatusPill.qml
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
         qml/components/TrayBadge.qml
-        qml/components/Sidebar.qml
-        qml/components/TopBar.qml
+        qml/components/TimerMenu.qml
+        qml/components/TitleBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
         qml/components/MessageSlot.qml
@@ -41,10 +37,19 @@ qt6_add_qml_module(sugo_core
         qml/components/SSwitch.qml
         qml/components/STextField.qml
         qml/components/SComboBox.qml
+        qml/components/AutoStartMenu.qml
         qml/components/CommandPalette.qml
+        qml/components/Composer.qml
         qml/components/SSlider.qml
         qml/components/Segmented.qml
         qml/components/NumberField.qml
+        qml/components/SMenu.qml
+        qml/components/SMenuHeader.qml
+        qml/components/SMenuItem.qml
+        qml/components/SMenuSeparator.qml
+        qml/components/SettingsNav.qml
+        qml/components/AccentButton.qml
+        qml/components/StatusLine.qml
         qml/components/BrandGlow.qml
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml
@@ -86,6 +91,10 @@ target_sources(sugo_core PRIVATE
     core/UpdateChecker.cpp
     core/Diagnostics.h
     core/Diagnostics.cpp
+    core/RetryAfter.h
+    core/UrlPolicy.h
+    core/QuitPolicy.h
+    core/QuitPolicy.cpp
     core/CalendarSync.h
     core/CalendarSync.cpp
     platform/NotificationInhibitor.h
@@ -110,6 +119,8 @@ target_sources(sugo_core PRIVATE
     platform/ScreenLockWatcher.cpp
     platform/SecretStore.h
     platform/SecretStore.cpp
+    platform/SecretHandoff.h
+    platform/SecretHandoff.cpp
     platform/DesktopStyle.h
     platform/DesktopStyle.cpp
     platform/AppImage.h
@@ -131,8 +142,21 @@ target_sources(sugo_core PRIVATE
     stats/StatsAggregator.cpp
     stats/StatsModel.h
     stats/StatsModel.cpp
+    # Sugo Sync: the same code on every system (docs/sync-plan.md).
+    sync/PresetSyncFormat.h
+    sync/PresetSyncFormat.cpp
+    sync/SyncCrypto.h
+    sync/SyncCrypto.cpp
+    sync/SyncSecrets.h
+    sync/SyncSecrets.cpp
+    sync/SyncApi.h
+    sync/SyncApi.cpp
+    sync/SyncAccount.h
+    sync/SyncAccount.cpp
+    sync/SyncController.h
+    sync/SyncController.cpp
 )
-target_include_directories(sugo_core PUBLIC core db platform stats)
+target_include_directories(sugo_core PUBLIC core db platform stats sync)
 # Qt's resource and QML cache objects share these include paths but may compile before moc has
 # created them; -Wmissing-include-dirs would warn in a clean parallel build.
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/sugo_core_autogen/include ${CMAKE_CURRENT_BINARY_DIR}/sugo_qml_autogen/include)
@@ -149,6 +173,7 @@ target_link_libraries(sugo_core PRIVATE
     ${SUGO_DBUS}
     Qt6::Network
     Qt6::Multimedia
+    PkgConfig::sodium
 )
 
 set(sugo_app_sources main.cpp)
@@ -165,6 +190,12 @@ if(APPLE)
         set(SUGO_BUNDLE_VERSION "${PROJECT_VERSION}")
     endif()
     set(SUGO_BUNDLE_EXECUTABLE Sugo)
+    # <true/> or <false/> for the key SugoInstallsUpdates (MacBundleInstaller::installsUpdates()).
+    if(SUGO_INSTALLS_UPDATES)
+        set(SUGO_BUNDLE_INSTALLS_UPDATES true)
+    else()
+        set(SUGO_BUNDLE_INSTALLS_UPDATES false)
+    endif()
     configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
 endif()
 

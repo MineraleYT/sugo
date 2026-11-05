@@ -89,6 +89,11 @@ class AppSettings : public QObject
 
     /// Window colours: "dark", "light" or "system" (the default: the desktop's light or dark mode).
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged FINAL)
+    /// The colour of work and of the main controls: one of accentColors (the default: "red").
+    /// Theme.qml has its shades for the dark and the light theme.
+    Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentColorChanged FINAL)
+    /// Every id accentColor takes, in the order the colour menu shows them.
+    Q_PROPERTY(QStringList accentColors READ accentColors CONSTANT FINAL)
     /// "stable" (releases) or "nightly" (a build of every change), for the updates of the AppImage and the macOS app.
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
     /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
@@ -184,6 +189,12 @@ public:
 
     QString colorScheme() const { return m_colorScheme; }
     void setColorScheme(const QString &scheme);
+    QString accentColor() const { return m_accentColor; }
+    /// An id that is not one of accentColors() sets the default.
+    void setAccentColor(const QString &id);
+    static QStringList accentColors();
+    /// The name of an accent colour for the interface ("Red"), or the id itself if it is not one.
+    Q_INVOKABLE static QString accentColorName(const QString &id);
 
     QString updateChannel() const { return m_updateChannel; }
     void setUpdateChannel(const QString &channel);
@@ -229,11 +240,26 @@ public:
     Q_INVOKABLE void playSoundPreview(const QString &soundName, int volume = -1);
     /// The fade level (0..1) of an alert sound at a position; the duration is 0 while unknown.
     static double alertFadeGain(qint64 positionMs, qint64 durationMs);
+    /// How long an alert's Qt Multimedia player may live: a little more than the sound
+    /// (kAlertPlayerGraceMs), or kAlertPlayerUnknownDurationMs while the duration is unknown (0).
+    /// A backend that never reports the end nor an error then does not keep it until quit.
+    static qint64 alertPlayerLifetimeMs(qint64 durationMs);
+    static constexpr qint64 kAlertPlayerGraceMs = 2000;
+    static constexpr qint64 kAlertPlayerUnknownDurationMs = 60 * 1000;
+    /// Tests: every alert player lives at most `ms` (0: alertPlayerLifetimeMs() again).
+    static void setAlertPlayerLifetimeForTesting(int ms);
+    /// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume: where Qt
+    /// Multimedia cannot. A player that fails to start or exits with an error right away gives way
+    /// to the next for this sound; it is not tried again in this session if it failed to start, or
+    /// if the next one played the file it could not (pw-play with no PipeWire daemon).
+    /// Public for tests.
+    static void playWithPlayerProgram(const QString &file, int volume);
     /// Tests: called with the sound name and volume instead of starting a player.
     void setSoundPlayerForTesting(std::function<void(const QString &, int)> player) { m_soundPlayer = std::move(player); }
-    /// canberra-gtk-play arguments for an event sound name. The name is glued to its option, so
-    /// one that starts with '-' can never be read as another option.
-    static QStringList canberraArguments(const QString &soundName);
+    /// canberra-gtk-play arguments for an event sound name at a volume of 1..100 (in whole dB for
+    /// canberra). The name is glued to its option, so one that starts with '-' can never be read
+    /// as another option.
+    static QStringList canberraArguments(const QString &soundName, int volume);
     /// An event sound name ("complete", "alarm-clock-elapsed") or an absolute path to a file.
     /// Anything else from the configuration ("../x", "-x", "a/b") is not looked up or played.
     static bool isUsableSoundName(const QString &soundName);
@@ -277,6 +303,7 @@ Q_SIGNALS:
     void firstRunCompletedChanged();
     void promptTaskNoteChanged();
     void colorSchemeChanged();
+    void accentColorChanged();
     void updateChannelChanged();
     void autoCheckUpdatesChanged();
     void verboseLoggingChanged();
@@ -288,7 +315,8 @@ Q_SIGNALS:
     void trayAvailableChanged();
     void keepRunningInTrayChanged();
     void startHiddenChanged();
-    /// The login entry could not be changed (read-only home, full disk, ...).
+    /// The login entry could not be changed (read-only home, full disk, run from the disk image,
+    /// ...). Emitted after the startAtLoginChanged() that restores the real state.
     void autostartFailed(const QString &message);
 
 private:
@@ -314,6 +342,7 @@ private:
         static constexpr bool firstRunCompleted = false;
         static constexpr bool promptTaskNote = true;
         static constexpr QLatin1String colorScheme{"system"};
+        static constexpr QLatin1String accentColor{"red"};
         static constexpr QLatin1String updateChannel{"stable"};
         static constexpr bool autoCheckUpdates = true;
         static constexpr bool verboseLogging = false;
@@ -353,6 +382,7 @@ private:
     bool m_firstRunCompleted = Defaults::firstRunCompleted;
     bool m_promptTaskNote = Defaults::promptTaskNote;
     QString m_colorScheme = QString(Defaults::colorScheme);
+    QString m_accentColor = QString(Defaults::accentColor);
     QString m_updateChannel = QString(Defaults::updateChannel);
     bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
     bool m_verboseLogging = Defaults::verboseLogging;

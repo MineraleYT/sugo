@@ -2,8 +2,10 @@
 #include <QSignalSpy>
 #include <QTest>
 
+#include "FakeClock.h"
 #include "KRunnerService.h"
 #include "PresetModel.h"
+#include "TimerBinding.h"
 #include "TimerEngine.h"
 
 class TestKRunnerService : public QObject
@@ -22,7 +24,33 @@ private Q_SLOTS:
     void testMatchesOfferOnlyRelevantActions();
     void testCustomMinutesDoNotChangeThePreset();
     void testPresetByName();
+    void testStartingTheCurrentPresetResumesIt();
+    void testNothingIsOfferedBeforeTheTimerIsAttached();
     void testControlCanBeTurnedOff();
+    void testAnotherPresetDoesNotThrowAwayTheActivePhase();
+    void testStartingTheCurrentPausedPresetKeepsItsTime();
+    void testUnknownPresetIsIgnored();
+    void testCustomMinutesOutOfRangeAreIgnored();
+    void testRunDoesOnlyOpenWhileControlIsOff();
+    void testOtherPresetsAreNotOfferedToStartWhileActive();
+    void testCustomMinutesDoNotThrowAwayTheActivePhase();
+
+private:
+    /// The engine as main.cpp wires it: choosing another preset resets it (TimerBinding).
+    struct Fixture {
+        FakeClock clock;
+        TimerEngine timer{&clock, nullptr};
+        PresetModel presets;
+        TimerBinding binding{&timer, &presets};
+        KRunnerService service{&timer, &presets};
+        QString first;
+        QString deep;
+        Fixture()
+        {
+            first = presets.currentUuid();
+            deep = presets.create({{QStringLiteral("name"), QStringLiteral("Deep Work")}});
+        }
+    };
 };
 
 void TestKRunnerService::testActions()
@@ -258,6 +286,44 @@ void TestKRunnerService::testPresetByName()
     QVERIFY(timer.isRunning());
 }
 
+void TestKRunnerService::testStartingTheCurrentPresetResumesIt()
+{
+    TimerEngine timer;
+    timer.setWorkSeconds(1500);
+    PresetModel presets;
+    KRunnerService service(&timer, &presets);
+    const QString uuid = presets.currentUuid();
+    QVERIFY(!uuid.isEmpty());
+
+    timer.start();
+    timer.pause();
+    QVERIFY(timer.isPaused());
+
+    // KRunner offers "Start preset" for the current preset while it is paused too.
+    service.Run(QStringLiteral("preset:") + uuid, QString());
+    QCOMPARE(presets.currentUuid(), uuid);
+    QVERIFY(timer.isRunning());
+    QVERIFY(!timer.isPaused());
+}
+
+void TestKRunnerService::testNothingIsOfferedBeforeTheTimerIsAttached()
+{
+    // main.cpp registers the runner before the timer exists.
+    KRunnerService service(nullptr, nullptr);
+    QVERIFY(service.Match(QStringLiteral("pomodoro")).isEmpty());
+    QVERIFY(service.Match(QStringLiteral("pomodoro 25")).isEmpty());
+    service.Run(QStringLiteral("start"), QString()); // nothing to run, and no crash
+    service.Run(QStringLiteral("custom:25"), QString());
+    service.Run(QStringLiteral("x"), QStringLiteral("start"));
+
+    TimerEngine timer;
+    PresetModel presets;
+    service.attach(&timer, &presets);
+    QVERIFY(!service.Match(QStringLiteral("pomodoro")).isEmpty());
+    service.Run(QStringLiteral("start"), QString());
+    QVERIFY(timer.isRunning());
+}
+
 void TestKRunnerService::testControlCanBeTurnedOff()
 {
     TimerEngine timer;
@@ -285,6 +351,183 @@ void TestKRunnerService::testControlCanBeTurnedOff()
     allowed = true;
     service.Run(QStringLiteral("start"), QString());
     QVERIFY(timer.isActive());
+}
+
+void TestKRunnerService::testAnotherPresetDoesNotThrowAwayTheActivePhase()
+{
+    Fixture f;
+    QVERIFY(!f.first.isEmpty());
+    QVERIFY(f.deep != f.first);
+    QCOMPARE(f.presets.currentUuid(), f.first);
+    QSignalSpy ended(&f.timer, &TimerEngine::sessionEnded);
+
+    f.timer.start();
+    f.clock.advanceSeconds(60);
+    const int remaining = f.timer.remainingSeconds();
+    QVERIFY(remaining > 0);
+
+    // A match from "pomodoro deep" (offered, or left over from before the start): the running
+    // work phase of the other timer stays, as with D-Bus selectPreset/startPreset.
+    f.service.Run(QStringLiteral("preset:") + f.deep, QString());
+    QCOMPARE(f.presets.currentUuid(), f.first);
+    QVERIFY(f.timer.isRunning());
+    QCOMPARE(f.timer.phase(), TimerEngine::Phase::Work);
+    QCOMPARE(f.timer.remainingSeconds(), remaining);
+    QCOMPARE(ended.count(), 0);
+
+    // Paused is active too: it stays paused, with its time.
+    f.timer.pause();
+    f.service.Run(QStringLiteral("preset:") + f.deep, QString());
+    QCOMPARE(f.presets.currentUuid(), f.first);
+    QVERIFY(f.timer.isPaused());
+    QCOMPARE(f.timer.remainingSeconds(), remaining);
+    QCOMPARE(ended.count(), 0);
+
+    // Once stopped, the other preset is chosen and started.
+    f.timer.stop();
+    f.service.Run(QStringLiteral("preset:") + f.deep, QString());
+    QCOMPARE(f.presets.currentUuid(), f.deep);
+    QVERIFY(f.timer.isRunning());
+}
+
+void TestKRunnerService::testStartingTheCurrentPausedPresetKeepsItsTime()
+{
+    Fixture f;
+    QSignalSpy ended(&f.timer, &TimerEngine::sessionEnded);
+    f.timer.start();
+    f.clock.advanceSeconds(90);
+    f.timer.pause();
+    const int remaining = f.timer.remainingSeconds();
+
+    f.service.Run(QStringLiteral("preset:") + f.first, QString());
+    QCOMPARE(f.presets.currentUuid(), f.first);
+    QVERIFY(f.timer.isRunning());
+    QCOMPARE(f.timer.remainingSeconds(), remaining);
+    QCOMPARE(ended.count(), 0);
+
+    // Running already: choosing it again changes nothing.
+    f.clock.advanceSeconds(10);
+    f.service.Run(QStringLiteral("preset:") + f.first, QString());
+    QVERIFY(f.timer.isRunning());
+    QCOMPARE(f.timer.remainingSeconds(), remaining - 10);
+    QCOMPARE(ended.count(), 0);
+}
+
+void TestKRunnerService::testUnknownPresetIsIgnored()
+{
+    Fixture f;
+    f.service.Run(QStringLiteral("preset:no-such-uuid"), QString());
+    f.service.Run(QStringLiteral("preset:"), QString());
+    QCOMPARE(f.presets.currentUuid(), f.first);
+    QVERIFY(f.timer.isIdle());
+}
+
+void TestKRunnerService::testCustomMinutesOutOfRangeAreIgnored()
+{
+    Fixture f;
+    for (const QString &id : {QStringLiteral("custom:0"), QStringLiteral("custom:-5"), QStringLiteral("custom:181"),
+                              QStringLiteral("custom:abc"), QStringLiteral("custom:")}) {
+        f.service.Run(id, QString());
+        QVERIFY2(f.timer.isIdle(), qPrintable(id));
+    }
+    f.service.Run(QStringLiteral("custom:180"), QString());
+    QVERIFY(f.timer.isRunning());
+    QCOMPARE(f.timer.remainingSeconds(), 180 * 60);
+}
+
+void TestKRunnerService::testRunDoesOnlyOpenWhileControlIsOff()
+{
+    Fixture f;
+    f.service.setControlAllowed([]() { return false; });
+    QSignalSpy open(&f.service, &KRunnerService::openRequested);
+
+    const QStringList ids{QStringLiteral("preset:") + f.deep, QStringLiteral("preset:") + f.first,
+                          QStringLiteral("custom:25"), QStringLiteral("skip"), QStringLiteral("resume")};
+    for (const QString &id : ids) {
+        f.service.Run(id, QString());
+        QVERIFY2(f.timer.isIdle(), qPrintable(id));
+        QCOMPARE(f.presets.currentUuid(), f.first);
+    }
+    QCOMPARE(open.count(), 0);
+
+    f.service.Run(QStringLiteral("open"), QString());
+    QCOMPARE(open.count(), 1);
+    QVERIFY(f.timer.isIdle());
+}
+
+void TestKRunnerService::testOtherPresetsAreNotOfferedToStartWhileActive()
+{
+    Fixture f;
+    const auto matchFor = [&f](const QString &uuid) {
+        const auto matches = f.service.Match(QStringLiteral("pomodoro deep"));
+        const auto it = std::find_if(matches.cbegin(), matches.cend(),
+                                     [&uuid](const RemoteMatch &m) { return m.id == QStringLiteral("preset:") + uuid; });
+        return it == matches.cend() ? RemoteMatch() : *it;
+    };
+    const QString subtextKey = QStringLiteral("subtext");
+
+    // Idle: another preset is offered to start.
+    RemoteMatch idle = matchFor(f.deep);
+    QVERIFY(idle.text.startsWith(QStringLiteral("Start preset")));
+    QVERIFY(idle.properties.value(subtextKey).toString().contains(QStringLiteral("minute")));
+
+    // Running or paused: still listed, but saying the timer must be stopped first.
+    f.timer.start();
+    for (int i = 0; i < 2; ++i) {
+        RemoteMatch busy = matchFor(f.deep);
+        QCOMPARE(busy.id, QStringLiteral("preset:") + f.deep);
+        QVERIFY2(!busy.text.startsWith(QStringLiteral("Start")), qPrintable(busy.text));
+        QVERIFY(busy.properties.value(subtextKey).toString().contains(QStringLiteral("Stop it")));
+        f.timer.pause();
+    }
+
+    // The current preset is still offered: choosing it resumes.
+    f.presets.update(f.first, {{QStringLiteral("name"), QStringLiteral("Deep focus")}});
+    QVERIFY(matchFor(f.first).text.startsWith(QStringLiteral("Start preset")));
+}
+
+void TestKRunnerService::testCustomMinutesDoNotThrowAwayTheActivePhase()
+{
+    Fixture f;
+    QSignalSpy ended(&f.timer, &TimerEngine::sessionEnded);
+    const QString subtextKey = QStringLiteral("subtext");
+
+    // Idle: "pomodoro 15" is offered to start.
+    auto matches = f.service.Match(QStringLiteral("pomodoro 15"));
+    QCOMPARE(matches.size(), 1);
+    QCOMPARE(matches.first().id, QStringLiteral("custom:15"));
+    QVERIFY(matches.first().text.startsWith(QStringLiteral("Start")));
+
+    f.timer.start();
+    f.clock.advanceSeconds(60);
+    const int remaining = f.timer.remainingSeconds();
+    QVERIFY(remaining > 15 * 60);
+
+    // Running or paused: still listed, but saying the timer must be stopped first, and
+    // choosing it (offered, or left over from before the start) keeps the phase.
+    for (int i = 0; i < 2; ++i) {
+        matches = f.service.Match(QStringLiteral("pomodoro 15"));
+        QCOMPARE(matches.size(), 1);
+        QCOMPARE(matches.first().id, QStringLiteral("custom:15"));
+        QVERIFY2(!matches.first().text.startsWith(QStringLiteral("Start")), qPrintable(matches.first().text));
+        QVERIFY(matches.first().properties.value(subtextKey).toString().contains(QStringLiteral("Stop it")));
+
+        const bool paused = f.timer.isPaused();
+        f.service.Run(QStringLiteral("custom:15"), QString());
+        QCOMPARE(ended.count(), 0);
+        QCOMPARE(f.timer.phase(), TimerEngine::Phase::Work);
+        QCOMPARE(f.timer.isPaused(), paused);
+        QCOMPARE(f.timer.remainingSeconds(), remaining);
+        f.timer.pause();
+    }
+
+    // Once stopped, it starts.
+    f.timer.stop();
+    ended.clear();
+    f.service.Run(QStringLiteral("custom:15"), QString());
+    QVERIFY(f.timer.isRunning());
+    QCOMPARE(f.timer.remainingSeconds(), 15 * 60);
+    QCOMPARE(ended.count(), 0);
 }
 
 QTEST_MAIN(TestKRunnerService)

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -18,15 +19,26 @@
  * off, and picks them in the settings (AppSettings::focusOnShortcut / focusOffShortcut).
  *
  * Available when the tool exists and both shortcuts are among those `shortcuts list` printed.
+ * `shortcuts run` takes an argument that starts with "-" for an option (`run -- <name>` does
+ * not work either), so a shortcut whose name does is run by its identifier: when the list has
+ * such a name, `shortcuts list --show-identifiers` is read too, and without an identifier
+ * (a tool without the option) that shortcut counts as missing.
  * The list is read again whenever the names change and when refreshShortcutList() is called
  * (the settings page, the application becoming active).
  *
  * Like FreedesktopInhibitor, a small asynchronous state machine: it remembers what is wanted
  * and, one `shortcuts run` at a time, makes the Focus match. A run that fails leaves the state
- * as it was (logged) and is not retried until the next inhibit() or a new list; one that
+ * as it was (logged) and is not retried until the next inhibit(), new names or a list that
+ * changed (the same list read again does not count); one that
  * times out is killed. An "on" whose outcome is unknown (timed out)
  * counts as on, so the release still runs the "off" shortcut: turning a Focus off twice is
- * harmless, leaving it on is not.
+ * harmless, leaving it on is not. Killing the `shortcuts` client may not stop the shortcut
+ * inside the Shortcuts app, so after a timeout the next run waits retryDelayMs (a late "on"
+ * must not land after the "off"). An "off" that times out is run once more after that pause,
+ * and then given up on: no retry loop, and quitting waits at most releaseTimeoutMs().
+ *
+ * The release runs the "off" shortcut that was set when the "on" ran, even if the names have
+ * changed since: a new "off" may not exist yet, and failing to run it would leave the Focus on.
  *
  * Unlike the freedesktop inhibition, nothing ties the Focus to our process: if Sugo crashes
  * while working, the Focus stays on until the user turns it off. Quitting releases it
@@ -48,7 +60,9 @@ public:
     void release() override;
     bool isInhibited() const override { return m_on || m_busy; }
     bool isReleasing() const override { return isInhibited() && !m_wanted; }
-    int releaseTimeoutMs() const override { return 2 * m_runTimeoutMs + 500; }
+    /// The longest release: an "on" in flight that times out, the pause, an "off" that times
+    /// out, the pause, the retried "off" (three runs, two pauses), plus a margin.
+    int releaseTimeoutMs() const override { return 3 * m_runTimeoutMs + 2 * m_retryDelayMs + 500; }
 
     /// The shortcuts to run; reads the list again when they change.
     void setShortcutNames(const QString &onShortcut, const QString &offShortcut);
@@ -63,14 +77,21 @@ public:
     void refreshShortcutList();
 
     /// Tests: shorter timeouts than the real ones.
-    void setTimeoutsForTesting(int runMs, int listMs)
+    void setTimeoutsForTesting(int runMs, int listMs, int retryDelayMs = 500)
     {
         m_runTimeoutMs = runMs;
         m_listTimeoutMs = listMs;
+        m_retryDelayMs = retryDelayMs;
     }
 
     /// The names of the shortcuts in the output of `shortcuts list`: one per line.
     static QStringList parseShortcutList(const QByteArray &output);
+    /// The identifiers in the output of `shortcuts list --show-identifiers` ("<name> (<UUID>)"
+    /// per line), by name; the first one of a name that appears twice.
+    static QHash<QString, QString> parseShortcutIdentifiers(const QByteArray &output);
+    /// What `shortcuts run` is given for `name`: the name, or for one that starts with "-" its
+    /// identifier in `identifiers` (empty if it has none: it cannot be run).
+    static QString runArgument(const QString &name, const QHash<QString, QString> &identifiers);
 
 Q_SIGNALS:
     /// The list was read (it may be the same as before).
@@ -80,12 +101,16 @@ private:
     using Done = std::function<void(bool ok, bool timedOut, const QByteArray &output, const QString &error)>;
     void runProgram(const QStringList &arguments, int timeoutMs, Done done);
     void sync();
+    void pauseThenSync();
+    void finishListing(const QStringList &list, const QHash<QString, QString> &identifiers);
     void report();
 
     QString m_program;
     QString m_onShortcut;
     QString m_offShortcut;
+    QString m_releaseShortcut; ///< The run argument of the "off" paired with the "on" that last ran; the release runs it.
     QStringList m_list;
+    QHash<QString, QString> m_identifiers; ///< Read only when a name in m_list starts with "-".
     bool m_listing = false;      ///< `shortcuts list` is running.
     bool m_listAgain = false;    ///< Asked for a refresh while one was running.
     bool m_wasAvailable = false; ///< Last value announced through availableChanged().
@@ -93,10 +118,13 @@ private:
     bool m_wanted = false; ///< What the caller asked for.
     bool m_on = false;     ///< The "on" shortcut ran (or may have) and "off" has not run since.
     bool m_busy = false;   ///< A `shortcuts run` is in flight; only one at a time.
+    bool m_pausing = false; ///< Waiting retryDelayMs after a timed-out run before the next one.
+    bool m_offRetried = false; ///< The "off" timed out once already: the next timeout gives up.
     bool m_onFailed = false; ///< The "on" shortcut failed; not run again until asked anew.
     bool m_reported = false;
     bool m_warnedUnavailable = false;
 
     int m_runTimeoutMs = 5000;
     int m_listTimeoutMs = 10000;
+    int m_retryDelayMs = 2000;
 };

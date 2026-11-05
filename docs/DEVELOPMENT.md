@@ -28,6 +28,7 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 - **CMake** 3.20+ and **Ninja**
 - **Qt 6.8+** (Core, Gui, Widgets, Qml, Quick, QuickControls2, Sql, Network, Multimedia; DBus on Linux only: Sugo does not link it on macOS, though the app bundle still carries QtDBus.framework because qt.io's QtGui links it)
 - **extra-cmake-modules 6.8+** (build tool only: no KDE Frameworks library is used)
+- **libsodium 1.0.18+** and **pkg-config** (Sugo Sync's encryption, the same on Linux and macOS; the Flatpak builds it as a module, the AppImage bundles it)
 - **Gettext** (`xgettext`), only to extract the strings
 
 ### Build dependencies
@@ -35,24 +36,28 @@ How to build Sugo, run its tests and publish a release. For using the applicatio
 #### Fedora
 ```sh
 sudo dnf install cmake ninja-build gcc-c++ \
-    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg qt6-qtmultimedia-devel kf6-extra-cmake-modules
+    qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtsvg qt6-qtmultimedia-devel kf6-extra-cmake-modules \
+    libsodium-devel pkgconf-pkg-config
 ```
 
 #### Ubuntu 26.04 or newer
 ```sh
 sudo apt install cmake ninja-build g++ \
-    qt6-base-dev qt6-declarative-dev qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
+    qt6-base-dev qt6-declarative-dev qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules \
+    libsodium-dev pkgconf
 ```
 
 #### Arch Linux
 ```sh
-sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg extra-cmake-modules
+sudo pacman -S cmake ninja gcc qt6-base qt6-declarative qt6-svg qt6-multimedia qt6-multimedia-ffmpeg extra-cmake-modules \
+    libsodium pkgconf
 ```
 
 #### openSUSE Tumbleweed
 ```sh
 sudo zypper install cmake ninja gcc-c++ \
-    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel extra-cmake-modules
+    qt6-base-devel qt6-declarative-devel qt6-svg-devel qt6-multimedia-devel qt6-sql-sqlite extra-cmake-modules \
+    libsodium-devel pkgconf
 ```
 
 #### macOS 13 or newer
@@ -60,11 +65,18 @@ sudo zypper install cmake ninja gcc-c++ \
 With the Xcode command line tools (`xcode-select --install`) and [Homebrew](https://brew.sh):
 
 ```sh
-brew install qt cmake ninja extra-cmake-modules
+brew install qt cmake ninja extra-cmake-modules libsodium pkgconf
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
     -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build
 open build/bin/Sugo.app
+```
+
+libsodium (the sync's encryption) is found through pkg-config, so `pkgconf` is needed too. Without Homebrew, or to build with the same library as the release (universal and static), build it from source and point pkg-config at it:
+
+```sh
+bash packaging/macos/build-libsodium.sh "$HOME/sugo-deps/sodium"
+export PKG_CONFIG_PATH="$HOME/sugo-deps/sodium/lib/pkgconfig"
 ```
 
 The program is the app bundle `build/bin/Sugo.app` (its binary is `Sugo.app/Contents/MacOS/Sugo`); there is nothing to install. The Linux files (desktop entry, KRunner plugin, D-Bus service, metainfo) are not installed on macOS. Homebrew's Qt is enough to develop; the app published in the releases is built with Qt from qt.io, see [Building the macOS app](#building-the-macos-app).
@@ -101,7 +113,7 @@ The first argument is the version the program shows and compares when it looks f
 
 ## Building the macOS app
 
-The release disk image is built on a Mac by `packaging/macos/build.sh` with Qt 6.10 from qt.io (installed with aqtinstall) and extra-cmake-modules from source, at the same versions as the AppImage. It needs the Xcode command line tools, CMake, Python 3 and git (Ninja is installed with Homebrew if missing):
+The release disk image is built on a Mac by `packaging/macos/build.sh` with Qt 6.10 from qt.io (installed with aqtinstall) and extra-cmake-modules from source, at the same versions as the AppImage, and libsodium from source. It needs the Xcode command line tools, CMake, Python 3 and git (Ninja and pkg-config are installed with Homebrew if missing):
 
 ```sh
 bash packaging/macos/build.sh 1.0.1-dev out
@@ -109,7 +121,9 @@ bash packaging/macos/build.sh 1.0.1-dev out
 
 The arguments are the version, as for the AppImage, and the folder that receives `Sugo-macOS-universal.dmg`. The script builds one universal app (`arm64` and `x86_64`, macOS 13 or later), copies Qt into it with `macdeployqt` (SQLite is the only SQL driver kept; the `offscreen` platform plugin is added for the smoke tests), and fails if the bundle is incomplete: a missing platform, SQL, SVG, multimedia (FFmpeg) or TLS plugin or QML module, a library loaded from outside the bundle (other than macOS's own), or a file without both architectures. It then signs the app ad hoc (`codesign --sign -`, required on Apple Silicon), checks the signature and `--version`, and makes the disk image with a link to `/Applications`. The downloads and the build are kept in `WORK` (`/tmp/sugo-macos` by default) and reused by the next run.
 
-The app is not signed with a Developer ID nor notarized, so Gatekeeper asks users to confirm the first launch (see the [user guide](USAGE.md#macos)). `SIGN_IDENTITY="Developer ID Application: …"` signs with that identity and the hardened runtime instead; notarization is not done by the script.
+**libsodium.** Homebrew's libsodium is a dylib for one architecture, so `packaging/macos/build-libsodium.sh` builds the release pinned in it (`LIBSODIUM_VERSION`, with the tarball's `LIBSODIUM_SHA256`) once for `arm64` and once for `x86_64` (macOS 13 or later), joins the two static libraries with `lipo`, and installs them with a `libsodium.pc` in `WORK/sodium`. `build.sh` puts that folder first in `PKG_CONFIG_PATH`, so CMake's `pkg_check_modules` finds it before any other copy, and fails if the program links a libsodium dylib or, once the sources include `sodium.h`, lacks its code in either architecture: linked statically, it adds nothing to the bundle. To move to a newer libsodium, check the tarball's minisign signature against libsodium's key (`RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3`, on [libsodium's site](https://doc.libsodium.org/installation)), then change the version and the SHA-256 in the script; the CI caches follow the version.
+
+The app is not signed with a Developer ID nor notarized, so Gatekeeper asks users to confirm the first launch (see the [user guide](USAGE.md#macos)). `SIGN_IDENTITY="Developer ID Application: …"` signs with that identity and the hardened runtime instead, with the entitlements of `packaging/macos/entitlements.plist` (`com.apple.security.cs.allow-jit`, without which the hardened runtime refuses the QML engine's JIT); notarization is not done by the script. The script's `--version` check loads no QML, so after such a build open a page of the real interface (or run a smoke page) before publishing it.
 
 ### The Focus shortcuts
 
@@ -119,7 +133,7 @@ On macOS Sugo silences notifications by running two shortcuts of the Shortcuts a
 2. Select each and choose File → Export, then "Anyone" (not "People Who Know Me"), and save it as `Sugo Focus On.shortcut` / `Sugo Focus Off.shortcut`. Such a file starts with `AEA1` (an Apple Encrypted Archive carrying Apple's signature); `tst_shortcutsfocusinstaller` checks that.
 3. Replace the files in `data/shortcuts/` (keep their `.license` files), and check on a Mac without iCloud, or another user account, that opening each shows the "Add Shortcut" sheet.
 
-To try the result, open the disk image, or run `tests/smoke_app.sh` on `Sugo.app/Contents/MacOS/Sugo` (it needs GNU `timeout`: `brew install coreutils` and put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`). In CI, `macos.yml` builds it and starts it without a display; `nightly.yml` and `release.yml` publish it when that succeeds, and publish the Linux packages without it when it fails.
+To try the result, open the disk image, or run `tests/smoke_app.sh` on `Sugo.app/Contents/MacOS/Sugo` (it needs GNU `timeout`: `brew install coreutils` and put `$(brew --prefix coreutils)/libexec/gnubin` first in `PATH`). In CI, `macos.yml` builds it (keeping Qt, extra-cmake-modules and libsodium in its cache) and starts it without a display; `nightly.yml` and `release.yml` publish it when that succeeds, and publish the Linux packages without it when it fails.
 
 ---
 
@@ -140,19 +154,19 @@ env -i PATH=/usr/bin:/bin HOME=/tmp/sugo-test-home \
 
 A test that builds a GUI application sets `QT_QPA_PLATFORM=offscreen` for itself (see `tests/CMakeLists.txt`); tests that need D-Bus start a private daemon and are written to work without a session bus. The build is expected to be free of compiler warnings.
 
-CI builds on Linux with GCC (and runs the suite), with Clang and warnings as errors (its warnings are close to those of Apple's compiler), and on macOS (arm64, Qt from qt.io, warnings as errors, the whole suite; not blocking yet).
+CI builds on Linux with GCC (and runs the suite) and with Clang (its warnings are close to those of Apple's compiler), both with warnings as errors, and on macOS (arm64, Qt from qt.io, warnings as errors, the whole suite; not blocking yet).
 
 CI runs only what a change can affect: its first job, Changes, reads the changed files and `.github/scripts/ci-changes.sh` decides which builds they need. Documentation runs nothing, a macOS-only file (`packaging/macos/`, the `.mm` sources, the `Mac*` sources built under `if(APPLE)`) only the macOS job, a Linux-only one (the D-Bus services, the desktop entry and the metainfo) only the Linux jobs, and the test scripts skip the Clang build; anything else, or a change it cannot read, runs everything. A file added for one platform only goes in that script's lists. The Linux jobs run in a container with every build dependency already installed (`.github/ci-image/Dockerfile`, on ghcr.io as `sugo-ci`, tagged with a hash of the Dockerfile): the CI image job builds it only when the Dockerfile changes, so a new dependency goes in the Dockerfile. The jobs keep the compiler cache (ccache) between runs, and a newer push cancels the run of the older one.
 
-**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage's self-update is not used on macOS, where the app bundle updates itself instead (`MacBundleInstaller`); `tst_updatechecker` tests both installers with stand-in tools on either system.
+**On macOS** the same `ctest` command works (the smoke runs need GNU `timeout`, see [Building the macOS app](#building-the-macos-app)). What is tested only on Linux: the freedesktop services over D-Bus (notifications, notification and power inhibitors, KRunner, the `/Timer` service, the single-instance bus name, the Secret Service, the Background portal), which the macOS build does not compile at all: QtDBus is not linked there (`SUGO_DBUS` in the top-level `CMakeLists.txt`), so `tst_powerinhibitor`, `tst_dbustimerservice`, `tst_singleinstance`, `tst_freedesktopnotifier`, `tst_freedesktopinhibitor`, `tst_krunnerservice` and `tst_secretstore` are not built, and the D-Bus cases of `tst_screenlockwatcher` and `tst_autostart` skip. The AppImage's self-update is not used on macOS, where the app bundle updates itself instead (`MacBundleInstaller`); `tst_updatechecker` tests both installers with stand-in tools on either system. `tst_mackeychainstore` writes to the real login Keychain, so it runs only with `SUGO_TEST_KEYCHAIN=1` from a terminal of the logged-in desktop session; over SSH there is no login session (every Keychain call fails with OSStatus -25308) and it skips. What happens to the Keychain items across updates of an ad hoc signed app is checked by hand (`tests/manual-review-checklist.md`, "macOS: Keychain").
 
 ### Linux and macOS parity
 
-`tst_platform_parity` makes sure Sugo offers the same on both systems. It starts the program in the smoke mode `inventory` (`src/qml/components/FeatureInventory.qml`), which opens every screen (the focus page, a timer's page, a new timer, statistics, about, each settings category, each step of the welcome tour, the search) and lists what the user can use there: rows, switches (by the setting they change), buttons, choices, fields, sliders and the search's commands. `tests/check_platform_parity.py` compares the list with `tests/platform-parity.json`:
+`tst_platform_parity` makes sure Sugo offers the same on both systems. It starts the program in the smoke mode `inventory` (`src/qml/components/FeatureInventory.qml`), which opens every screen (the focus page, a timer's page, a new timer, statistics, each settings category from General to About, each step of the welcome tour, the search) and lists what the user can use there: rows, switches (by the setting they change), buttons, choices, fields, sliders and the search's commands. `tests/check_platform_parity.py` compares the list with `tests/platform-parity.json`:
 
 - `common`: on both systems; one missing here fails the test.
 - `linux` / `macos`: on that system only, each with the reason (the Dock, the Focus shortcuts, keeping running in the tray...). Anything else found on one system only fails the test.
-- `updateInstall`: only in builds that install updates (AppImage, `Sugo.app`).
+- `updateInstall`: only in builds that install updates (AppImage, the disk image's `Sugo.app`).
 - `macosNames`: the Mac wording of the same control ("menu bar" for "tray", "Show in Finder" for "Open folder").
 - `tests`: for each platform feature, the tests that must exist on each system (notifications, silencing, screen awake, autostart, keyring, single instance, external control, quitting...).
 
@@ -171,7 +185,7 @@ It takes the same screenshots of every screen on both and writes `/tmp/sugo-comp
 
 | Variable | Effect |
 |---|---|
-| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `about`, `welcome`; or on a part of one: `settings/<category>` (`general`, `sounds`, `focus`, `calendar`, `advanced`), `welcome/<step>` (0-3) |
+| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `welcome`; or on a part of one: `settings/<category>` (`general`, `timers`, `sounds`, `focus`, `calendar`, `sync`, `advanced`, `about`; `about` alone is `settings/about`), `welcome/<step>` (0-3) |
 | `SUGO_SMOKE_PAGE`, `SUGO_STATS_SMOKE_TEST=1` | Smoke runs (`tests/smoke_app.sh`): check a page, then quit |
 | `SUGO_SMOKE_PAGE=inventory`, `SUGO_INVENTORY=file.json` | Writes what every screen offers to the file, then quits ([parity](#linux-and-macos-parity)) |
 | `SUGO_SCREENSHOT=file.png` | Saves a picture of the window after `SUGO_SCREENSHOT_DELAY` ms (1500 by default), then quits |
@@ -226,11 +240,11 @@ git push origin testing:main    # mark the tested build as the base of the next 
 
 ## Releasing
 
-A release is a version bump, a commit, an annotated tag on `main` and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages and the macOS apps on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one).
+A release is a version bump, a commit, an annotated tag on `main` and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages and the macOS apps on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one). Every file of a release or a nightly is named after its version, the same way for each package: `Sugo-X.Y.Z-x86_64.AppImage`, `Sugo-X.Y.Z-x86_64.flatpak`, `Sugo-X.Y.Z-macOS-universal.dmg` (the build scripts write them without the version; the publish jobs rename them). So no link can point straight at the latest file: the README and the user guide link the page of the latest release (`releases/latest`), and the feeds carry each file's full address.
 
-**Nightly builds.** Every push to `testing` that passes CI is built by `nightly.yml` and published as a new pre-release tagged `vX.Y.Z-nightly.YYYYMMDD.N` (`release.yml` ignores these tags): the AppImage and `nightly.json`. The pre-release `nightly` stays as the fixed address of the feed of the nightly channel (it holds only the latest `nightly.json`; its tag follows `testing`, the branch can't be called `nightly` like the tag) and as the starting point of the next release notes. Old nightlies are not deleted. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
+**Nightly builds.** Every push to `testing` that passes CI is built by `nightly.yml` and published as a new pre-release tagged `vX.Y.Z-nightly.YYYYMMDD.N` (`release.yml` ignores these tags): the AppImage and `nightly.json`. Started by hand (Run workflow on `testing`), it publishes only when the newest CI run of that commit on `testing` passed. The pre-release `nightly` stays as the fixed address of the feed of the nightly channel (it holds only the latest `nightly.json`; its tag follows `testing`, the branch can't be called `nightly` like the tag) and as the starting point of the next release notes. Old nightlies are not deleted. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. `YYYYMMDD` is the day the workflow run was created (UTC), not the date of the commit, and `N` its run number, so each nightly is newer than the ones before it even when `testing` moves to an older commit. The feed and the tag `nightly` only move forward: a publish that finds `nightly.json` already announcing a newer version (an older run re-run, or one that reached the publish job late) keeps its own pre-release and leaves them as they are. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
 
-**macOS.** Both workflows also build `Sugo-macOS-universal.dmg` with `macos.yml` (on a macOS runner, see [Building the macOS app](#building-the-macos-app)). For now a failure there does not stop the release: the Linux packages and the feed are published without the disk image. When it is there it is uploaded with the other files, the notes explain how to open it the first time (Gatekeeper), and the feed gets a `macos` entry (`url`, `sha256`, `size` of the disk image) next to the AppImage's keys, which the AppImages ignore. The macOS app reads that entry to update itself, like the AppImage, when its bundle is in a folder it can write to (`/Applications` for an administrator; `MacBundle::path()`, `MacBundleInstaller` in `src/core/UpdateInstaller.h`): it downloads the disk image next to the bundle, checks its size and SHA-256, mounts it (`hdiutil attach -nobrowse -readonly`), checks that its `Sugo.app` has the bundle identifier `io.github.mineraleyt.sugo` and a valid signature (`codesign --verify --deep --strict`), copies it next to the running app as `Sugo.app.new` (`ditto`, then `xattr -cr`) and detaches the image; when Sugo quits, the new bundle takes the old one's place, and "Restart to update" opens it (`open -n`). Any failure leaves the installed app as it was. A feed without `macos`, or an app in a folder it cannot write to, only reports the new version, with a link to the release page.
+**macOS.** Both workflows also build `Sugo-macOS-universal.dmg` with `macos.yml` (on a macOS runner, see [Building the macOS app](#building-the-macos-app)). For now a failure there does not stop the release: the Linux packages and the feed are published without the disk image. When it is there it is uploaded with the other files, the notes explain how to open it the first time (Gatekeeper), and the feed gets a `macos` entry (`url`, `sha256`, `size` of the disk image) next to the AppImage's keys, which the AppImages ignore. The macOS app reads that entry to update itself, like the AppImage, when its bundle is in a folder it can write to (`/Applications` for an administrator; `MacBundle::path()`, `MacBundleInstaller` in `src/core/UpdateInstaller.h`): it downloads the disk image next to the bundle, checks its size and SHA-256, mounts it (`hdiutil attach -nobrowse -readonly`), checks that its `Sugo.app` has the bundle identifier `io.github.mineraleyt.sugo` and a valid signature (`codesign --verify --deep --strict`), copies it next to the running app as `.Sugo.app.new`, hidden so that Spotlight and launchers do not list it (`ditto`, then `xattr -cr`) and detaches the image; when Sugo quits, the new bundle takes the old one's place, and "Restart to update" opens it (`open -n`). Any failure leaves the installed app as it was. Only the disk image's app does this: `packaging/macos/build.sh` configures with `-DSUGO_INSTALLS_UPDATES=ON`, which puts `SugoInstallsUpdates` = true in its `Info.plist`; a `Sugo.app` built from source has it false and, like a build from source on Linux, only reports new versions (otherwise "Install update" would replace the build being worked on with the release). A feed without `macos`, or an app in a folder it cannot write to, also only reports the new version, with a link to the release page.
 
 **Checklist** for version `X.Y.Z`:
 
@@ -248,6 +262,20 @@ A release is a version bump, a commit, an annotated tag on `main` and a push. Th
    git tag -a vX.Y.Z -m "Sugo X.Y.Z: …"
    git push origin main vX.Y.Z
    ```
-6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand (`bash packaging/macos/build.sh X.Y.Z out` on a Mac, then `gh release upload vX.Y.Z out/Sugo-macOS-universal.dmg`), or leave it for the next release. On a Mac, open the disk image, drag Sugo to Applications, and check the first launch and `Sugo.app/Contents/MacOS/Sugo --version`.
+6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-X.Y.Z-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand, or leave it for the next release. By hand, the feed needs the disk image's `macos` entry too, as `release.yml` writes it (without it the Macs see the update but never install it): build with `bash packaging/macos/build.sh X.Y.Z out` on a Mac, then
+   ```sh
+   cd out
+   dmg=Sugo-X.Y.Z-macOS-universal.dmg
+   mv Sugo-macOS-universal.dmg "$dmg"
+   gh release upload vX.Y.Z "$dmg" --repo MineraleYT/sugo
+   gh release download vX.Y.Z --repo MineraleYT/sugo --pattern stable.json --clobber
+   jq --arg url "https://github.com/MineraleYT/sugo/releases/download/vX.Y.Z/$dmg" \
+      --arg sha256 "$(shasum -a 256 "$dmg" | cut -d' ' -f1)" \
+      --argjson size "$(wc -c < "$dmg" | tr -d ' ')" \
+      '. + {macos: {url: $url, sha256: $sha256, size: $size}}' stable.json > stable.json.new
+   mv stable.json.new stable.json
+   gh release upload vX.Y.Z stable.json --repo MineraleYT/sugo --clobber
+   ```
+   The disk image goes first: the feed must never announce a file that is not there. On a Mac, open the disk image, drag Sugo to Applications, and check the first launch and `Sugo.app/Contents/MacOS/Sugo --version`.
 
 The workflow refuses to publish unless the tag, the version in `CMakeLists.txt` and the newest `<release>` in the metainfo all agree. Every `v*` tag is built, tested and published, whatever the tagged commit changed. Pushes that only change Markdown files or `docs/` skip CI. Third-party actions and the build image are pinned to a commit or digest; Dependabot proposes updates.

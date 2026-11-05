@@ -86,6 +86,33 @@ private Q_SLOTS:
         app.unregisterObject(QStringLiteral("/Timer"));
     }
 
+    void aCallWaitingForTheTimerIsAnsweredOnceAttached()
+    {
+        // main.cpp registers /Timer before it takes the bus name, long before the timer exists, so
+        // that a call which started Sugo by D-Bus activation finds the object. The call waits in
+        // the event queue, and the timer is attached before the event loop runs.
+        TimerDBusObject host;
+        auto *adaptor = new DBusTimerService(nullptr, nullptr, &host);
+        QDBusConnection app(QStringLiteral("app"));
+        QVERIFY(app.registerObject(QStringLiteral("/Timer"), &host, QDBusConnection::ExportAdaptors));
+
+        const QDBusMessage message = QDBusMessage::createMethodCall(
+            service, QStringLiteral("/Timer"), QStringLiteral("io.github.mineraleyt.sugo.Timer"), QStringLiteral("start"));
+        const QDBusPendingCall pending = QDBusConnection(QStringLiteral("caller")).asyncCall(message);
+
+        FakeClock clock;
+        TimerEngine engine(&clock, nullptr);
+        PresetModel presets;
+        adaptor->attach(&engine, &presets);
+
+        QDBusPendingCallWatcher watcher(pending);
+        QSignalSpy done(&watcher, &QDBusPendingCallWatcher::finished);
+        done.wait(5000);
+        QCOMPARE(pending.reply().type(), QDBusMessage::ReplyMessage);
+        QVERIFY(engine.isRunning());
+        app.unregisterObject(QStringLiteral("/Timer"));
+    }
+
 private:
     /// The timers "Pomodoro" (built-in), "Deep Work" and "Reading" and a service around them.
     struct Fixture

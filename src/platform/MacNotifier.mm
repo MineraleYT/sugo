@@ -3,9 +3,7 @@
 
 #include "MacNotificationMapping.h"
 
-#include <QHash>
 #include <QLoggingCategory>
-#include <QPointer>
 #include <QSet>
 
 #import <Foundation/Foundation.h>
@@ -37,14 +35,12 @@ struct MacNotifier::Private {
     NSMutableSet<UNNotificationCategory *> *categories = nil;
     QSet<QString> categoryIds;
 
-    /// Notifications waiting for the permission to be read, by ticket.
-    struct Pending {
-        QPointer<QObject> context;
-        Notification notification;
-    };
-    QHash<quint64, Pending> pending;
-    quint64 nextTicket = 1;
+    /// Notifications waiting for the permission to be read or answered.
+    MacPendingNotifications pending;
 
+    /// Asks the system's question (pending.beginQuestion() said to): its answer delivers every
+    /// notification that waited for it.
+    void askForPermission();
     void deliver(quint64 ticket, bool allowed);
     void post(QObject *context, const Notification &notification);
 };
@@ -70,7 +66,9 @@ UNNotificationCategory *makeCategory(const QString &identifier, const QList<MacN
     return [UNNotificationCategory categoryWithIdentifier:identifier.toNSString()
                                                   actions:actions
                                         intentIdentifiers:@[]
-                                                  options:UNNotificationCategoryOptionNone];
+                                                  // A dismissed banner reaches the delegate too,
+                                                  // which then forgets its handlers.
+                                                  options:UNNotificationCategoryOptionCustomDismissAction];
 }
 } // namespace
 
@@ -146,17 +144,63 @@ MacNotifier::MacNotifier(std::unique_ptr<Notifier> fallback, QObject *parent)
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     // The center keeps only a weak reference: d->delegate holds it.
     center.delegate = d->delegate;
+    // Banners an earlier run left behind (it crashed or was killed, so ~MacNotifier did not take
+    // them out): their handlers went with it, so a click on one of their buttons, or a task note
+    // typed into one, would reach nothing. The list arrives later: those this run has shown by
+    // then (known to the registry) stay.
+    [center removeAllPendingNotificationRequests];
+    const std::shared_ptr<Shared> shared = d->shared;
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *delivered) {
+        NSMutableArray<NSString *> *identifiers = [NSMutableArray arrayWithCapacity:delivered.count];
+        for (UNNotification *notification in delivered) {
+            [identifiers addObject:notification.request.identifier];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            MacNotifier::Private *notifier = shared->notifier;
+            if (!notifier) {
+                return;
+            }
+            NSMutableArray<NSString *> *stale = [NSMutableArray arrayWithCapacity:identifiers.count];
+            for (NSString *identifier in identifiers) {
+                if (!notifier->registry.contains(QString::fromNSString(identifier))) {
+                    [stale addObject:identifier];
+                }
+            }
+            if (stale.count > 0) {
+                qCInfo(lcMacNotifier) << "Removing" << stale.count << "notification(s) left by an earlier run";
+                [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:stale];
+            }
+        });
+    }];
+    d->pending.beginQuestion();
+    d->askForPermission();
+}
+
+void MacNotifier::Private::askForPermission()
+{
+    const std::shared_ptr<Shared> sharedState = shared;
     // No sound: Sugo plays its own. The first call shows the system's question; later ones
     // return what the user chose.
-    [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert
-                          completionHandler:^(BOOL granted, NSError *error) {
-                              if (error) {
-                                  qCWarning(lcMacNotifier) << "Cannot ask for notifications:"
-                                                           << QString::fromNSString(error.localizedDescription);
-                              } else if (!granted) {
-                                  qCInfo(lcMacNotifier) << "Notifications are not allowed; using the menu bar icon";
+    [[UNUserNotificationCenter currentNotificationCenter]
+        requestAuthorizationWithOptions:UNAuthorizationOptionAlert
+                      completionHandler:^(BOOL granted, NSError *error) {
+                          if (error) {
+                              qCWarning(lcMacNotifier) << "Cannot ask for notifications:"
+                                                       << QString::fromNSString(error.localizedDescription);
+                          } else if (!granted) {
+                              qCInfo(lcMacNotifier) << "Notifications are not allowed; using the menu bar icon";
+                          }
+                          dispatch_async(dispatch_get_main_queue(), ^{
+                              MacNotifier::Private *notifier = sharedState->notifier;
+                              if (!notifier) {
+                                  return;
                               }
-                          }];
+                              const QList<quint64> answered = notifier->pending.endQuestion();
+                              for (const quint64 ticket : answered) {
+                                  notifier->deliver(ticket, granted);
+                              }
+                          });
+                      }];
 }
 
 MacNotifier::~MacNotifier()
@@ -166,12 +210,27 @@ MacNotifier::~MacNotifier()
     if (center.delegate == d->delegate) {
         center.delegate = nil;
     }
+    // Sugo is quitting: its banners would stay in the Notification Center with buttons and a
+    // reply field that reach nothing (a click would start Sugo again in the background, which
+    // knows nothing of them). They go with it.
+    [center removeAllPendingNotificationRequests];
+    [center removeAllDeliveredNotifications];
+    // Both are only sent to the notification service, which may not have them before the process
+    // ends. It answers requests in order, so an answer to one more means they arrived; the wait is
+    // bounded in case the service does not answer at all.
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *) {
+        dispatch_semaphore_signal(done);
+    }];
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC)) != 0) {
+        qCWarning(lcMacNotifier) << "The notification service did not confirm removing Sugo's notifications";
+    }
 }
 
 void MacNotifier::notify(QObject *context, const Notification &notification)
 {
-    const quint64 ticket = d->nextTicket++;
-    d->pending.insert(ticket, {context, notification});
+    // Replaces the earlier ones of `context` still waiting here, as it would on screen.
+    const quint64 ticket = d->pending.add(context, notification);
     const std::shared_ptr<Shared> shared = d->shared;
     // Read every time: the user may allow or forbid notifications in System Settings at any time.
     [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
@@ -184,16 +243,12 @@ void MacNotifier::notify(QObject *context, const Notification &notification)
             if (status == UNAuthorizationStatusAuthorized || status == UNAuthorizationStatusProvisional) {
                 notifier->deliver(ticket, true);
             } else if (status == UNAuthorizationStatusNotDetermined) {
-                // The question at start-up has not been answered yet: ask (again) and wait.
-                [[UNUserNotificationCenter currentNotificationCenter]
-                    requestAuthorizationWithOptions:UNAuthorizationOptionAlert
-                                  completionHandler:^(BOOL granted, NSError *) {
-                                      dispatch_async(dispatch_get_main_queue(), ^{
-                                          if (shared->notifier) {
-                                              shared->notifier->deliver(ticket, granted);
-                                          }
-                                      });
-                                  }];
+                // The question has not been answered yet: wait for the answer, asking again only
+                // if no question is outstanding (the one at start-up may have been dismissed).
+                notifier->pending.waitForAnswer(ticket);
+                if (notifier->pending.beginQuestion()) {
+                    notifier->askForPermission();
+                }
             } else {
                 notifier->deliver(ticket, false);
             }
@@ -203,14 +258,14 @@ void MacNotifier::notify(QObject *context, const Notification &notification)
 
 void MacNotifier::Private::deliver(quint64 ticket, bool allowed)
 {
-    const Pending item = pending.take(ticket);
-    if (!item.context) {
-        return;
+    const std::optional<MacPendingNotifications::Item> item = pending.take(ticket);
+    if (!item) {
+        return; // replaced by a newer one of its context, or its context is gone
     }
     if (allowed) {
-        post(item.context, item.notification);
+        post(item->context, item->notification);
     } else if (fallback) {
-        fallback->notify(item.context, item.notification);
+        fallback->notify(item->context, item->notification);
     }
 }
 
@@ -218,6 +273,20 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
 {
     const QList<MacNotificationMapping::ActionSpec> specs = MacNotificationMapping::actionsFor(notification);
     const QString category = MacNotificationMapping::categoryIdentifier(specs);
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    // The earlier banners of the same sender (an older phase, an older session) are replaced, as
+    // they would have expired on Linux: their handlers are forgotten, so an answer still given
+    // in one (a task note for a session long past) reaches nothing, and they leave the
+    // Notification Center.
+    const QStringList replaced = registry.takeEarlier(context);
+    if (!replaced.isEmpty()) {
+        NSMutableArray<NSString *> *identifiers = [NSMutableArray arrayWithCapacity:NSUInteger(replaced.size())];
+        for (const QString &id : replaced) {
+            [identifiers addObject:id.toNSString()];
+        }
+        [center removeDeliveredNotificationsWithIdentifiers:identifiers];
+        [center removePendingNotificationRequestsWithIdentifiers:identifiers];
+    }
     const QString requestId = registry.add(context, notification);
 
     UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
@@ -230,7 +299,6 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
     UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:requestId.toNSString()
                                                                           content:content
                                                                           trigger:nil];
-    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     const std::shared_ptr<Shared> sharedState = shared;
     void (^add)(void) = ^{
         [center addNotificationRequest:request
@@ -240,9 +308,16 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
                      }
                      const QString message = QString::fromNSString(error.localizedDescription);
                      dispatch_async(dispatch_get_main_queue(), ^{
-                         qCWarning(lcMacNotifier) << "Cannot show a notification:" << message;
-                         if (sharedState->notifier) {
-                             sharedState->notifier->registry.remove(requestId);
+                         MacNotifier::Private *notifier = sharedState->notifier;
+                         if (!notifier) {
+                             return;
+                         }
+                         // Allowed a moment ago, refused now (switched off in between, or the
+                         // system's notification service failed): the menu bar icon shows it.
+                         qCWarning(lcMacNotifier) << "Cannot show a notification; using the menu bar icon:" << message;
+                         const std::optional<MacNotificationRegistry::Unshown> unshown = notifier->registry.takeUnshown(requestId);
+                         if (unshown && notifier->fallback) {
+                             notifier->fallback->notify(unshown->context, unshown->notification);
                          }
                      });
                  }];

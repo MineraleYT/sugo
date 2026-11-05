@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QDateTime>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 #include "Localization.h"
 
 #include <memory>
 
+#include "DamagedDatabase.h"
 #include "Database.h"
 #include "PresetModel.h"
 #include "PresetPersistence.h"
@@ -108,6 +112,89 @@ private Q_SLOTS:
         QCOMPARE(p.cyclesBeforeLong, 2);
         QCOMPARE(p.options, custom.options);
         QCOMPARE(p.options.value(PresetOption::SilenceWhileWorking).typeId(), QMetaType::Bool);
+    }
+
+    void timesAndAuthorRoundTrip()
+    {
+        TimerPreset custom = makePreset(QStringLiteral("u1"), QStringLiteral("Synced"));
+        custom.createdAt = 1762250000123;
+        custom.updatedAt = 1762251234567;
+        custom.updatedBy = QStringLiteral("dev_other");
+        QVERIFY(repo->saveAll({builtinDefault(), custom}));
+
+        const QList<TimerPreset> loaded = repo->loadAll();
+        QCOMPARE(loaded.at(0).createdAt, 0);
+        QCOMPARE(loaded.at(0).updatedBy, QString());
+        QCOMPARE(loaded.at(1).createdAt, custom.createdAt);
+        QCOMPARE(loaded.at(1).updatedAt, custom.updatedAt);
+        QCOMPARE(loaded.at(1).updatedBy, custom.updatedBy);
+
+        custom.updatedAt += 1000;
+        custom.updatedBy.clear(); // edited here
+        QVERIFY(repo->saveAll({builtinDefault(), custom}));
+        QCOMPARE(repo->loadAll().at(1).updatedAt, custom.updatedAt);
+        QCOMPARE(repo->loadAll().at(1).updatedBy, QString());
+    }
+
+    void deletingLeavesATombstoneStampedNow()
+    {
+        const QDateTime now = QDateTime::fromMSecsSinceEpoch(1762300000000, QTimeZone::UTC);
+        repo->setNowProvider([now] { return now; });
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A")),
+                               makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        QVERIFY(repo->tombstones().isEmpty());
+
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        bool ok = false;
+        QCOMPARE(repo->tombstones(&ok), (QList<PresetTombstone>{{QStringLiteral("a"), now.toMSecsSinceEpoch(), QString()}}));
+        QVERIFY(ok);
+    }
+
+    void receivedTombstonesKeepTheirTimeAndDevice()
+    {
+        repo->setNowProvider([] { return QDateTime::fromMSecsSinceEpoch(1762300000000, QTimeZone::UTC); });
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A")),
+                               makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+
+        const PresetTombstone deletedThere{QStringLiteral("a"), 1762200000000, QStringLiteral("dev_other")};
+        const PresetTombstone neverSeenHere{QStringLiteral("z"), 1762100000000, QStringLiteral("dev_other")};
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))},
+                              {deletedThere, neverSeenHere,
+                               // Never stored: the built-in timer, and a timer that is still here.
+                               {PresetModel::DefaultUuid, 1762200000000, QStringLiteral("dev_other")},
+                               {QStringLiteral("b"), 1762200000000, QStringLiteral("dev_other")}}));
+
+        QCOMPARE(repo->tombstones(), (QList<PresetTombstone>{neverSeenHere, deletedThere}));
+        QCOMPARE(uuids(repo->loadAll()), (QStringList{PresetModel::DefaultUuid, QStringLiteral("b")}));
+
+        // Saving again without them keeps them.
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("b"), QStringLiteral("B"))}));
+        QCOMPARE(repo->tombstones().size(), 2);
+    }
+
+    void timerThatComesBackLosesItsTombstone()
+    {
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A"))}));
+        QVERIFY(repo->saveAll({builtinDefault()}));
+        QCOMPARE(repo->tombstones().size(), 1);
+
+        QVERIFY(repo->saveAll({builtinDefault(), makePreset(QStringLiteral("a"), QStringLiteral("A again"))}));
+        QVERIFY(repo->tombstones().isEmpty());
+    }
+
+    void oldTombstonesExpire()
+    {
+        qint64 now = 1762300000000;
+        repo->setNowProvider([&now] { return QDateTime::fromMSecsSinceEpoch(now, QTimeZone::UTC); });
+        QVERIFY(repo->saveAll({builtinDefault()},
+                              {{QStringLiteral("old"), now - PresetRepository::TombstoneLifetimeMs - 1, QString()},
+                               {QStringLiteral("recent"), now - 1000, QString()}}));
+        QCOMPARE(repo->tombstones().size(), 1);
+        QCOMPARE(repo->tombstones().at(0).uuid, QStringLiteral("recent"));
+
+        now += PresetRepository::TombstoneLifetimeMs;
+        QVERIFY(repo->saveAll({builtinDefault()}));
+        QVERIFY(repo->tombstones().isEmpty());
     }
 
     void savingAgainUpdatesInPlaceAndReorders()
@@ -262,6 +349,75 @@ private Q_SLOTS:
         QVERIFY(uuids(repo->loadAll()).contains(uuid));
     }
 
+    void savesAreAnnounced()
+    {
+        PresetModel model;
+        PresetPersistence persistence(&model, repo.get());
+        QSignalSpy saved(&persistence, &PresetPersistence::saved);
+
+        const QString uuid = model.create({{QStringLiteral("name"), QStringLiteral("Study")}});
+        QCOMPARE(saved.count(), 1);
+        model.setCurrentUuid(uuid); // the selection alone is not a change of the timers
+        QCOMPARE(saved.count(), 1);
+
+        // A merge replaces the list without modified(), then saves with the deletions it received.
+        QList<TimerPreset> merged = model.presets();
+        merged.removeIf([&uuid](const TimerPreset &p) { return p.uuid == uuid; });
+        model.setPresets(merged, uuid);
+        const PresetTombstone gone{uuid, QDateTime::currentMSecsSinceEpoch() - 1000, QStringLiteral("dev_other")};
+        QVERIFY(persistence.save({gone}));
+        QCOMPARE(saved.count(), 2);
+        QVERIFY(!uuids(repo->loadAll()).contains(uuid));
+        QCOMPARE(repo->tombstones(), QList<PresetTombstone>{gone});
+        QCOMPARE(repo->currentUuid(), PresetModel::DefaultUuid);
+
+        // A refused save is not announced.
+        QSqlQuery query(QSqlDatabase::database(db->connectionName()));
+        QVERIFY(query.exec(QStringLiteral("CREATE TEMP TRIGGER refuse BEFORE INSERT ON preset "
+                                          "BEGIN SELECT RAISE(ABORT, 'disk full'); END")));
+        model.create({{QStringLiteral("name"), QStringLiteral("Read")}});
+        QCOMPARE(saved.count(), 2);
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+    }
+
+    void retryKeepsReceivedTombstones()
+    {
+        PresetModel model;
+        PresetPersistence persistence(&model, repo.get());
+        persistence.setRetryIntervalForTesting(30);
+        const QString first = model.create({{QStringLiteral("name"), QStringLiteral("Study")}});
+        const QString second = model.create({{QStringLiteral("name"), QStringLiteral("Read")}});
+        QSqlQuery query(QSqlDatabase::database(db->connectionName()));
+        const QString refuse = QStringLiteral("CREATE TEMP TRIGGER refuse BEFORE INSERT ON preset_tombstone "
+                                              "BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+
+        // A merge deletes a timer removed elsewhere, but the database refuses: the retry
+        // stores the deletion as it was received, not one made here now.
+        const auto mergeWithout = [&model](const QString &uuid) {
+            QList<TimerPreset> merged = model.presets();
+            merged.removeIf([&uuid](const TimerPreset &p) { return p.uuid == uuid; });
+            model.setPresets(merged, model.currentUuid());
+        };
+        const PresetTombstone firstGone{first, QDateTime::currentMSecsSinceEpoch() - 100000, QStringLiteral("dev_other")};
+        QVERIFY(query.exec(refuse));
+        mergeWithout(first);
+        QVERIFY(!persistence.save({firstGone}));
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+        QTRY_VERIFY(!persistence.isSaveFailing());
+        QCOMPARE(repo->tombstones(), QList<PresetTombstone>{firstGone});
+
+        // The same when the next change of the timers saves before the retry.
+        persistence.setRetryIntervalForTesting(60 * 60 * 1000);
+        const PresetTombstone secondGone{second, QDateTime::currentMSecsSinceEpoch() - 50000, QStringLiteral("dev_other")};
+        QVERIFY(query.exec(refuse));
+        mergeWithout(second);
+        QVERIFY(!persistence.save({secondGone}));
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+        model.update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 30 * 60}});
+        QVERIFY(!persistence.isSaveFailing());
+        QCOMPARE(repo->tombstones(), (QList<PresetTombstone>{firstGone, secondGone}));
+    }
+
     void deletedPresetsStayDeletedAndSelectionFallsBack()
     {
         QString uuid;
@@ -340,6 +496,76 @@ private Q_SLOTS:
 
         model.create({{QStringLiteral("name"), QStringLiteral("Edit after failed load")}});
         QCOMPARE(uuids(repo->loadAll()), (QStringList{PresetModel::DefaultUuid, QStringLiteral("mine")}));
+    }
+    // A page that cannot be read (a bad sector, an I/O error) must fail the load, not end it early:
+    // a short list would be saved back over the database, deleting the timers it lacks and
+    // leaving tombstones that Sugo Sync spreads to the other devices.
+    void loadAllFailsWhenAPageCannotBeRead_data()
+    {
+        QTest::addColumn<QByteArray>("marker");
+        QTest::newRow("timer") << QByteArray("timer-name-0280");
+        QTest::newRow("option") << QByteArray("option-value-0280");
+    }
+
+    void loadAllFailsWhenAPageCannotBeRead()
+    {
+        QFETCH(QByteArray, marker);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            PresetRepository writer(file.connectionName());
+            QList<TimerPreset> presets{builtinDefault()};
+            for (int i = 0; i < 300; ++i) {
+                TimerPreset p = makePreset(QStringLiteral("uuid-%1").arg(i),
+                                           QStringLiteral("timer-name-%1").arg(i, 4, 10, QLatin1Char('0')));
+                p.options.insert(QStringLiteral("note"), QStringLiteral("option-value-%1").arg(i, 4, 10, QLatin1Char('0')));
+                presets.append(p);
+            }
+            QVERIFY(writer.saveAll(presets));
+            bool ok = false;
+            QCOMPARE(writer.loadAll(&ok).size(), 301);
+            QVERIFY(ok);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, marker) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        PresetRepository reader(damaged.name());
+        bool ok = true;
+        QVERIFY(reader.loadAll(&ok).isEmpty());
+        QVERIFY(!ok);
+    }
+
+    void tombstonesFailWhenAPageCannotBeRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            PresetRepository writer(file.connectionName());
+            QList<TimerPreset> presets{builtinDefault()};
+            for (int i = 0; i < 300; ++i) {
+                presets.append(makePreset(QStringLiteral("deleted-timer-%1").arg(i, 4, 10, QLatin1Char('0')), QStringLiteral("Gone")));
+            }
+            QVERIFY(writer.saveAll(presets));
+            QVERIFY(writer.saveAll({builtinDefault()}));
+            bool ok = false;
+            QCOMPARE(writer.tombstones(&ok).size(), 300);
+            QVERIFY(ok);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, QByteArray("deleted-timer-0280")) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        PresetRepository reader(damaged.name());
+        bool ok = true;
+        QVERIFY(reader.tombstones(&ok).isEmpty());
+        QVERIFY(!ok);
     }
 };
 

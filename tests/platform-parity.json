@@ -2,7 +2,7 @@
   "_comment": [
     "What every screen of Sugo offers on Linux and on macOS (tests/check_platform_parity.py, ctest tst_platform_parity).",
     "Entries come from the smoke run SUGO_SMOKE_PAGE=inventory (src/qml/components/FeatureInventory.qml), with Linux's wording.",
-    "common: on both platforms. linux / macos: on that platform only, with the reason. updateInstall: only in builds that install updates (AppImage, Sugo.app).",
+    "common: on both platforms. linux / macos: on that platform only, with the reason. updateInstall: only in builds that install updates (AppImage, the disk image's Sugo.app).",
     "macosNames: macOS wording of an entry, mapped to the Linux one.",
     "A new control on one platform only must be added here with its reason; one on both goes in common."
   ],
@@ -28,10 +28,6 @@
     "welcome/2": {
       "row: Show an icon in the menu bar": "row: Show an icon in the tray"
     },
-    "settings/advanced": {
-      "button: Show in Finder": "button: Open folder",
-      "row: Links": "row: D-Bus commands"
-    },
     "timer-page": {
       "button: Set Up…": "switch: Silence notifications while working"
     },
@@ -42,9 +38,27 @@
   "screens": {
     "timer": {
       "common": [
+        "button: Pomodoro",
+        "button: Silence notifications while working",
         "button: Skip",
         "button: Start",
+        "button: Start automatically",
         "button: Stop"
+      ]
+    },
+    "timer/menu-timers": {
+      "common": [
+        "button: Edit timers…",
+        "button: New timer",
+        "button: Pomodoro",
+        "field: Search timers"
+      ]
+    },
+    "timer/menu-start": {
+      "common": [
+        "button: All phases",
+        "button: Breaks only",
+        "button: Manual"
       ]
     },
     "timer-page": {
@@ -53,11 +67,21 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Discard",
         "button: Duplicate",
+        "button: Focus",
+        "button: General",
         "button: Icon",
         "button: Reset to Defaults",
+        "button: Save",
+        "button: Sounds",
         "button: Start",
+        "button: Sync",
         "button: The default timer cannot be deleted",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -65,8 +89,11 @@
         "field: Name",
         "field: Short break",
         "field: Work",
+        "row: Category",
+        "row: Icon",
         "row: Long break",
         "row: Long break after",
+        "row: Name",
         "row: Play a sound when a phase ends",
         "row: Short break",
         "row: Show a notification when a phase ends",
@@ -84,9 +111,17 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
         "button: Cancel",
         "button: Create Timer",
+        "button: Focus",
+        "button: General",
         "button: Icon",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -94,8 +129,11 @@
         "field: Name",
         "field: Short break",
         "field: Work",
+        "row: Category",
+        "row: Icon",
         "row: Long break",
         "row: Long break after",
+        "row: Name",
         "row: Play a sound when a phase ends",
         "row: Short break",
         "row: Show a notification when a phase ends",
@@ -120,22 +158,20 @@
         "button: Year"
       ]
     },
-    "about": {
-      "common": [
-        "button: Check for Updates",
-        "button: Project website",
-        "button: Report a bug"
-      ]
-    },
     "settings/general": {
       "common": [
+        "button: About",
+        "button: Accent color",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Sounds",
+        "button: Sync",
+        "button: Timers",
         "choice: Badge style",
         "choice: Color scheme",
+        "row: Accent color",
         "row: Badge style",
         "row: Color scheme",
         "row: Show an icon in the system tray",
@@ -156,19 +192,39 @@
         "setting: showDockBadge": "The Dock exists only on macOS."
       },
       "updateInstall": [
+        "button: Nightly",
+        "button: Stable",
         "row: Check for updates automatically",
+        "row: Update channel",
         "setting: autoCheckUpdates"
+      ]
+    },
+    "settings/timers": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: New timer",
+        "button: Pomodoro",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
       ]
     },
     "settings/sounds": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Preview",
         "button: Sounds",
+        "button: Sync",
         "button: Test",
+        "button: Timers",
         "choice: Focus sound",
         "choice: Phase sound",
         "choice: Pre-alarm sound",
@@ -185,11 +241,14 @@
     },
     "settings/focus": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Sounds",
+        "button: Sync",
+        "button: Timers",
         "row: Keep the screen awake during work sessions",
         "row: Pause timer when screen is locked",
         "row: Prompt for a task note when a work session finishes",
@@ -206,12 +265,15 @@
     },
     "settings/calendar": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Log in",
         "button: Sounds",
+        "button: Sync",
+        "button: Timers",
         "choice: Calendar service",
         "field: Server address",
         "row: Add an event to your calendar each time you finish a work session.",
@@ -222,42 +284,62 @@
         "switch: Include the task note in the event description"
       ]
     },
+    "settings/sync": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Sign in",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers",
+        "field: Device name",
+        "row: Device name",
+        "row: Session history and statistics",
+        "row: Sign in",
+        "row: Task notes",
+        "row: Your timers on all your computers"
+      ]
+    },
     "settings/advanced": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Back up…",
         "button: Calendar",
         "button: Clear history…",
-        "button: Copy command",
         "button: Copy to Clipboard",
-        "button: Export Diagnostics…",
-        "button: Export…",
         "button: Focus",
         "button: General",
-        "button: Open folder",
         "button: Reset Settings…",
         "button: Restore…",
-        "button: Show the Welcome Tour",
         "button: Sounds",
-        "button: View Report…",
+        "button: Sync",
+        "button: Timers",
         "choice: Sessions to remove",
         "row: Allow other programs to control the timer",
         "row: Backup and restore",
-        "row: D-Bus commands",
-        "row: Database",
         "row: Diagnostic report",
-        "row: Export history",
         "row: Reset settings",
         "row: Session history",
-        "row: Verbose logging",
-        "row: Welcome tour",
-        "setting: allowExternalControl",
-        "setting: verboseLogging"
-      ],
-      "updateInstall": [
-        "button: Nightly",
-        "button: Stable",
-        "row: Update channel"
+        "setting: allowExternalControl"
+      ]
+    },
+    "settings/about": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Check for Updates",
+        "button: Focus",
+        "button: General",
+        "button: Project website",
+        "button: Report a bug",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
       ]
     },
     "welcome/0": {
@@ -297,18 +379,24 @@
     "welcome/3": {
       "common": [
         "button: Back",
-        "button: Start"
+        "button: Done",
+        "button: Pomodoro",
+        "button: Silence notifications while working",
+        "button: Skip",
+        "button: Start",
+        "button: Start automatically",
+        "button: Stop"
       ]
     },
     "search": {
       "common": [
         "command: About",
-        "command: Focus (shortcut)",
-        "command: New timer (shortcut)",
-        "command: Pomodoro (shortcut)",
-        "command: Settings (shortcut)",
-        "command: Start the timer (shortcut)",
-        "command: Statistics (shortcut)"
+        "command: Focus",
+        "command: New timer",
+        "command: Pomodoro",
+        "command: Settings",
+        "command: Start the timer",
+        "command: Statistics"
       ]
     }
   },

@@ -2,8 +2,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QScopeGuard>
+#include <QSet>
 #include <QSignalSpy>
-#include <QStandardPaths>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +28,7 @@ struct FakeState {
     bool supported = true;
     bool enabled = false;
     bool failNext = false;
+    bool temporaryLocation = false;
     int setCalls = 0;
     int repairCalls = 0;
 };
@@ -50,9 +54,68 @@ public:
         return true;
     }
     void repair() override { ++m_state->repairCalls; }
+    bool runsFromTemporaryLocation() const override { return m_state->temporaryLocation; }
+
+    /// As when the Background portal's dialog answers after setEnabled() gave up waiting.
+    void changeLater(bool enabled)
+    {
+        m_state->enabled = enabled;
+        notifyChanged();
+    }
 
 private:
     std::shared_ptr<FakeState> m_state;
+};
+
+/// Stand-ins for pw-play and paplay, first on PATH while the object lives. Each call is logged
+/// as "<program> <file name>". Both fail at once (exit 1) on a file whose name contains "bad";
+/// after setNoPipeWire(), pw-play fails on every file, as where no PipeWire daemon runs.
+class FakeAlertPlayers
+{
+public:
+    FakeAlertPlayers()
+        : m_oldPath(qgetenv("PATH"))
+    {
+        for (const char *name : {"pw-play", "paplay"}) {
+            QFile file(m_dir.filePath(QLatin1String(name)));
+            if (!file.open(QIODevice::WriteOnly)) {
+                return;
+            }
+            file.write(R"SH(#!/bin/sh
+dir=$(dirname "$0")
+name=$(basename "$0")
+for last; do :; done
+echo "$name $(basename "$last")" >> "$dir/calls.log"
+case "$last" in *bad*) echo "$name: cannot decode $last" >&2; exit 1 ;; esac
+[ "$name" = pw-play ] && [ -f "$dir/no-pipewire" ] && { echo "pw-play: cannot connect" >&2; exit 1; }
+exit 0
+)SH");
+            file.close();
+            file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        }
+        qputenv("PATH", QByteArray(m_dir.path().toLocal8Bit() + ':' + m_oldPath));
+    }
+    ~FakeAlertPlayers() { qputenv("PATH", m_oldPath); }
+    FakeAlertPlayers(const FakeAlertPlayers &) = delete;
+    FakeAlertPlayers &operator=(const FakeAlertPlayers &) = delete;
+
+    bool isValid() const { return m_dir.isValid() && QFileInfo(m_dir.filePath(QStringLiteral("paplay"))).isExecutable(); }
+    void setNoPipeWire()
+    {
+        QFile file(m_dir.filePath(QStringLiteral("no-pipewire")));
+        (void)file.open(QIODevice::WriteOnly);
+    }
+    /// A sound file's path (the fakes never read it).
+    QString file(const char *name) const { return m_dir.filePath(QLatin1String(name)); }
+    QStringList calls() const
+    {
+        QFile log(m_dir.filePath(QStringLiteral("calls.log")));
+        return log.open(QIODevice::ReadOnly) ? QString::fromUtf8(log.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts) : QStringList();
+    }
+
+private:
+    QTemporaryDir m_dir;
+    QByteArray m_oldPath;
 };
 } // namespace
 
@@ -63,13 +126,15 @@ class AppSettingsTest : public QObject
 private:
     QTemporaryDir dir;
     std::shared_ptr<FakeState> state;
+    FakeAutostart *autostart = nullptr; // owned by the last AppSettings made
 
     QString configPath() const { return dir.filePath(QStringLiteral("settings.conf")); }
 
     std::unique_ptr<AppSettings> make(bool trayAvailable = true)
     {
-        return std::make_unique<AppSettings>(Settings::open(configPath()),
-                                             std::make_unique<FakeAutostart>(state), trayAvailable);
+        auto fake = std::make_unique<FakeAutostart>(state);
+        autostart = fake.get();
+        return std::make_unique<AppSettings>(Settings::open(configPath()), std::move(fake), trayAvailable);
     }
 
     // Reads the file directly, not through the object under test.
@@ -84,6 +149,9 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
+        // A developer's exported SUGO_DATA_DIR would turn off the login-entry repair these tests
+        // count; the test that needs the variable sets it itself.
+        qunsetenv("SUGO_DATA_DIR");
     }
 
     void init()
@@ -377,6 +445,60 @@ private Q_SLOTS:
         QCOMPARE(changed.count(), 1);        // announced, so a checkbox shows the real state again
     }
 
+    // Opened from the disk image: a message that says what to do, not a generic failure.
+    void enablingFromATemporaryLocationSaysToMoveTheApp()
+    {
+        const auto settings = make();
+        QSignalSpy failed(settings.get(), &AppSettings::autostartFailed);
+        state->temporaryLocation = true;
+
+        settings->setStartAtLogin(true);
+
+        QCOMPARE(state->setCalls, 0);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(failed.first().first().toString().contains(QStringLiteral("Applications folder")));
+
+        // Turning off an entry made by the installed copy still works from there.
+        state->enabled = true;
+        settings->setStartAtLogin(false);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+    }
+
+    // The portal's dialog answered after setStartAtLogin() reported a failure.
+    void aChangeMadeLaterIsAnnounced()
+    {
+        const auto settings = make();
+        QSignalSpy changed(settings.get(), &AppSettings::startAtLoginChanged);
+        QSignalSpy failed(settings.get(), &AppSettings::autostartFailed);
+
+        autostart->changeLater(true);
+        QVERIFY(settings->startAtLogin());
+        QCOMPARE(changed.count(), 1);
+
+        // Switched off later: "Start minimized" goes with it, as when switched off from here.
+        settings->setStartMinimized(true);
+        autostart->changeLater(false);
+        QVERIFY(!settings->startAtLogin());
+        QVERIFY(!settings->startMinimized());
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(failed.count(), 0);
+    }
+
+    // The welcome tour clears its message on startAtLoginChanged: the failure must come after it.
+    void theFailureIsAnnouncedAfterTheStateChange()
+    {
+        QStringList order;
+        const auto settings = make();
+        connect(settings.get(), &AppSettings::startAtLoginChanged, this, [&order] { order << QStringLiteral("changed"); });
+        connect(settings.get(), &AppSettings::autostartFailed, this, [&order] { order << QStringLiteral("failed"); });
+
+        state->failNext = true;
+        settings->setStartAtLogin(true);
+        QCOMPARE(order, QStringList({QStringLiteral("changed"), QStringLiteral("failed")}));
+    }
+
     void aStaleEntryIsRepairedAtStartup()
     {
         make();
@@ -465,6 +587,7 @@ private Q_SLOTS:
             config.setValue(QStringLiteral("FocusSoundMode"), 99);
             config.setValue(QStringLiteral("SoundVolume"), 500);
             config.setValue(QStringLiteral("ColorScheme"), QStringLiteral("purple"));
+            config.setValue(QStringLiteral("AccentColor"), QStringLiteral("purple"));
             config.sync();
         }
         {
@@ -473,6 +596,7 @@ private Q_SLOTS:
             QCOMPARE(settings->focusSoundMode(), 6);
             QCOMPARE(settings->soundVolume(), 100);
             QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
         } // releases the shared config, so the next one rereads the file
 
         {
@@ -480,12 +604,64 @@ private Q_SLOTS:
             config.setValue(QStringLiteral("TrayBadgeStyle"), -1);
             config.setValue(QStringLiteral("FocusSoundMode"), -4);
             config.setValue(QStringLiteral("SoundVolume"), -3);
+            config.setValue(QStringLiteral("AccentColor"), 7);
             config.sync();
         }
         const auto reloaded = make();
         QCOMPARE(reloaded->trayBadgeStyle(), 0);
         QCOMPARE(reloaded->focusSoundMode(), 0);
         QCOMPARE(reloaded->soundVolume(), 0);
+        QCOMPARE(reloaded->accentColor(), QStringLiteral("red"));
+    }
+
+    void emptyOrNonNumericValuesUseTheDefaults()
+    {
+        // A hand-edited or half-written file: such a value must not read as 0 (muting the alerts).
+        // A file of its own: QSettings keeps the parse of a path it has seen before when the
+        // file's size and time stamp have not changed, which a test writing the same path at
+        // once can hit (seen on macOS).
+        const QString path = dir.filePath(QStringLiteral("hand-edited.conf"));
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write("[General]\nSoundVolume=\nFocusSoundVolume=loud\nTrayBadgeStyle=two\nFocusSoundMode=\n");
+        }
+        const auto settings = std::make_unique<AppSettings>(Settings::open(path), std::make_unique<FakeAutostart>(state), true);
+        QCOMPARE(settings->soundVolume(), 80);
+        QCOMPARE(settings->focusSoundVolume(), 30);
+        QCOMPARE(settings->trayBadgeStyle(), 0);
+        QCOMPARE(settings->focusSoundMode(), 0);
+    }
+
+    void aFailedSaveIsLoggedOnce()
+    {
+        QTemporaryDir parent;
+        QVERIFY(parent.isValid());
+        const QString folder = parent.filePath(QStringLiteral("read-only"));
+        QVERIFY(QDir().mkpath(folder));
+        QVERIFY(QFile::setPermissions(folder, QFile::ReadOwner | QFile::ExeOwner));
+        const auto restore = qScopeGuard([&folder]() {
+            QFile::setPermissions(folder, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        });
+        {
+            // Root (some containers) writes anywhere: nothing to test there.
+            QFile probe(folder + QStringLiteral("/probe"));
+            if (probe.open(QIODevice::WriteOnly)) {
+                probe.remove();
+                QSKIP("The read-only folder can be written to (running as root?)");
+            }
+        }
+
+        const Settings::Ptr settings = Settings::open(folder + QStringLiteral("/sugo.conf"));
+        settings->setValue(QStringLiteral("SoundVolume"), 7);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot save the settings to .*sugo\\.conf")));
+        Settings::sync(*settings);
+        QVERIFY(settings->status() != QSettings::NoError);
+
+        // The next change fails the same way, without a second message.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("^Cannot save the settings")));
+        settings->setValue(QStringLiteral("SoundVolume"), 8);
+        Settings::sync(*settings);
     }
 
     void colorSchemeDefaultsToSystemAndPersists()
@@ -504,6 +680,63 @@ private Q_SLOTS:
         }
         QCOMPARE(stored("ColorScheme"), QStringLiteral("dark"));
         QCOMPARE(make()->colorScheme(), QStringLiteral("dark"));
+    }
+
+    void accentColorDefaultsToRedAndPersists()
+    {
+        {
+            const auto settings = make();
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
+            QCOMPARE(stored("AccentColor"), missing()); // the default is not written out
+            QSignalSpy spy(settings.get(), &AppSettings::accentColorChanged);
+            settings->setAccentColor(QStringLiteral("teal"));
+            QCOMPARE(settings->accentColor(), QStringLiteral("teal"));
+            QCOMPARE(spy.count(), 1);
+            settings->setAccentColor(QStringLiteral("teal"));
+            QCOMPARE(spy.count(), 1);
+            settings->setAccentColor(QStringLiteral(" Violet ")); // like the stored scheme: trimmed, any case
+            QCOMPARE(settings->accentColor(), QStringLiteral("violet"));
+            QCOMPARE(spy.count(), 2);
+            settings->setAccentColor(QStringLiteral("purple")); // not an accent: the default
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
+            QCOMPARE(spy.count(), 3);
+            settings->setAccentColor(QString());
+            QCOMPARE(spy.count(), 3);
+            settings->setAccentColor(QStringLiteral("blue"));
+            QCOMPARE(spy.count(), 4);
+        }
+        QCOMPARE(stored("AccentColor"), QStringLiteral("blue"));
+        QCOMPARE(make()->accentColor(), QStringLiteral("blue"));
+    }
+
+    void everyAccentColorHasAName()
+    {
+        QSet<QString> names;
+        for (const QString &id : AppSettings::accentColors()) {
+            const QString name = AppSettings::accentColorName(id);
+            QVERIFY2(!name.isEmpty() && name != id, qPrintable(id));
+            names.insert(name);
+        }
+        QCOMPARE(names.size(), AppSettings::accentColors().size());
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("red")), QStringLiteral("Red"));
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("purple")), QStringLiteral("purple"));
+    }
+
+    void everyAccentColorIsKept()
+    {
+        const QStringList ids = AppSettings::accentColors();
+        QCOMPARE(ids,
+                 QStringList({QStringLiteral("red"), QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("lime"),
+                              QStringLiteral("green"), QStringLiteral("teal"), QStringLiteral("cyan"), QStringLiteral("blue"),
+                              QStringLiteral("violet"), QStringLiteral("pink")}));
+        for (const QString &id : ids) {
+            {
+                const auto settings = make();
+                settings->setAccentColor(id);
+                QCOMPARE(settings->accentColor(), id);
+            }
+            QCOMPARE(make()->accentColor(), id);
+        }
     }
 
     void updatesDefaultToStableAndAutomatic()
@@ -575,6 +808,7 @@ private Q_SLOTS:
         settings->setFirstRunCompleted(true);
         settings->setPromptTaskNote(false);
         settings->setColorScheme(QStringLiteral("light"));
+        settings->setAccentColor(QStringLiteral("cyan"));
         settings->setUpdateChannel(QStringLiteral("nightly"));
         settings->setAutoCheckUpdates(false);
         settings->setVerboseLogging(true);
@@ -584,6 +818,7 @@ private Q_SLOTS:
         QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
         QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
         QSignalSpy scheme(settings.get(), &AppSettings::colorSchemeChanged);
+        QSignalSpy accent(settings.get(), &AppSettings::accentColorChanged);
         QSignalSpy verbose(settings.get(), &AppSettings::verboseLoggingChanged);
         QSignalSpy channel(settings.get(), &AppSettings::updateChannelChanged);
         QSignalSpy firstRun(settings.get(), &AppSettings::firstRunCompletedChanged);
@@ -609,6 +844,7 @@ private Q_SLOTS:
         QVERIFY(settings->protectWeekendStreak());
         QVERIFY(settings->promptTaskNote());
         QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
+        QCOMPARE(settings->accentColor(), QStringLiteral("red"));
         QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
         QVERIFY(settings->autoCheckUpdates());
         QVERIFY(!settings->verboseLogging());
@@ -617,6 +853,7 @@ private Q_SLOTS:
         QCOMPARE(trayIcon.count(), 1);
         QCOMPARE(volume.count(), 1);
         QCOMPARE(scheme.count(), 1);
+        QCOMPARE(accent.count(), 1);
         QCOMPARE(verbose.count(), 1);
         QCOMPARE(channel.count(), 1);
         // ... and what is not a preference of this class stays.
@@ -631,6 +868,7 @@ private Q_SLOTS:
         QCOMPARE(stored("SoundVolume"), QStringLiteral("80"));
         QCOMPARE(stored("SoundTheme"), QStringLiteral("alarm-clock-elapsed"));
         QCOMPARE(stored("ColorScheme"), QStringLiteral("system"));
+        QCOMPARE(stored("AccentColor"), QStringLiteral("red"));
         QCOMPARE(stored("UpdateChannel"), QStringLiteral("stable"));
         QCOMPARE(stored("VerboseLogging"), QStringLiteral("false"));
         QCOMPARE(stored("FirstRunCompleted"), QStringLiteral("true"));
@@ -638,6 +876,7 @@ private Q_SLOTS:
         const auto reloaded = make();
         QCOMPARE(reloaded->soundVolume(), 80);
         QCOMPARE(reloaded->colorScheme(), QStringLiteral("system"));
+        QCOMPARE(reloaded->accentColor(), QStringLiteral("red"));
         QVERIFY(reloaded->showTrayIcon());
         QVERIFY(!reloaded->verboseLogging());
 
@@ -646,6 +885,7 @@ private Q_SLOTS:
         QCOMPARE(trayIcon.count(), 1);
         QCOMPARE(volume.count(), 1);
         QCOMPARE(scheme.count(), 1);
+        QCOMPARE(accent.count(), 1);
     }
 
     void trayAvailabilityChangesUpdateDependentProperties()
@@ -673,8 +913,13 @@ private Q_SLOTS:
 
     void defaultSettingsAreSharedAndPrivate()
     {
-        QStandardPaths::setTestModeEnabled(true);
-        QFile::remove(Settings::defaultPath());
+        // The default file in a directory of its own: never the user's real settings, and
+        // nothing left behind in ~/.qttest.
+        QTemporaryDir dataDir;
+        QVERIFY(dataDir.isValid());
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dataDir.path()));
+        const auto unset = qScopeGuard([] { qunsetenv("SUGO_DATA_DIR"); });
+        QCOMPARE(Settings::defaultPath(), dataDir.filePath(QStringLiteral("sugo.conf")));
         QVERIFY(QDir().mkpath(QFileInfo(Settings::defaultPath()).absolutePath()));
         {
             const Settings::Ptr settings = Settings::openDefault();
@@ -684,9 +929,40 @@ private Q_SLOTS:
         }
         QCOMPARE(QFile::permissions(Settings::defaultPath()) & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions());
         QCOMPARE(Settings::openDefault()->value(QStringLiteral("SoundVolume")).toInt(), 7);
+    }
 
-        QFile::remove(Settings::defaultPath());
-        QStandardPaths::setTestModeEnabled(false);
+    void syncKeepsANewFilePrivate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QFile::Permissions others = QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther;
+
+        // A new file, in a folder that does not exist yet.
+        const QString path = dir.filePath(QStringLiteral("sugo/sugo.conf"));
+        {
+            const Settings::Ptr settings = Settings::open(path);
+            settings->setValue(QStringLiteral("SoundVolume"), 7);
+            Settings::sync(*settings);
+        }
+        QVERIFY(QFileInfo::exists(path));
+        QCOMPARE(QFile::permissions(path) & others, QFile::Permissions());
+        QVERIFY(QFile::permissions(path) & QFile::ReadOwner);
+        QCOMPARE(Settings::open(path)->value(QStringLiteral("SoundVolume")).toInt(), 7);
+
+        // An existing file readable by others is made private.
+        const QString shared = dir.filePath(QStringLiteral("shared.conf"));
+        {
+            QFile file(shared);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        QVERIFY(QFile::setPermissions(shared, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther));
+        {
+            const Settings::Ptr settings = Settings::open(shared);
+            settings->setValue(QStringLiteral("SoundVolume"), 9);
+            Settings::sync(*settings);
+        }
+        QCOMPARE(QFile::permissions(shared) & others, QFile::Permissions());
+        QCOMPARE(Settings::open(shared)->value(QStringLiteral("SoundVolume")).toInt(), 9);
     }
 
     void dataDirVariableReplacesDefaultLocation()
@@ -731,10 +1007,24 @@ private Q_SLOTS:
 
     void canberraGetsTheSoundNameAsOneOptionValue()
     {
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete")), QStringList{QStringLiteral("--id=complete")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 100),
+                 (QStringList{QStringLiteral("--id=complete"), QStringLiteral("--volume=0")}));
         // A name read from the configuration that looks like an option stays a value.
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd")),
-                 QStringList{QStringLiteral("--id=--file=/etc/passwd")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd"), 100).constFirst(),
+                 QStringLiteral("--id=--file=/etc/passwd"));
+    }
+
+    void canberraGetsTheVolumeInDecibels()
+    {
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 50).constLast(), QStringLiteral("--volume=-6"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 10).constLast(), QStringLiteral("--volume=-20"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 1).constLast(), QStringLiteral("--volume=-40"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 150).constLast(), QStringLiteral("--volume=0"));
+        // No decimal separator, which strtod would read by the user's locale.
+        for (int volume = 1; volume <= 100; ++volume) {
+            const QString argument = AppSettings::canberraArguments(QStringLiteral("complete"), volume).constLast();
+            QVERIFY2(!argument.contains(QLatin1Char('.')) && !argument.contains(QLatin1Char(',')), qPrintable(argument));
+        }
     }
 
     void alertSoundsFadeInAndOut()
@@ -795,6 +1085,44 @@ private Q_SLOTS:
             QVERIFY2(!file.isEmpty(), name);
             QVERIFY2(QFileInfo::exists(file + QStringLiteral(".license")), name);
         }
+    }
+
+    // The two tests below share the remembered unusable players (process-wide): this one, first,
+    // leaves none behind, as nothing in it fails to start or fails where the other one plays.
+    void aFileNoPlayerCanPlayDoesNotSilenceTheNextAlert()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and paplay are the Linux players; macOS uses afplay");
+#endif
+        FakeAlertPlayers players;
+        QVERIFY(players.isValid());
+        // Both players fail on a broken file: each is tried, for that file only.
+        AppSettings::playWithPlayerProgram(players.file("bad.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(), (QStringList{QStringLiteral("pw-play bad.oga"), QStringLiteral("paplay bad.oga")}), 3000);
+        // pw-play is not given up on: it plays the next, good file.
+        AppSettings::playWithPlayerProgram(players.file("bell.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(),
+                                  (QStringList{QStringLiteral("pw-play bad.oga"), QStringLiteral("paplay bad.oga"), QStringLiteral("pw-play bell.oga")}), 3000);
+        QTest::qWait(300); // and nothing else is started for it
+        QCOMPARE(players.calls().size(), 3);
+    }
+
+    void anAlertPlayerThatCannotPlayHereGivesWayToTheNext()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and paplay are the Linux players; macOS uses afplay");
+#endif
+        // pw-play is installed but exits at once with an error (no PipeWire daemon): paplay
+        // plays the sound instead.
+        FakeAlertPlayers players;
+        QVERIFY(players.isValid());
+        players.setNoPipeWire();
+        AppSettings::playWithPlayerProgram(players.file("bell.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(), (QStringList{QStringLiteral("pw-play bell.oga"), QStringLiteral("paplay bell.oga")}), 3000);
+        // paplay played what pw-play could not: the next alert goes straight to paplay.
+        AppSettings::playWithPlayerProgram(players.file("complete.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(),
+                                  (QStringList{QStringLiteral("pw-play bell.oga"), QStringLiteral("paplay bell.oga"), QStringLiteral("paplay complete.oga")}), 3000);
     }
 
     void afplayGetsOnlyFormatsItReads()

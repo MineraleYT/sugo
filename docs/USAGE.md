@@ -39,29 +39,29 @@ Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three
 
 One file that runs on any recent x86_64 Linux and keeps itself up to date (the recommended package on Linux):
 
-1. Download [Sugo-x86_64.AppImage](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-x86_64.AppImage).
+1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
 2. Make it executable and start it:
    ```sh
-   chmod +x Sugo-x86_64.AppImage
-   ./Sugo-x86_64.AppImage
+   chmod +x Sugo-*-x86_64.AppImage
+   ./Sugo-*-x86_64.AppImage
    ```
 
 Keep the file in a folder you can write to (for example `~/Applications`): Sugo puts its updates in place of it. If AppImageLauncher is installed, starting the AppImage makes it offer to move the file there and add Sugo to the application menu. How updates work is described in [Updates and diagnostics](#updates-and-diagnostics).
 
 ### Flatpak
 
-The Flatpak bundle is attached to each release as `sugo-v<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
+The Flatpak bundle is attached to each release as `Sugo-<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
 
-1. Download `sugo-v*-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
 2. Install it for your user, then start Sugo from the application menu, or with:
    ```sh
-   flatpak install --user ./sugo-v*-x86_64.flatpak
+   flatpak install --user ./Sugo-*-x86_64.flatpak
    flatpak run io.github.mineraleyt.sugo
    ```
 
 The first install also downloads the KDE runtime from Flathub, if it is not installed yet.
 
-- **Updating:** the Flatpak does not update itself. **About → Check for Updates** tells you when a new release is out: download its bundle and install it the same way, over the old one. Your timers, statistics and settings are kept.
+- **Updating:** the Flatpak does not update itself. **Settings → About → Check for Updates** tells you when a new release is out: download its bundle and install it the same way, over the old one. Your timers, statistics and settings are kept.
 - **Removing:** `flatpak uninstall --user io.github.mineraleyt.sugo` removes the app; add `--delete-data` to remove your data too.
 - **Permissions:** the sandbox has network access (for the update check and calendar sync), the notification and screen-saver services (to silence notifications and keep the screen awake), the system tray, and audio. *Start at login* goes through the desktop's background portal, which may ask for your permission the first time.
 - **Your data** lives under `~/.var/app/io.github.mineraleyt.sugo/` instead of the usual folders (see [Data, backup and privacy](#data-backup-and-privacy)).
@@ -70,7 +70,7 @@ The first install also downloads the KDE runtime from Flathub, if it is not inst
 
 One app for both Apple Silicon and Intel Macs, for **macOS 13 Ventura or later**:
 
-1. Download [Sugo-macOS-universal.dmg](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg), open it and drag **Sugo** to **Applications**.
+1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
 2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
    - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
    - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
@@ -92,13 +92,13 @@ Sugo can also be built from source on Linux and macOS: dependencies for the comm
 
 The first time you open Sugo, a short animated tour shows how timers work and sets up a few things: the tray icon (the menu bar icon on macOS), starting at login and, on macOS, the shortcuts that silence notifications while you work. Everything it sets can be changed later in **Settings**.
 
-Then pick a timer in the sidebar and press **Start**. That is all there is to it: Sugo counts down the work phase, tells you when to take a break, and records the session in your [statistics](#statistics).
+The window has three tabs at the top: **Focus** (the timer), **Statistics** and **Settings**; the search button next to them (`Ctrl` + `K`) finds pages, timers and commands. To pick a timer, click its name under the controls on the Focus tab, or search for it, then press **Start**. That is all there is to it: Sugo counts down the work phase, tells you when to take a break, and records the session in your [statistics](#statistics).
 
 ---
 
 ## Timers
 
-A *timer* (preset) bundles the durations of a work phase, a short break and a long break, how many work sessions come before a long break, and a few options. Sugo starts with one timer, **Pomodoro** (25/5, a 15-minute break after four sessions), which silences desktop notifications while you work; edit it, or add timers of your own with **New timer** in the sidebar.
+A *timer* (preset) bundles the durations of a work phase, a short break and a long break, how many work sessions come before a long break, and a few options. Sugo starts with one timer, **Pomodoro** (25/5, a 15-minute break after four sessions), which silences desktop notifications while you work; edit it, or add timers of your own with **New timer** (in the list of timers on the Focus tab, in **Settings → Timers**, or in the search). **Settings → Timers** lists every timer, grouped by category: click one to open its page, change it and press **Save** at the top.
 
 - **Name, category and icon** appear in the timer list, the tray menu and the statistics. The category is also used as the label of the phase chip while you work.
 - **Auto-start** decides what happens when a phase ends: *Manual* (nothing starts by itself), *Breaks only*, or *All phases*.
@@ -153,7 +153,7 @@ On macOS, use `⌘` (Command) wherever this table says `Ctrl`.
 |:---|:---|
 | `Space` | Start or pause the timer (on the Focus page, when nothing else has the focus) |
 | `S` | Skip to the next phase (on the Focus page, while a phase runs) |
-| `Ctrl` + `1` … `4` | Go to Focus, Statistics, Settings, About |
+| `Ctrl` + `1` … `4` | Go to Focus, Statistics, Settings, Settings → About |
 | `Ctrl` + `K` | Search pages, timers and commands |
 | `Ctrl` + `N` | New timer |
 | `Ctrl` + `,` | Open Settings |
@@ -297,7 +297,7 @@ As over D-Bus, choosing another timer is refused while a phase is running or pau
 
 Inside the Flatpak the Linux files live under `~/.var/app/io.github.mineraleyt.sugo/`.
 
-**Settings → Data management** can **back up** the database to a file, **restore** a backup (including backups made by older versions), and **clear the session history**. Restoring replaces your current timers and sessions, and is not possible while a timer is running. If the database file is damaged, Sugo moves it aside (`sugo.db.corrupt-…`) and starts a new one.
+**Settings → Advanced → Data management** can **back up** the database to a file, **restore** a backup (including backups made by older versions), and **clear the session history**. Restoring replaces your current timers and sessions, and is not possible while a timer is running. If the database file is damaged, Sugo moves it aside (`sugo.db.corrupt-…`) and starts a new one.
 
 **What leaves your computer.** Nothing about you:
 
@@ -310,8 +310,8 @@ There is no telemetry.
 
 ## Updates and diagnostics
 
-- **The AppImage and the macOS app update themselves, when you say so.** A minute after Sugo starts, and every six hours, it looks for a newer version on its channel; when there is one, the sidebar shows **Install update**. Nothing is downloaded before you click it. Sugo then downloads the new version (the AppImage next to itself, the macOS app its disk image), checks that the file is complete and intact (its size and SHA-256 checksum), and only then prepares it. The sidebar then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo (on macOS, quitting also puts it in place). A failed or damaged download changes nothing. This needs the AppImage or the app to be in a folder you can write to; otherwise Sugo only tells you that a new release is out.
-- **Settings → General → Updates** (AppImage and macOS app) has **Check for updates automatically**: turn it off and Sugo only looks when you ask, with **About → Check for Updates**.
-- **Settings → Advanced → Pre-release builds** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/MineraleYT/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
-- **About → Check for Updates** tells you whether a newer version exists; the AppImage and the macOS app can install it from there, the other packages link to the release (a Flatpak or a distribution's package is updated the way it was installed). A successful check with nothing new shows a green check on the button for a few seconds.
-- **Settings → Advanced → Troubleshooting & Diagnostics** can copy or export a report with the version, your environment and the latest log lines. Your home directory, user name, passwords and addresses with credentials are replaced with placeholders. Attach it to a bug report.
+- **The AppImage and the macOS app update themselves, when you say so.** A minute after Sugo starts, and every six hours, it looks for a newer version on its channel; when there is one, the title bar shows **Install update** (only its icon in a narrow window). Nothing is downloaded before you click it. Sugo then downloads the new version (the AppImage next to itself, the macOS app its disk image), checks that the file is complete and intact (its size and SHA-256 checksum), and only then prepares it. The same button then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo (on macOS, quitting also puts it in place). A failed or damaged download changes nothing. This needs the AppImage or the app to be in a folder you can write to; otherwise Sugo only tells you that a new release is out.
+- **Settings → General → Updates** (AppImage and macOS app) has **Check for updates automatically**: turn it off and Sugo only looks when you ask, with **Settings → About → Check for Updates**.
+- **Settings → General → Updates → Update channel** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/MineraleYT/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
+- **Settings → About → Check for Updates** tells you whether a newer version exists; the AppImage and the macOS app can install it from there, the other packages link to the release (a Flatpak or a distribution's package is updated the way it was installed). A successful check with nothing new shows a green check on the button for a few seconds.
+- **Settings → Advanced → Troubleshooting & Diagnostics** copies a report with the version, your environment and the latest log lines. Your home directory, user name, passwords and addresses with credentials are replaced with placeholders. Attach it to a bug report.

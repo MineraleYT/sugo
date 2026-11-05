@@ -129,6 +129,167 @@ private Q_SLOTS:
         registry.remove(b);
         QCOMPARE(registry.size(), 1);
     }
+
+    void aNewNotificationReplacesTheEarlierOnesOfItsContext()
+    {
+        MacNotificationRegistry registry;
+        QObject phases;
+        QObject other;
+        QStringList ran;
+        Notifier::Notification n;
+        Notifier::Reply reply;
+        reply.replied = [&ran](const QString &text) { ran << text; };
+        n.reply = reply;
+        auto *gone = new QObject;
+
+        const QString oldSession = registry.add(&phases, n);
+        const QString otherContext = registry.add(&other, n);
+        const QString orphan = registry.add(gone, n);
+        delete gone;
+
+        // The next phase notification: the earlier one of the same context (and the one whose
+        // context is gone) go, so their banners can be taken out of the Notification Center.
+        const QStringList replaced = registry.takeEarlier(&phases);
+        QCOMPARE(replaced.size(), 2);
+        QVERIFY(replaced.contains(oldSession));
+        QVERIFY(replaced.contains(orphan));
+        QVERIFY(!registry.contains(oldSession));
+        QVERIFY(!registry.contains(orphan));
+        QVERIFY(registry.contains(otherContext));
+        const QString newSession = registry.add(&phases, n);
+
+        // A reply still typed into the old banner reaches nothing.
+        QVERIFY(!registry.respond(oldSession, replyActionId(), QStringLiteral("stale")));
+        QVERIFY(registry.respond(newSession, replyActionId(), QStringLiteral("fresh")));
+        QCOMPARE(ran, QStringList{QStringLiteral("fresh")});
+        QVERIFY(registry.takeEarlier(&phases).isEmpty());
+    }
+
+    void anUnshownRequestIsHandedBackWhole()
+    {
+        MacNotificationRegistry registry;
+        QObject context;
+        QStringList ran;
+        Notifier::Notification n = withActions({QStringLiteral("Start")}, true);
+        n.text = QStringLiteral("Break is over");
+        n.defaultAction = [&ran](const QString &) { ran << QStringLiteral("default"); };
+        n.reply->replied = [&ran](const QString &text) { ran << QStringLiteral("reply:") + text; };
+        const QString id = registry.add(&context, n);
+
+        const std::optional<MacNotificationRegistry::Unshown> unshown = registry.takeUnshown(id);
+        QVERIFY(unshown.has_value());
+        QCOMPARE(unshown->context, &context);
+        QCOMPARE(unshown->notification.title, n.title);
+        QCOMPARE(unshown->notification.text, n.text);
+        QCOMPARE(unshown->notification.actions.size(), 1);
+        QCOMPARE(unshown->notification.actions.at(0).label, QStringLiteral("Start"));
+        QVERIFY(unshown->notification.reply.has_value());
+        QCOMPARE(unshown->notification.reply->label, QStringLiteral("Log Task"));
+        // The handlers come back too, so the other notifier can run them.
+        unshown->notification.defaultAction(QString());
+        unshown->notification.reply->replied(QStringLiteral("notes"));
+        QCOMPARE(ran, (QStringList{QStringLiteral("default"), QStringLiteral("reply:notes")}));
+
+        // Forgotten: neither handed back twice nor answerable.
+        QVERIFY(!registry.contains(id));
+        QVERIFY(!registry.takeUnshown(id).has_value());
+        QVERIFY(!registry.respond(id, defaultActionId()));
+    }
+
+    void anUnshownRequestWithoutItsContextIsDropped()
+    {
+        MacNotificationRegistry registry;
+        auto *context = new QObject;
+        const QString id = registry.add(context, withActions({}, false));
+        delete context;
+        QVERIFY(!registry.takeUnshown(id).has_value());
+        QVERIFY(!registry.contains(id));
+        QVERIFY(!registry.takeUnshown(QStringLiteral("someone-else")).has_value());
+    }
+
+    void aWaitingNotificationIsReplacedByTheNextOfItsContext()
+    {
+        MacPendingNotifications pending;
+        QObject phases;
+        QObject other;
+        Notifier::Notification first = withActions({}, false);
+        first.text = QStringLiteral("first");
+        Notifier::Notification second = withActions({}, false);
+        second.text = QStringLiteral("second");
+
+        const quint64 a = pending.add(&phases, first);
+        const quint64 b = pending.add(&other, first);
+        const quint64 c = pending.add(&phases, second);
+        QVERIFY(a != c);
+        QCOMPARE(pending.size(), 2);
+
+        // The replaced one is gone: it would have been replaced on screen anyway.
+        QVERIFY(!pending.take(a).has_value());
+        const std::optional<MacPendingNotifications::Item> latest = pending.take(c);
+        QVERIFY(latest.has_value());
+        QCOMPARE(latest->context, &phases);
+        QCOMPARE(latest->notification.text, QStringLiteral("second"));
+        QVERIFY(!pending.take(c).has_value()); // taken once
+        QVERIFY(pending.take(b).has_value());
+        QCOMPARE(pending.size(), 0);
+    }
+
+    void aWaitingNotificationWithoutItsContextIsDropped()
+    {
+        MacPendingNotifications pending;
+        auto *context = new QObject;
+        const quint64 ticket = pending.add(context, withActions({}, false));
+        delete context;
+        QVERIFY(!pending.take(ticket).has_value());
+        QCOMPARE(pending.size(), 0);
+
+        // And it does not linger until then: the next notification clears it out.
+        auto *gone = new QObject;
+        pending.add(gone, withActions({}, false));
+        delete gone;
+        QObject alive;
+        pending.add(&alive, withActions({}, false));
+        QCOMPARE(pending.size(), 1);
+    }
+
+    void thePermissionIsAskedForOnceWhileUnanswered()
+    {
+        MacPendingNotifications pending;
+        QObject phases;
+        QObject sync;
+
+        // The question at start-up is outstanding: notifications only wait for its answer.
+        QVERIFY(pending.beginQuestion());
+        const quint64 work = pending.add(&phases, withActions({}, false));
+        pending.waitForAnswer(work);
+        QVERIFY(!pending.beginQuestion());
+        const quint64 approve = pending.add(&sync, withActions({}, false));
+        pending.waitForAnswer(approve);
+        QVERIFY(!pending.beginQuestion());
+        const quint64 breakOver = pending.add(&phases, withActions({}, false));
+        pending.waitForAnswer(breakOver);
+        QVERIFY(!pending.beginQuestion());
+
+        // Answered: every notification that waited, oldest first; the replaced one is already gone.
+        const QList<quint64> answered = pending.endQuestion();
+        QCOMPARE(answered, (QList<quint64>{approve, breakOver}));
+        QVERIFY(pending.take(approve).has_value());
+        QVERIFY(pending.take(breakOver).has_value());
+        QVERIFY(pending.endQuestion().isEmpty());
+
+        // A later notification that still finds the question unanswered asks again.
+        QVERIFY(pending.beginQuestion());
+    }
+
+    void anAnswerWithoutAQuestionHandsOverNothing()
+    {
+        MacPendingNotifications pending;
+        QObject context;
+        const quint64 ticket = pending.add(&context, withActions({}, false));
+        QVERIFY(pending.endQuestion().isEmpty());
+        // Not waiting for an answer: still there for whoever reads the setting.
+        QVERIFY(pending.take(ticket).has_value());
+    }
 };
 
 QTEST_MAIN(MacNotificationMappingTest)

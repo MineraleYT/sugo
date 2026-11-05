@@ -7,11 +7,14 @@
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTest>
+#include <QThread>
 #include <QTimer>
 
 #include <memory>
 
 #include "FreedesktopInhibitor.h"
+#include "InhibitorFactory.h"
+#include "PrivateDBus.h"
 
 namespace
 {
@@ -69,6 +72,60 @@ public Q_SLOTS:
         }
         active.removeAll(cookie);
     }
+};
+
+/// A notification server without Inhibit, as on desktops whose server does not offer it.
+class ServerWithoutInhibit : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.Notifications")
+
+public Q_SLOTS:
+    QStringList GetCapabilities() { return {QStringLiteral("body")}; }
+};
+
+/// Publishes a notification server from a thread of its own: the factory asks it a blocking
+/// question, which a server on the test's thread could not answer.
+class ThreadedServer
+{
+public:
+    ThreadedServer(const QString &address, std::unique_ptr<QObject> object)
+        : m_object(std::move(object))
+    {
+        m_thread.start();
+        m_object->moveToThread(&m_thread);
+        QMetaObject::invokeMethod(
+            m_object.get(),
+            [this, address] {
+                QDBusConnection bus = QDBusConnection::connectToBus(address, QStringLiteral("threaded-server"));
+                m_registered = bus.registerObject(kPath, m_object.get(), QDBusConnection::ExportAllSlots)
+                    && bus.registerService(kService);
+            },
+            Qt::BlockingQueuedConnection);
+    }
+
+    ~ThreadedServer()
+    {
+        QMetaObject::invokeMethod(
+            m_object.get(),
+            [this] {
+                QDBusConnection bus(QStringLiteral("threaded-server"));
+                bus.unregisterService(kService);
+                bus.unregisterObject(kPath);
+                QDBusConnection::disconnectFromBus(QStringLiteral("threaded-server"));
+                m_object.reset();
+            },
+            Qt::BlockingQueuedConnection);
+        m_thread.quit();
+        m_thread.wait();
+    }
+
+    bool registered() const { return m_registered; }
+
+private:
+    QThread m_thread;
+    std::unique_ptr<QObject> m_object;
+    bool m_registered = false;
 };
 } // namespace
 
@@ -235,6 +292,22 @@ private Q_SLOTS:
         QVERIFY(inhibitor->isInhibited());
     }
 
+    void aSlowInhibitIsWaitedForAndItsCookieReleased()
+    {
+        // plasmashell is busy as the focus session starts and answers only after several seconds,
+        // yet still grants the inhibition: its cookie must be kept, or nothing would ever end it.
+        server->replyDelayMs = 4000;
+        inhibitor->inhibit(QStringLiteral("focus"));
+        QTest::qWait(3500);
+        QVERIFY(inhibitor->isInhibited()); // still waiting for the answer, not given up
+        inhibitor->release();              // the session ends before the server has answered
+
+        QTRY_COMPARE_WITH_TIMEOUT(server->calls.size(), 2, 5000);
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        QVERIFY(server->active.isEmpty()); // the late cookie was handed back
+        QCOMPARE(server->calls, (QStringList{QStringLiteral("Inhibit"), QStringLiteral("UnInhibit")}));
+    }
+
     void anUnansweredUnInhibitIsSentAgain()
     {
         inhibitor->inhibit(QStringLiteral("focus"));
@@ -311,6 +384,126 @@ private Q_SLOTS:
         inhibitor->release();
         QTRY_VERIFY(!inhibitor->isInhibited());
         QVERIFY(!server->active.contains(2));
+    }
+
+    void aCookieFromTheNewServerInAStaleReplyIsReleased()
+    {
+        // Let the watcher's match rule settle first.
+        inhibitor->inhibit(QStringLiteral("focus"));
+        QTRY_COMPARE(server->active.size(), 1);
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        server->calls.clear();
+
+        // The service is taken again (here by the same connection, so the same unique name) and
+        // Sugo has not yet seen NameOwnerChanged when a work phase starts: its Inhibit (cookie 2) is
+        // answered after the owner change, and a second Inhibit follows.
+        unpublishServer();
+        publishServer();
+        inhibitor->inhibit(QStringLiteral("focus")); // before the event loop delivers the change
+        QTRY_COMPARE_WITH_TIMEOUT(server->calls.count(QStringLiteral("Inhibit")), 2, 3000);
+        QTRY_VERIFY(inhibitor->isInhibited());
+
+        // The cookie of the stale reply is handed back, so ending the phase leaves nothing held.
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY_WITH_TIMEOUT(server->active.isEmpty(), 3000);
+    }
+
+    void aRaceWithANewServerProcessLeavesNoInhibitionBehind()
+    {
+        // As above, but the new server is another process (another connection), as when
+        // plasmashell restarts. Let the inhibitor learn who serves notifications first.
+        inhibitor->inhibit(QStringLiteral("focus"));
+        QTRY_COMPARE(server->active.size(), 1);
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+
+        QDBusConnection newBus = QDBusConnection::connectToBus(address, QStringLiteral("new-server"));
+        QVERIFY(newBus.isConnected());
+        FakeNotificationServer newServer;
+        unpublishServer();
+        QVERIFY(newBus.registerObject(kPath, &newServer, QDBusConnection::ExportAllSlots));
+        QVERIFY(newBus.registerService(kService));
+        inhibitor->inhibit(QStringLiteral("focus")); // before the event loop delivers the change
+
+        QTRY_COMPARE_WITH_TIMEOUT(newServer.active.size(), 1, 3000);
+        QTRY_VERIFY(inhibitor->isInhibited());
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY_WITH_TIMEOUT(newServer.active.isEmpty(), 3000);
+        QVERIFY(server->active.isEmpty());
+
+        newBus.unregisterService(kService);
+        newBus.unregisterObject(kPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("new-server"));
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        publishServer(); // for cleanup()
+    }
+
+    void theCookieOfAServerStartedByTheInhibitCallIsKept()
+    {
+        // Sugo started before the notification server; the first Inhibit starts it (D-Bus
+        // activation). The bus announces the new owner before the server's reply.
+        PrivateDBus bus;
+        if (!bus.start({kService})) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-client"));
+        QDBusConnection serverConnection = QDBusConnection::connectToBus(bus.address(), QStringLiteral("activation-server"));
+        QVERIFY(client.isConnected());
+        QVERIFY(serverConnection.isConnected());
+        FakeNotificationServer started;
+        {
+            FreedesktopInhibitor lateInhibitor(client, QStringLiteral("io.github.mineraleyt.sugo"));
+            lateInhibitor.inhibit(QStringLiteral("focus"));
+            QTest::qWait(200); // the call waits on the bus for the server it asked to start
+            QVERIFY(started.calls.isEmpty());
+
+            QVERIFY(serverConnection.registerObject(kPath, &started, QDBusConnection::ExportAllSlots));
+            QVERIFY(serverConnection.registerService(kService));
+            QTRY_COMPARE_WITH_TIMEOUT(started.active.size(), 1, 3000);
+            QTest::qWait(300);
+            // Its reply was kept: no second Inhibit, so no cookie left behind.
+            QCOMPARE(started.calls, (QStringList{QStringLiteral("Inhibit")}));
+            QVERIFY(lateInhibitor.isInhibited());
+
+            lateInhibitor.release();
+            QTRY_VERIFY(!lateInhibitor.isInhibited());
+            QVERIFY(started.active.isEmpty());
+        }
+        serverConnection.unregisterService(kService);
+        serverConnection.unregisterObject(kPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-client"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("activation-server"));
+    }
+
+    void theFactoryChoosesByWhatTheServerOffers()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The factory looks for a notification server on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("factory-client"));
+        QVERIFY(client.isConnected());
+
+        // No server yet: it may still be starting, so silencing is tried.
+        QVERIFY(createNotificationInhibitor(client)->isAvailable());
+        {
+            const ThreadedServer plasma(bus.address(), std::make_unique<FakeNotificationServer>());
+            QVERIFY(plasma.registered());
+            QVERIFY(createNotificationInhibitor(client)->isAvailable());
+        }
+        {
+            const ThreadedServer other(bus.address(), std::make_unique<ServerWithoutInhibit>());
+            QVERIFY(other.registered());
+            QVERIFY(!createNotificationInhibitor(client)->isAvailable());
+        }
+        QDBusConnection::disconnectFromBus(QStringLiteral("factory-client"));
+#endif
     }
 
     void aServiceRestartAfterReleaseDoesNotInhibitAgain()

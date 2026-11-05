@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import io.github.mineraleyt.sugo
 
-/// A group of settings: a bold heading, an optional line under it, and its rows in one card.
+/// A group of settings: a small heading, an optional line under it, and its rows in one card.
 ColumnLayout {
     id: section
 
@@ -14,20 +14,20 @@ ColumnLayout {
     default property alias rows: rowColumn.data
 
     Layout.fillWidth: true
-    spacing: Theme.spaceMd
+    Layout.topMargin: section.title.length > 0 ? Theme.spaceLg : 0
+    spacing: Theme.spaceSm
 
     RowLayout {
         Layout.fillWidth: true
         visible: section.title.length > 0
         spacing: Theme.spaceMd
         Text {
-            text: section.title
-            color: Theme.foreground
-            font.pixelSize: Theme.fontHeading - 3
-            font.weight: Font.DemiBold
-        }
-        Item {
             Layout.fillWidth: true
+            text: section.title
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            font.weight: Font.Medium
+            elide: Text.ElideRight
         }
         RowLayout {
             id: extraRow
@@ -38,10 +38,9 @@ ColumnLayout {
         visible: section.description.length > 0
         text: section.description
         color: Theme.muted
-        font.pixelSize: Theme.fontBody
+        font.pixelSize: Theme.fontCaption
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
-        Layout.topMargin: -Theme.spaceXs
     }
     Rectangle {
         Layout.fillWidth: true
@@ -55,8 +54,8 @@ ColumnLayout {
             id: rowColumn
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: Theme.spaceXl
-            anchors.rightMargin: Theme.spaceXl
+            anchors.leftMargin: Theme.settingsRowPaddingX
+            anchors.rightMargin: Theme.settingsRowPaddingX
             spacing: 0
         }
     }

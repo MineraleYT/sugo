@@ -3,6 +3,7 @@
 
 #include "PresetModel.h"
 #include "TimerEngine.h"
+#include "TrayPresenter.h"
 
 #include "Localization.h"
 
@@ -35,10 +36,10 @@ void TimerMenuActions::addControls(QMenu *menu)
         m_engine->toggle();
     });
     m_stopAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-playback-stop")), QString(), this, [this]() {
-        m_engine->stop();
+        Q_EMIT endPhaseRequested(false);
     });
     m_skipAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-skip-forward")), QString(), this, [this]() {
-        m_engine->skip();
+        Q_EMIT endPhaseRequested(true);
     });
 }
 
@@ -124,12 +125,20 @@ void TimerMenuActions::rebuildTimerMenu()
         for (int row = 0; row < list.size(); ++row) {
             const TimerPreset &preset = list.at(row);
             const QString iconName = m_presets->data(m_presets->index(row), PresetModel::IconNameRole).toString();
-            QAction *action = m_timerMenu->addAction(iconName.isEmpty() ? QIcon() : QIcon::fromTheme(iconName), preset.name);
+            QAction *action = m_timerMenu->addAction(iconName.isEmpty() ? QIcon() : QIcon::fromTheme(iconName),
+                                                     menuText(preset.name));
             action->setCheckable(true);
             action->setData(preset.uuid);
             m_timerGroup->addAction(action);
             const QString uuid = preset.uuid;
             connect(action, &QAction::triggered, this, [this, uuid]() {
+                // Locking the submenu does not disable its entries, and a copy of the menu shown before
+                // the phase started (Dock menu, desktop tray menu) can still trigger them: switching
+                // timers would reset the engine and end the running session.
+                if (m_engine->isActive()) {
+                    syncTimerChecks();
+                    return;
+                }
                 m_presets->setCurrentUuid(uuid);
                 // If the choice was refused the clicked entry must not stay ticked.
                 syncTimerChecks();

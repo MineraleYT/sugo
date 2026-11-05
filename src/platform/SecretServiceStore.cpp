@@ -6,6 +6,7 @@
 #include <QDBusVariant>
 #include <QEventLoop>
 #include <QLoggingCategory>
+#include <QScopedValueRollback>
 #include <QTimer>
 
 Q_LOGGING_CATEGORY(lcSecretStore, "sugo.platform.secretstore")
@@ -105,7 +106,7 @@ bool SecretServiceStore::renewSession()
     return ensureSession();
 }
 
-std::optional<QList<QDBusObjectPath>> SecretServiceStore::search(const QString &key)
+std::optional<SecretServiceStore::Matches> SecretServiceStore::search(const QString &key)
 {
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("SearchItems"));
     const SecretServiceAttributes attributes{{QStringLiteral("application"), m_applicationId}, {QStringLiteral("key"), key}};
@@ -115,29 +116,35 @@ std::optional<QList<QDBusObjectPath>> SecretServiceStore::search(const QString &
         qCWarning(lcSecretStore) << "Searching the keyring failed:" << reply.errorMessage();
         return std::nullopt;
     }
-    const auto unlocked = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(0));
-    const auto locked = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(1));
-    if (!locked.isEmpty() && !unlock(locked)) {
-        return std::nullopt;
-    }
-    return unlocked + locked;
+    return Matches{qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(0)), qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(1))};
 }
 
 bool SecretServiceStore::unlock(const QList<QDBusObjectPath> &objects)
 {
+    // The user said no (or was not there): reads do not ask again on every call, each of which
+    // would show the prompt and wait for it.
+    if (!m_unlockRetryAfter.hasExpired()) {
+        return false;
+    }
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("Unlock"));
     call << QVariant::fromValue(objects);
     const QDBusMessage reply = m_bus.call(call, QDBus::Block, kCallTimeoutMs);
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().size() < 2) {
         qCWarning(lcSecretStore) << "Unlocking the keyring failed:" << reply.errorMessage();
+        m_unlockRetryAfter.setRemainingTime(m_retryIntervalMs);
         return false;
     }
     const auto prompt = qvariant_cast<QDBusObjectPath>(reply.arguments().at(1));
-    return prompt.path() == kNoObject || runPrompt(prompt);
+    if (prompt.path() == kNoObject || runPrompt(prompt)) {
+        return true;
+    }
+    m_unlockRetryAfter.setRemainingTime(m_retryIntervalMs);
+    return false;
 }
 
 bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
 {
+    const QScopedValueRollback<bool> prompting(m_prompting, true);
     PromptWaiter waiter;
     QEventLoop loop;
     QObject::connect(&waiter, &PromptWaiter::done, &loop, &QEventLoop::quit);
@@ -148,12 +155,23 @@ bool SecretServiceStore::runPrompt(const QDBusObjectPath &prompt)
     QDBusMessage call = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Prompt"));
     call << QString(); // no parent window id
     const QDBusMessage reply = m_bus.call(call, QDBus::Block, kCallTimeoutMs);
+    bool timedOut = false;
     if (reply.type() == QDBusMessage::ReplyMessage && !waiter.completed) {
         QTimer::singleShot(m_promptTimeoutMs, &loop, &QEventLoop::quit);
         loop.exec();
+        timedOut = !waiter.completed;
     }
     m_bus.disconnect(kService, prompt.path(), kPromptInterface, QStringLiteral("Completed"), &waiter,
                      SLOT(onCompleted(bool, QDBusVariant)));
+    if (timedOut) {
+        // Not answered in time: the dialog is closed, or it would stay on screen and the next
+        // unlock would open a second one on top of it.
+        const QDBusMessage dismiss = QDBusMessage::createMethodCall(kService, prompt.path(), kPromptInterface, QStringLiteral("Dismiss"));
+        const QDBusMessage dismissed = m_bus.call(dismiss, QDBus::Block, kCallTimeoutMs);
+        if (dismissed.type() != QDBusMessage::ReplyMessage) {
+            qCWarning(lcSecretStore) << "Closing the keyring prompt failed:" << dismissed.errorMessage();
+        }
+    }
     if (!waiter.completed || waiter.dismissed) {
         qCWarning(lcSecretStore) << "The keyring prompt was dismissed or not answered";
         return false;
@@ -182,15 +200,29 @@ std::optional<QString> SecretServiceStore::read(const QString &key)
     if (!ensureSession()) {
         return std::nullopt;
     }
-    const auto items = search(key);
-    if (!items) {
+    if (m_prompting) {
+        // Called from the event loop that waits for an open prompt: asking now would stack a
+        // second prompt on top of it.
         return std::nullopt;
     }
-    if (items->isEmpty()) {
+    const auto matches = search(key);
+    if (!matches) {
+        return std::nullopt;
+    }
+    // A readable copy is enough: a locked one (say a stale copy in a second keyring) is only
+    // unlocked when there is no other, and a refused unlock then does not hide the readable one.
+    QDBusObjectPath item;
+    if (!matches->unlocked.isEmpty()) {
+        item = matches->unlocked.first();
+    } else if (matches->locked.isEmpty()) {
         return QString();
+    } else if (unlock(matches->locked)) {
+        item = matches->locked.first();
+    } else {
+        return std::nullopt;
     }
     const auto getSecret = [&]() {
-        QDBusMessage call = QDBusMessage::createMethodCall(kService, items->first().path(), kItemInterface, QStringLiteral("GetSecret"));
+        QDBusMessage call = QDBusMessage::createMethodCall(kService, item.path(), kItemInterface, QStringLiteral("GetSecret"));
         call << QVariant::fromValue(m_session);
         return m_bus.call(call, QDBus::Block, kCallTimeoutMs);
     };
@@ -208,12 +240,26 @@ std::optional<QString> SecretServiceStore::read(const QString &key)
 
 bool SecretServiceStore::write(const QString &key, const QString &secret)
 {
+    // A write is the user's own doing (a password saved, an account disconnected): it asks again
+    // even right after a refused unlock, or the password would end up in the settings file and a
+    // disconnected account's password would stay in the keyring.
+    m_unlockRetryAfter = QDeadlineTimer();
     if (!ensureSession()) {
         return false;
     }
+    if (m_prompting) {
+        return false; // as in read(): no second prompt while one is open
+    }
     if (secret.isEmpty()) {
-        const auto items = search(key);
-        return items && deleteItems(*items);
+        const auto matches = search(key);
+        if (!matches) {
+            return false;
+        }
+        // What can be reached is removed even if a locked copy stays: the removal still fails
+        // then, as the secret may be read from that copy later.
+        const bool removedUnlocked = deleteItems(matches->unlocked);
+        const bool removedLocked = matches->locked.isEmpty() || (unlock(matches->locked) && deleteItems(matches->locked));
+        return removedUnlocked && removedLocked;
     }
 
     QDBusMessage alias = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("ReadAlias"));
@@ -224,7 +270,13 @@ bool SecretServiceStore::write(const QString &key, const QString &secret)
         return false;
     }
     const auto collection = qvariant_cast<QDBusObjectPath>(aliasReply.arguments().at(0));
-    if (collection.path() == kNoObject || !unlock({collection})) {
+    if (collection.path() == kNoObject) {
+        // No keyring set as the default one (none created yet, or none chosen): the caller keeps
+        // the secret elsewhere, and this says why.
+        qCWarning(lcSecretStore) << "The keyring has no default collection (the alias \"default\" is not set); the secret is not stored there";
+        return false;
+    }
+    if (!unlock({collection})) {
         return false;
     }
 

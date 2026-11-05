@@ -17,6 +17,8 @@
 #include <memory>
 
 #include "CalendarSync.h"
+#include "FakeSecretStore.h"
+#include "RedirectServer.h"
 #include "SecretStore.h"
 #include "Settings.h"
 
@@ -50,34 +52,6 @@ private:
 };
 
 const QString kPassword = QStringLiteral("s3cretPW-xyz");
-
-/// An in-memory keyring; copies share their contents, like a real keyring across restarts.
-class FakeSecretStore : public SecretStore
-{
-public:
-    std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
-    std::shared_ptr<bool> available = std::make_shared<bool>(true);
-
-    std::optional<QString> read(const QString &key) override
-    {
-        if (!*available) {
-            return std::nullopt;
-        }
-        return secrets->value(key);
-    }
-    bool write(const QString &key, const QString &secret) override
-    {
-        if (!*available) {
-            return false;
-        }
-        if (secret.isEmpty()) {
-            secrets->remove(key);
-        } else {
-            secrets->insert(key, secret);
-        }
-        return true;
-    }
-};
 
 QByteArray basic(const QString &user, const QString &pw)
 {
@@ -183,13 +157,18 @@ public:
     QByteArray expectedAuth;           ///< Required on the DAV paths when not empty.
     QList<int> putStatuses;            ///< Consumed one per PUT, then defaultPut.
     int defaultPut = 201;
+    QByteArray putRetryAfter;          ///< Retry-After of a PUT that is not accepted, when not empty.
     int deleteStatus = 204;
+    int propfindStatus = 0;            ///< Answers every PROPFIND with this status when not 0.
+    QByteArray forbiddenPropfindPath;  ///< A PROPFIND of this path is answered with 403.
     QString prefix;                    ///< XML namespace prefix of the multistatus.
     int pollsBefore200 = 2;
     int polls = 0;
     QString loginServer;               ///< `server` in the final login answer.
     QString loginPage;                 ///< `login` (the page to open) in the first answer; empty: on this server.
     QString loginName = QStringLiteral("alice");
+    QString userId;                    ///< Names the DAV folders; empty: the login name.
+    bool principalLookup = true;       ///< Says where the user's calendars are, as Nextcloud does.
     QString appPassword = kPassword;
     QByteArray token = "tok123";
     bool onlyOneCalendar = false;
@@ -245,10 +224,14 @@ private:
         }
     }
 
-    void reply(QTcpSocket *s, int status, const QByteArray &body = QByteArray(), const QByteArray &type = "application/json")
+    void reply(QTcpSocket *s, int status, const QByteArray &body = QByteArray(), const QByteArray &type = "application/json",
+               const QByteArray &retryAfter = QByteArray())
     {
-        QByteArray out = "HTTP/1.1 " + QByteArray::number(status) + " X\r\nContent-Type: " + type + "\r\nContent-Length: "
-            + QByteArray::number(body.size()) + "\r\nConnection: keep-alive\r\n\r\n" + body;
+        QByteArray out = "HTTP/1.1 " + QByteArray::number(status) + " X\r\nContent-Type: " + type + "\r\n";
+        if (!retryAfter.isEmpty()) {
+            out += "Retry-After: " + retryAfter + "\r\n";
+        }
+        out += "Content-Length: " + QByteArray::number(body.size()) + "\r\nConnection: keep-alive\r\n\r\n" + body;
         s->write(out);
         s->flush();
     }
@@ -277,15 +260,33 @@ private:
             reply(s, 401, "no");
             return;
         }
+        if (req.method == "PROPFIND" && propfindStatus != 0) {
+            reply(s, propfindStatus);
+            return;
+        }
+        if (req.method == "PROPFIND" && !forbiddenPropfindPath.isEmpty() && path == forbiddenPropfindPath) {
+            reply(s, 403);
+            return;
+        }
         if (req.method == "PROPFIND") {
             QByteArray body;
+            const QByteArray principal = "/remote.php/dav/principals/users/" + user() + "/";
             if (path.startsWith("/custom/calendar")) {
                 body = "<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/custom/calendar/</d:href><d:propstat><d:prop>"
                        "<d:resourcetype><d:collection/><c:calendar xmlns:c=\"urn:ietf:params:xml:ns:caldav\"/></d:resourcetype>"
                        "<d:displayname>Mine</d:displayname></d:prop></d:propstat></d:response>"
                        "<d:response><d:href>/custom/calendar/one.ics</d:href><d:propstat><d:prop><d:resourcetype/></d:prop></d:propstat></d:response>"
                        "</d:multistatus>";
-            } else if (path.startsWith("/remote.php/dav/calendars/alice")) {
+            } else if (path == "/remote.php/dav/" && principalLookup) {
+                body = "<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/remote.php/dav/</d:href><d:propstat><d:prop>"
+                       "<d:current-user-principal><d:href>" + principal + "</d:href></d:current-user-principal>"
+                       "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>";
+            } else if (path == principal) {
+                const QByteArray home = "/remote.php/dav/calendars/" + user() + "/";
+                body = "<d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:response><d:href>" + principal
+                    + "</d:href><d:propstat><d:prop><c:calendar-home-set><d:href>" + home + "</d:href></c:calendar-home-set>"
+                      "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>";
+            } else if (path == "/remote.php/dav/calendars/alice/") {
                 body = multistatus(prefix);
                 if (noPersonal) {
                     body.replace("/personal/", "/private/");
@@ -306,7 +307,7 @@ private:
             if (status >= 200 && status < 300) {
                 stored.insert(path, req.body);
             }
-            reply(s, status);
+            reply(s, status, QByteArray(), "application/json", status >= 200 && status < 300 ? QByteArray() : putRetryAfter);
             return;
         }
         if (req.method == "DELETE") {
@@ -318,6 +319,8 @@ private:
         }
         reply(s, 405);
     }
+
+    QByteArray user() const { return (userId.isEmpty() ? loginName : userId).toUtf8(); }
 
     QTcpServer m_server;
     QHash<QTcpSocket *, QByteArray> m_buffers;
@@ -350,7 +353,8 @@ private:
     std::unique_ptr<CalendarSync> makeSyncWithKeyring(const FakeSecretStore &keyring)
     {
         auto config = Settings::open(configPath());
-        auto store = std::make_unique<FakeSecretStore>(keyring);
+        // As createSecretStore() gives it: a refused secret is not asked for again.
+        auto store = std::make_unique<AskOnceSecretStore>(std::make_unique<FakeSecretStore>(keyring));
         auto sync = std::make_unique<CalendarSync>(config, std::move(store));
         sync->setRetryDelaysForTesting({40, 80});
         sync->setLoginPollIntervalForTesting(20);
@@ -534,7 +538,12 @@ private Q_SLOTS:
         QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(""), &error), QString());
         QVERIFY(error.isEmpty());
 
-        for (const QString &bad : {QStringLiteral("cloud.example.org"), QStringLiteral("http://cloud.example.org"),
+        // Typed without its scheme: an https address.
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(" cloud.example.org/ "), &error), QStringLiteral("https://cloud.example.org"));
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral("cloud.example.org:8443/nc"), &error), QStringLiteral("https://cloud.example.org:8443/nc"));
+        QVERIFY(error.isEmpty());
+
+        for (const QString &bad : {QStringLiteral("http://cloud.example.org"),
                                    QStringLiteral("ftp://cloud.example.org"), QStringLiteral("https://alice:pw@cloud.example.org"),
                                    QStringLiteral("https://")}) {
             error.clear();
@@ -549,13 +558,23 @@ private Q_SLOTS:
 
     void settersRejectInsecureUrls()
     {
+        QSignalSpy rejected(m_sync.get(), &CalendarSync::inputRejected);
         m_sync->setServerUrl(QStringLiteral("http://cloud.example.org"));
         QVERIFY(m_sync->serverUrl().isEmpty());
         QVERIFY(!m_sync->lastError().isEmpty());
-        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        QCOMPARE(rejected.count(), 1);
+        QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
         QVERIFY(m_sync->calendarUrl().isEmpty());
+        QCOMPARE(rejected.count(), 1);
+        QVERIFY(!rejected.takeFirst().at(0).toString().isEmpty());
+        // The same refusal twice is announced twice: lastErrorChanged alone would not tell.
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
+        QCOMPARE(rejected.count(), 1);
+        rejected.clear();
         m_sync->setServerUrl(QStringLiteral("https://cloud.example.org/"));
         QCOMPARE(m_sync->serverUrl(), QStringLiteral("https://cloud.example.org"));
+        QCOMPARE(rejected.count(), 0);
     }
 
     void plainHttpToRemoteHostSendsNothing()
@@ -582,6 +601,57 @@ private Q_SLOTS:
 
     // ----- Discovery -----
 
+    void parseCalendarsColours_data()
+    {
+        QTest::addColumn<QString>("sent");
+        QTest::addColumn<QString>("shown");
+        // CalDAV's #RRGGBBAA would be #AARRGGBB to QML: the alpha is left out.
+        QTest::newRow("rgba") << QStringLiteral("#0082C9FF") << QStringLiteral("#0082c9");
+        QTest::newRow("rgba transparent") << QStringLiteral("#FF000000") << QStringLiteral("#ff0000");
+        QTest::newRow("rgb") << QStringLiteral("#3a87ad") << QStringLiteral("#3a87ad");
+        QTest::newRow("spaces") << QStringLiteral("  #3A87AD ") << QStringLiteral("#3a87ad");
+        QTest::newRow("short") << QStringLiteral("#f0f") << QStringLiteral("#ff00ff");
+        // Nextcloud keeps what a client sent, "#" or not.
+        QTest::newRow("rgb without #") << QStringLiteral("3A87AD") << QStringLiteral("#3a87ad");
+        QTest::newRow("rgba without #") << QStringLiteral("0082c9ff") << QStringLiteral("#0082c9");
+        QTest::newRow("name") << QStringLiteral("teal") << QStringLiteral("#008080");
+        // None, or none that can be read: the one Nextcloud's web interface makes from the name "Home".
+        QTest::newRow("none") << QString() << QStringLiteral("#bc5c91");
+        QTest::newRow("not a colour") << QStringLiteral("#12345") << QStringLiteral("#bc5c91");
+        QTest::newRow("garbage") << QStringLiteral("blue-ish") << QStringLiteral("#bc5c91");
+    }
+    void parseCalendarsColours()
+    {
+        QFETCH(QString, sent);
+        QFETCH(QString, shown);
+        const QString xml =
+            QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" "
+                           "xmlns:a=\"http://apple.com/ns/ical/\"><d:response><d:href>/dav/cal/home/</d:href><d:propstat><d:prop>"
+                           "<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>Home</d:displayname>"
+                           "<a:calendar-color>%1</a:calendar-color></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                           "</d:response></d:multistatus>")
+                .arg(sent);
+        const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).color, shown);
+    }
+
+    void parseCalendarsColourFromName()
+    {
+        // Values worked out with the JavaScript of nextcloud/calendar (uidToColor).
+        const auto colourOf = [](const QString &name) {
+            const QString xml = QStringLiteral("<d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:response>"
+                                               "<d:href>/dav/cal/x/</d:href><d:propstat><d:prop><d:resourcetype><c:calendar/></d:resourcetype>"
+                                               "<d:displayname>%1</d:displayname></d:prop></d:propstat></d:response></d:multistatus>")
+                                    .arg(name);
+            const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+            return cals.size() == 1 ? cals.at(0).color : QStringLiteral("missing");
+        };
+        QCOMPARE(colourOf(QStringLiteral("Orari dottore")), QStringLiteral("#d09e6d"));
+        QCOMPARE(colourOf(QStringLiteral("Home")), QStringLiteral("#bc5c91"));
+        QCOMPARE(colourOf(QString()), QString()); // no name, no colour
+    }
+
     void parseCalendarsTolerant()
     {
         for (const QString &prefix : {QString(), QStringLiteral("d"), QStringLiteral("D"), QStringLiteral("ns0")}) {
@@ -590,11 +660,61 @@ private Q_SLOTS:
             QCOMPARE(cals.size(), 2);
             QCOMPARE(cals.at(0).name, QStringLiteral("Personal"));
             QCOMPARE(cals.at(0).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/personal"));
-            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9FF"));
+            QCOMPARE(cals.at(0).color, QStringLiteral("#0082c9")); // sent as #0082c9FF
             QCOMPARE(cals.at(1).name, QStringLiteral("Work"));
             QCOMPARE(cals.at(1).url, QStringLiteral("https://cloud.example.org/remote.php/dav/calendars/alice/work-team"));
         }
         QVERIFY(CalendarSync::parseCalendars("<not xml", QUrl(QStringLiteral("https://x.org/"))).isEmpty());
+    }
+
+    void parseCalendarsSkipsPropertiesTheServerDoesNotHave()
+    {
+        // Properties asked for but not defined come back in a propstat of their own, with status
+        // 404. An empty component set there says nothing: absent means any component (RFC 4791).
+        const QByteArray xml =
+            "<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\">"
+            "<d:response><d:href>/dav/cal/home/</d:href>"
+            "<d:propstat><d:prop><d:resourcetype><d:collection/><c:calendar/></d:resourcetype>"
+            // (A status line with more than one space between its words is still read.)
+            "<d:displayname>Home</d:displayname></d:prop><d:status>HTTP/1.1  200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><c:supported-calendar-component-set/><d:displayname>Not this</d:displayname></d:prop>"
+            "<d:status>HTTP/1.1 404 Not Found</d:status></d:propstat>"
+            "</d:response>"
+            // Only a failed propstat says it is a calendar: it is not one.
+            "<d:response><d:href>/dav/cal/other/</d:href>"
+            "<d:propstat><d:prop><d:displayname>Other</d:displayname></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+            "<d:propstat><d:prop><d:resourcetype><c:calendar/></d:resourcetype></d:prop>"
+            "<d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat>"
+            "</d:response>"
+            "</d:multistatus>";
+        const auto cals = CalendarSync::parseCalendars(xml, QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+        QCOMPARE(cals.size(), 1);
+        QCOMPARE(cals.at(0).name, QStringLiteral("Home"));
+        QCOMPARE(cals.at(0).url, QStringLiteral("https://dav.example.net/dav/cal/home"));
+    }
+
+    void parseCalendarsTakesTheDefaultPortForTheSameServer()
+    {
+        const auto response = [](const QString &href) {
+            return QStringLiteral("<d:response><d:href>%1</d:href><d:propstat><d:prop><d:resourcetype><d:collection/>"
+                                  "<c:calendar/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat>"
+                                  "</d:response>")
+                .arg(href);
+        };
+        const QString xml = QStringLiteral("<?xml version=\"1.0\"?><d:multistatus xmlns:d=\"DAV:\" "
+                                           "xmlns:c=\"urn:ietf:params:xml:ns:caldav\">")
+            + response(QStringLiteral("https://cloud.example.org/dav/cal/plain/"))
+            + response(QStringLiteral("https://cloud.example.org:443/dav/cal/explicit/"))
+            + response(QStringLiteral("https://cloud.example.org:8443/dav/cal/elsewhere/"))
+            + QStringLiteral("</d:multistatus>");
+        // The port written out or not, https://host and https://host:443 are the same server;
+        // another port is not.
+        for (const QString &request : {QStringLiteral("https://cloud.example.org/dav/cal/"), QStringLiteral("https://cloud.example.org:443/dav/cal/")}) {
+            const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(request));
+            QCOMPARE(cals.size(), 2);
+            QVERIFY(cals.at(0).url.endsWith(QStringLiteral("/dav/cal/plain")));
+            QVERIFY(cals.at(1).url.endsWith(QStringLiteral("/dav/cal/explicit")));
+        }
     }
 
     void discoveryNextcloud()
@@ -612,18 +732,86 @@ private Q_SLOTS:
         QCOMPARE(cals.size(), 2);
         QCOMPARE(cals.at(0).toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Personal"));
         QVERIFY(cals.at(1).toMap().value(QStringLiteral("url")).toString().endsWith(QStringLiteral("/work-team")));
+        // The server says where the user's calendars are: principal, then calendar home.
         const auto propfind = m_server->of("PROPFIND");
-        QCOMPARE(propfind.size(), 1);
-        QCOMPARE(propfind.first().path, QByteArray("/remote.php/dav/calendars/alice/"));
-        QCOMPARE(propfind.first().headers.value("depth"), QByteArray("1"));
-        QVERIFY(propfind.first().headers.value("user-agent").startsWith("Sugo/"));
-        QVERIFY(propfind.first().body.contains("resourcetype"));
+        QCOMPARE(propfind.size(), 3);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(0).headers.value("depth"), QByteArray("0"));
+        QVERIFY(propfind.at(0).body.contains("current-user-principal"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/principals/users/alice/"));
+        QCOMPARE(propfind.at(1).headers.value("depth"), QByteArray("0"));
+        QVERIFY(propfind.at(1).body.contains("calendar-home-set"));
+        QCOMPARE(propfind.at(2).path, QByteArray("/remote.php/dav/calendars/alice/"));
+        QCOMPARE(propfind.at(2).headers.value("depth"), QByteArray("1"));
+        QVERIFY(propfind.at(2).headers.value("user-agent").startsWith("Sugo/"));
+        QVERIFY(propfind.at(2).body.contains("resourcetype"));
+        for (const auto &req : propfind) {
+            QCOMPARE(req.headers.value("authorization"), basic(QStringLiteral("alice"), kPassword));
+        }
         // Not configured until a calendar is chosen.
         QCOMPARE(m_sync->status(), CalendarSync::NotConfigured);
         m_sync->selectCalendar(cals.at(1).toMap().value(QStringLiteral("url")).toString(), QStringLiteral("Work"));
         QCOMPARE(m_sync->status(), CalendarSync::Ready);
         QCOMPARE(m_sync->calendarName(), QStringLiteral("Work"));
         checkNoSecrets();
+    }
+
+    void discoveryNextcloudWithoutAPrincipalLooksUnderTheLoginName()
+    {
+        m_server->principalLookup = false; // the server does not say where the calendars are
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 2);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+    }
+
+    void discoveryNextcloudForbiddenAtTheRootLooksUnderTheLoginName()
+    {
+        // The root is kept from this account (an ACL, a proxy rule): not a refused login, and
+        // the calendars are where Nextcloud usually puts the login name's.
+        m_server->forbiddenPropfindPath = "/remote.php/dav/";
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 2);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+        QVERIFY(m_sync->lastError().isEmpty());
+        QVERIFY(!m_sync->isSendingPaused());
+    }
+
+    void discoveryNextcloudRefusedAtThePrincipalStopsThere()
+    {
+        // A wrong password: one refused request, not a second one at the fallback address (the
+        // server's brute-force protection counts each).
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("other"));
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 1);
+        QCOMPARE(propfind.first().path, QByteArray("/remote.php/dav/"));
+        QVERIFY(m_sync->calendars().isEmpty());
+        checkNoSecrets();
+
+        // The right password finds the calendars.
+        m_sync->setPassword(QStringLiteral("other"));
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        QVERIFY(m_sync->lastError().isEmpty());
     }
 
     void discoveryCustomIsCalendar()
@@ -637,6 +825,26 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->calendars().size(), 1);
         QCOMPARE(m_sync->calendars().first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Mine"));
         QCOMPARE(m_sync->calendars().first().toMap().value(QStringLiteral("url")).toString(), m_server->base() + QStringLiteral("/custom/calendar"));
+    }
+
+    void discovery403DoesNotPauseSending()
+    {
+        // The server does not let this account list the place asked (an ACL on the principal or
+        // the calendar home): a refusal of the address, not of the login. The calendar chosen
+        // still gets the events.
+        configureCustom();
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        checkNoSecrets();
+
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 1);
     }
 
     void discoveryWrongPassword()
@@ -809,6 +1017,161 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
     }
 
+    void a403TestAfterARejectedLoginLiftsThePause()
+    {
+        // Paused on a 401; then the password works on the server, but the calendar refuses the
+        // test event. The login was taken: no "Login rejected" coming back, the event is tried.
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->defaultPut = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 3); // refused (401), the test's, the event again
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("does not accept new events")));
+        QTest::qWait(100);
+        QVERIFY2(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")), qPrintable(m_sync->statusText()));
+        QCOMPARE(m_sync->pendingCount(), 1);
+    }
+
+    void a403LookupAfterARejectedLoginLiftsThePause()
+    {
+        configureCustom();
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void a403LookupKeepsThePauseOf403sInARow()
+    {
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_server->count("PROPFIND"), 1);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTest::qWait(100);
+        QVERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3); // nothing sent again with the credentials in doubt
+    }
+
+    void put403IsTheCalendarRefusingNotTheLogin()
+    {
+        // A calendar shared read-only: the login is fine, the calendar does not take events.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        QCOMPARE(m_sync->pendingCount(), 1); // kept, not skipped
+        checkNoSecrets();
+
+        // Tried again later: once the calendar takes it, it is sent.
+        m_server->defaultPut = 201;
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void put403InARowPausesSending()
+    {
+        // Some servers answer a wrong password with 403: not retried for ever (an account lock),
+        // but paused after three in a row, with a message that names both possible causes.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3);
+        QCOMPARE(m_sync->status(), CalendarSync::Failed);
+        for (const QString &text : {m_sync->statusText(), m_sync->lastError()}) {
+            QVERIFY2(text.contains(QStringLiteral("403")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("does not accept new events")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("app password")), qPrintable(text));
+            QVERIFY2(!text.startsWith(QStringLiteral("Login rejected")), qPrintable(text));
+        }
+        QTest::qWait(250);
+        QCOMPARE(m_server->count("PUT"), 3); // not retried while paused
+        QCOMPARE(m_sync->pendingCount(), 1);
+        checkNoSecrets();
+
+        // A test that is refused too keeps it paused, with the same message.
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 4);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->isSendingPaused());
+        QVERIFY(m_sync->statusText().contains(QStringLiteral("app password")));
+
+        // A new password is tried at once.
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_server->defaultPut = 201;
+        m_sync->setPassword(QStringLiteral("rotated"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void anAcceptedEventStartsThe403CountAgain()
+    {
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({150, 300});
+        m_server->putStatuses = {403, 403, 201};
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->count("PUT"), 3);
+        QVERIFY(!m_sync->isSendingPaused());
+
+        // Two refusals after the one accepted: still waiting with the backoff, not paused.
+        m_sync->enqueueWorkSession(record(2));
+        QTRY_COMPARE(m_server->count("PUT"), 5);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 6);
+    }
+
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::newRow("400 (would skip the event)") << 400;
+        QTest::newRow("403 (would delay it)") << 403;
+        QTest::newRow("404 (would delay it)") << 404;
+    }
+    void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne()
+    {
+        QFETCH(int, http);
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->putStatuses = {http};
+        m_sync->enqueueWorkSession(record());
+        QCOMPARE(m_server->count("PUT"), 0); // on its way to the first calendar
+        m_sync->selectCalendar(m_server->base() + QStringLiteral("/cal/work/"), QStringLiteral("Work"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        const auto puts = m_server->of("PUT");
+        QCOMPARE(puts.size(), 2);
+        QVERIFY(puts.at(0).path.startsWith("/cal/personal/"));
+        QVERIFY(puts.at(1).path.startsWith("/cal/work/"));
+        QCOMPARE(m_server->stored.size(), 1);
+        QVERIFY(m_server->stored.cbegin().key().startsWith("/cal/work/"));
+        QVERIFY(!m_sync->isSendingPaused());
+        QCOMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
     void put404And500RetryWithBackoff()
     {
         configureCustom();
@@ -824,6 +1187,128 @@ private Q_SLOTS:
         QVERIFY2(puts.at(2).at - puts.at(1).at >= 70, "second retry came too early");
         QCOMPARE(m_sync->status(), CalendarSync::Ready);
         QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void aRedirectToAnotherServerNeverCarriesThePassword_data()
+    {
+        QTest::addColumn<int>("status");
+        QTest::newRow("302") << 302;
+        QTest::newRow("307") << 307;
+        QTest::newRow("308") << 308;
+    }
+    void aRedirectToAnotherServerNeverCarriesThePassword()
+    {
+        // The calendar's server sends the event elsewhere (another port: another origin). The
+        // password goes to the calendar's server only: the redirect is not followed, the event
+        // stays queued and is tried again later, still never at the other server.
+        QFETCH(int, status);
+        RedirectServer calendar;
+        calendar.status = status;
+        calendar.target = m_server->base();
+        m_sync->setProvider(QStringLiteral("caldav"));
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->setCalendarUrl(calendar.base() + QStringLiteral("/cal/personal/"));
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTRY_VERIFY(calendar.requests.size() >= 2); // tried again, with the backoff
+        const QByteArray auth = basic(QStringLiteral("alice"), kPassword);
+        QCOMPARE(calendar.requests.first().method, QByteArray("PUT"));
+        QCOMPARE(calendar.requests.first().headers.value("authorization"), auth); // the password was there to leak
+        QVERIFY2(m_server->requests.isEmpty(), "the redirect to another server was followed");
+        QCOMPARE(m_sync->pendingCount(), 1);
+        QVERIFY(m_server->stored.isEmpty());
+        QVERIFY(!m_sync->isSendingPaused());
+        checkNoSecrets();
+    }
+
+    void aRedirectOnTheSameServerIsFollowed()
+    {
+        // The control for the test above: the fake redirect works and is followed when it stays
+        // on the calendar's server, with the password.
+        RedirectServer calendar;
+        calendar.target = calendar.base() + QStringLiteral("/moved");
+        calendar.answers.append({"/moved/", 201, QByteArray()});
+        m_sync->setProvider(QStringLiteral("caldav"));
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->setCalendarUrl(calendar.base() + QStringLiteral("/cal/personal/"));
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(calendar.requests.size(), 2);
+        const RedirectServer::Request &followed = calendar.requests.at(1);
+        QCOMPARE(followed.method, QByteArray("PUT"));
+        QVERIFY(followed.path.startsWith("/moved/cal/personal/"));
+        QCOMPARE(followed.headers.value("authorization"), basic(QStringLiteral("alice"), kPassword));
+        QVERIFY(followed.body.contains("SUMMARY:Deep work"));
+    }
+
+    void putRefusedForTheCalendarKeepsTheQueue_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::newRow("409 (the calendar is gone)") << 409;
+        QTest::newRow("423 (the calendar is locked)") << 423;
+    }
+    void putRefusedForTheCalendarKeepsTheQueue()
+    {
+        // The problem is the calendar, not the event: skipping would drop every queued session
+        // one after the other while the calendar is away or locked.
+        QFETCH(int, http);
+        configureCustom();
+        m_server->defaultPut = http;
+        m_sync->enqueueWorkSession(record(1));
+        m_sync->enqueueWorkSession(record(2));
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->lastError().contains(QString::number(http)));
+        QVERIFY(!m_sync->lastError().contains(QStringLiteral("skipped")));
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_VERIFY(m_server->count("PUT") >= 2); // tried again, with the backoff
+        QCOMPARE(m_sync->pendingCount(), 2);      // kept, not skipped
+        QVERIFY(m_server->stored.isEmpty());
+
+        m_server->defaultPut = 201;
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 2);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void retryAfterIsHonoured_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::addColumn<QByteArray>("header");
+        QTest::addColumn<int>("expectedMs");
+        QTest::newRow("429, 15 minutes") << 429 << QByteArray("900") << 900 * 1000;
+        QTest::newRow("503, 2 minutes") << 503 << QByteArray("120") << 120 * 1000;
+        // At most an hour, as Sugo Sync: more would overflow the timer's milliseconds.
+        QTest::newRow("huge") << 429 << QByteArray("2500000") << 3600 * 1000;
+        // Shorter than the backoff, or unreadable: the backoff's own delay.
+        QTest::newRow("shorter") << 429 << QByteArray("30") << 60 * 1000;
+        QTest::newRow("zero") << 429 << QByteArray("0") << 60 * 1000;
+        QTest::newRow("http date") << 503 << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 60 * 1000;
+    }
+    void retryAfterIsHonoured()
+    {
+        // A server asking for a longer pause (429, 503) is not asked again sooner.
+        QFETCH(int, http);
+        QFETCH(QByteArray, header);
+        QFETCH(int, expectedMs);
+        // A backoff of a minute: no retry can go out while the test looks (40 ms could, on a slow
+        // machine), and Retry-After shorter than it is told apart from the backoff.
+        m_sync->setRetryDelaysForTesting({60 * 1000});
+        configureCustom();
+        m_server->defaultPut = http;
+        m_server->putRetryAfter = header;
+        m_sync->enqueueWorkSession(record());
+        QTRY_VERIFY(m_sync->retryIntervalForTesting() > 0);
+        QCOMPARE(m_sync->status(), CalendarSync::Failed);
+        QCOMPARE(m_server->count("PUT"), 1);
+        QCOMPARE(m_sync->retryIntervalForTesting(), expectedMs);
+        QCOMPARE(m_sync->pendingCount(), 1);
     }
 
     void serverErrorMessage()
@@ -887,6 +1372,35 @@ private Q_SLOTS:
         QTRY_VERIFY(m_sync->lastError().startsWith(QStringLiteral("Login rejected: check username and app password")));
         QCOMPARE(m_sync->status(), CalendarSync::Failed);
         checkNoSecrets();
+    }
+
+    void testConnection403IsTheCalendarRefusingNotTheLogin()
+    {
+        // A calendar shared read-only answers the test event with 403: the login is fine, so
+        // sending is not paused and the message is the one a refused event gets.
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->defaultPut = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("does not accept new events")));
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        checkNoSecrets();
+
+        // A finished session is still tried (and waits, refused like the test event).
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_server->count("PUT"), 2);
+        QCOMPARE(m_sync->pendingCount(), 1);
+        QVERIFY(!m_sync->isSendingPaused());
+
+        // Once the calendar takes events, it goes without a new password.
+        m_server->defaultPut = 201;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
     }
 
     void networkErrorIsReported()
@@ -1001,6 +1515,27 @@ private Q_SLOTS:
         QVERIFY(again->enabled());
     }
 
+    void loginFlowWithALoginNameThatIsNotTheUserId()
+    {
+        // Signed in with an e-mail address: the DAV folders are named after the user id.
+        m_server->loginName = QStringLiteral("alice@example.org");
+        m_server->userId = QStringLiteral("alice");
+        m_server->expectedAuth = basic(QStringLiteral("alice@example.org"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->startNextcloudLogin();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QCOMPARE(m_sync->username(), QStringLiteral("alice@example.org"));
+        QCOMPARE(m_sync->calendarName(), QStringLiteral("Personal"));
+        QCOMPARE(m_sync->calendarUrl(), m_server->base() + QStringLiteral("/remote.php/dav/calendars/alice/personal"));
+        QCOMPARE(m_server->of("PROPFIND").last().path, QByteArray("/remote.php/dav/calendars/alice/"));
+
+        // Events go there, signed in with the login name.
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(m_server->of("PUT").first().path.startsWith("/remote.php/dav/calendars/alice/personal/"));
+    }
+
     void loginFlowSingleCalendarIsPicked()
     {
         m_server->onlyOneCalendar = true;
@@ -1054,8 +1589,12 @@ private Q_SLOTS:
         m_sync->selectCalendar(QStringLiteral("https://elsewhere.example.com/cal/x"), QStringLiteral("X"));
         QCOMPARE(m_sync->calendarUrl(), before);
         QVERIFY(!m_sync->lastError().isEmpty());
+        QSignalSpy rejected(m_sync.get(), &CalendarSync::inputRejected);
         m_sync->setCalendarUrl(QStringLiteral("https://elsewhere.example.com/cal/x"));
         QCOMPARE(m_sync->calendarUrl(), before);
+        // Typed in, the refusal is announced so the view can keep the address and say why.
+        QCOMPARE(rejected.count(), 1);
+        QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
         // The same server with its port written out is still the same server.
         m_sync->selectCalendar(QStringLiteral("https://cloud.example.org:443/cal/work"), QStringLiteral("Work"));
         QVERIFY(m_sync->calendarUrl().contains(QStringLiteral("/cal/work")));
@@ -1310,6 +1849,18 @@ private Q_SLOTS:
         QFile f(configPath());
         QVERIFY(f.open(QIODevice::ReadOnly));
         QVERIFY(!f.readAll().contains(kPassword.toUtf8()));
+    }
+
+    void passwordIsStoredAsTyped()
+    {
+        configureCustom();
+        const QString spaced = QStringLiteral(" pass word ");
+        m_server->expectedAuth = basic(QStringLiteral("alice"), spaced);
+        m_sync->setPassword(spaced);
+        QCOMPARE(diskGroup().group(QStringLiteral("caldav")).readEntry("AppPassword", QString()), spaced);
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->of("PUT").first().headers.value("authorization"), basic(QStringLiteral("alice"), spaced));
     }
 
     // ----- Per-provider settings -----
@@ -1652,6 +2203,20 @@ private Q_SLOTS:
         QCOMPARE(m_server->count("DELETE"), 2);
     }
 
+    void aTestEventThatMayNotBeRemovedIsNotARejectedLogin()
+    {
+        // The PUT went through with these credentials: a 403 to its DELETE is the calendar
+        // keeping it (no right to remove), not the login.
+        configureCustom();
+        m_server->deleteStatus = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("could not be removed yet")));
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().contains(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->isSendingPaused());
+    }
+
     void passwordIsKeptInTheKeyring()
     {
         FakeSecretStore keyring;
@@ -1741,6 +2306,74 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QVERIFY(m_sync->hasPassword());
         QCOMPARE(m_server->stored.size(), 1);
+    }
+
+    void aRefusedKeyringIsNotAskedAgainAtEverySend()
+    {
+        FakeSecretStore keyring;
+        m_sync = makeSyncWithKeyring(keyring);
+        configureCustom();
+        QVERIFY(m_sync->isPasswordInKeyring());
+
+        // An update of the macOS app: the next start asks, and the user answers "Deny".
+        *keyring.refuses = true;
+        *keyring.reads = 0;
+        m_sync = makeSyncWithKeyring(keyring);
+        QVERIFY(!m_sync->hasPassword());
+        const int asked = *keyring.reads;
+        QCOMPARE(asked, 1);
+
+        // Work sessions, a connection test, a calendar refresh: no new question, nothing sent.
+        m_sync->enqueueWorkSession(record());
+        m_sync->enqueueWorkSession(record(8));
+        m_sync->testConnection();
+        m_sync->refreshCalendars();
+        QTest::qWait(200);
+        QCOMPARE(*keyring.reads, asked);
+        QVERIFY(!m_sync->hasPassword());
+        QCOMPARE(m_sync->pendingCount(), 2);
+        QCOMPARE(m_server->stored.size(), 0);
+
+        // Entering the password again stores it anew, and what was queued goes out.
+        m_sync->setPassword(kPassword);
+        QVERIFY(m_sync->hasPassword());
+        QVERIFY(m_sync->isPasswordInKeyring());
+        m_sync->enqueueWorkSession(record(9));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 3);
+    }
+
+    void finishedWorkSessionsDoNotWaitForTheKeyring()
+    {
+        FakeSecretStore keyring;
+        m_sync = makeSyncWithKeyring(keyring);
+        configureCustom();
+        QVERIFY(m_sync->isPasswordInKeyring());
+
+        // The keyring does not give the password (its unlock prompt was dismissed).
+        *keyring.available = false;
+        m_sync = makeSyncWithKeyring(keyring);
+        QVERIFY(!m_sync->hasPassword());
+        QTest::qWait(50);
+        const int reads = *keyring.reads;
+
+        // Several sessions end in a row: the keyring is not asked while each one is recorded
+        // (the timer is ending the phase then), and is asked only once afterwards.
+        m_sync->enqueueWorkSession(record(1));
+        m_sync->enqueueWorkSession(record(2));
+        m_sync->enqueueWorkSession(record(3));
+        QCOMPARE(*keyring.reads, reads);
+        QCOMPARE(m_sync->pendingCount(), 3);
+        QTRY_COMPARE(*keyring.reads, reads + 1);
+        QTest::qWait(100);
+        QCOMPARE(*keyring.reads, reads + 1);
+        QVERIFY(m_server->requests.isEmpty());
+
+        // Once the keyring answers, the next session sends them all.
+        *keyring.available = true;
+        m_sync->enqueueWorkSession(record(4));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 4);
     }
 
     void defaults()

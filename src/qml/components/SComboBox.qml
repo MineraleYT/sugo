@@ -3,24 +3,42 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// A drop-down list in the style of the other controls.
+/// A drop-down list in the style of the other controls: its list is an SMenu under the field, with
+/// a check on the current entry. As wide as its longest entry, so it does not move when the choice
+/// changes.
 QQC2.ComboBox {
     id: combo
 
-    implicitWidth: Math.max(Theme.space4xl * 3.5, implicitContentWidth + leftPadding + rightPadding)
-    implicitHeight: Theme.controlHeight
+    /// The width of the longest entry's text. (ComboBox.WidestText measures the entries only for a
+    /// content item that takes typing, which this one does not.)
+    readonly property real widestTextWidth: {
+        void model;
+        let widest = textMetrics.advanceWidth(displayText);
+        for (let i = 0; i < count; ++i) {
+            widest = Math.max(widest, textMetrics.advanceWidth(textAt(i)));
+        }
+        return Math.ceil(widest);
+    }
+
+    implicitWidth: Math.max(Theme.selectMinWidth, widestTextWidth + leftPadding + rightPadding)
+    implicitHeight: Theme.controlHeightSm
     leftPadding: Theme.spaceMd + Theme.hairline * 2
-    rightPadding: Theme.controlHeight
+    rightPadding: Theme.spaceMd * 2 + Theme.iconSm
     font.pixelSize: Theme.fontBody
     hoverEnabled: true
+
+    FontMetrics {
+        id: textMetrics
+        font: combo.font
+    }
 
     background: Rectangle {
         radius: Theme.radius
         // hover and pressed are translucent: lay them over the field's colour, not in place of it.
-        color: combo.down || combo.popup.visible ? Qt.tint(Theme.background, Theme.pressed)
-                                                 : (combo.hovered ? Qt.tint(Theme.background, Theme.hover) : Theme.background)
+        color: combo.pressed ? Qt.tint(Theme.background, Theme.pressed)
+                          : (combo.hovered && !combo.popup.visible ? Qt.tint(Theme.background, Theme.hover) : Theme.background)
         border.width: Theme.hairline
-        border.color: combo.visualFocus ? Theme.focusRing : Theme.border
+        border.color: combo.visualFocus ? Theme.focusRing : combo.popup.visible ? Theme.borderStrong : Theme.border
     }
 
     contentItem: Text {
@@ -37,55 +55,43 @@ QQC2.ComboBox {
         name: "chevron-down"
         size: Theme.iconSm
         color: Theme.muted
+        rotation: combo.popup.visible ? 180 : 0
     }
 
-    delegate: QQC2.ItemDelegate {
-        id: entry
+    delegate: SMenuItem {
         required property var model
         required property int index
-        width: ListView.view.width
-        implicitHeight: Theme.controlHeight
+        width: ListView.view ? ListView.view.width : implicitWidth
+        text: model[combo.textRole] ?? model.modelData ?? ""
+        font: combo.font
+        checked: combo.currentIndex === index
         highlighted: combo.highlightedIndex === index
-        hoverEnabled: true
-        contentItem: Text {
-            text: entry.model[combo.textRole] ?? entry.model.modelData ?? ""
-            color: Theme.foreground
-            font: combo.font
-            verticalAlignment: Text.AlignVCenter
-            elide: Text.ElideRight
-        }
-        background: Rectangle {
-            radius: Theme.radiusSm
-            color: entry.highlighted || entry.hovered ? Theme.hover : "transparent"
-            LineIcon {
-                visible: combo.currentIndex === entry.index
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.spaceMd
-                anchors.verticalCenter: parent.verticalCenter
-                name: "check"
-                size: Theme.iconSm
-                color: Theme.foreground
-            }
-        }
     }
 
-    popup: QQC2.Popup {
-        y: combo.height + Theme.spaceXs
-        width: Math.max(combo.width, Theme.space4xl * 4)
-        padding: Theme.spaceXs
-        implicitHeight: Math.min(contentItem.implicitHeight + padding * 2, Theme.contentMaxWidth / 2)
-        contentItem: ListView {
-            clip: true
-            implicitHeight: contentHeight
-            model: combo.popup.visible ? combo.delegateModel : null
-            currentIndex: combo.highlightedIndex
-            QQC2.ScrollIndicator.vertical: QQC2.ScrollIndicator {}
+    popup: SMenu {
+        anchorItem: combo
+        side: "bottom"
+        align: "start"
+        // The combo box keeps the keyboard (Up, Down, Enter, Escape) while its list is open.
+        focus: false
+        naturalWidth: {
+            let widest = combo.width - Theme.menuPadding * 2;
+            const entries = list.contentItem.children;
+            for (let i = 0; i < entries.length; ++i) {
+                widest = Math.max(widest, entries[i].implicitWidth);
+            }
+            return widest;
         }
-        background: Rectangle {
-            radius: Theme.radius + 2
-            color: Theme.raised
-            border.width: Theme.hairline
-            border.color: Theme.borderStrong
+        onOpened: showItem(list.currentItem)
+
+        // The menu scrolls, not the list: it is as tall as its entries.
+        ListView {
+            id: list
+            implicitHeight: contentHeight
+            interactive: false
+            model: combo.delegateModel
+            currentIndex: combo.highlightedIndex
+            onCurrentItemChanged: if (combo.popup.visible) combo.popup.showItem(currentItem)
         }
     }
 }

@@ -12,15 +12,17 @@ QQC2.Page {
     title: i18n("Settings")
     background: null
 
-    // The settings are split in categories; only the cards of the chosen one are shown.
+    // The settings are split in categories; only the cards of the chosen one are shown. The
+    // window lists them (SettingsNav), or this page in a drop-down list when the window is narrow.
     property string category: "general"
-    readonly property var categories: [
-        { id: "general", text: i18n("General") },
-        { id: "sounds", text: i18n("Sounds") },
-        { id: "focus", text: i18n("Focus") },
-        { id: "calendar", text: i18n("Calendar") },
-        { id: "advanced", text: i18n("Advanced") }
-    ]
+    readonly property var categories: applicationWindow().settingsCategories
+    /// The window is too narrow for the list of the categories beside the page.
+    readonly property bool narrow: page.Window.width > 0 && page.Window.width < Theme.settingsNavBreakpoint
+
+    /// Index of the category shown in `categories`.
+    function categoryIndex(): int {
+        return Math.max(0, categories.findIndex(entry => entry.id === category));
+    }
 
     /// Index of the entry of `list` (an array of { value } objects) whose value is `value`;
     /// 0 when there is none. Used by the combo box bindings.
@@ -70,6 +72,31 @@ QQC2.Page {
         interval: 3000
         onTriggered: page.calTestOk = false
     }
+    // Why the address just typed was refused (the field keeps it to be corrected); cleared by the
+    // next edit.
+    property string calInputError: ""
+    // A refused address leaves its field unbound. Once the stored addresses change, or the service
+    // (each keeps its own), both fields show what is stored again and the refusal no longer applies.
+    function resetCalFields() {
+        page.calInputError = "";
+        calServerField.text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+        calUrlField.text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+    }
+    Connections {
+        target: CalendarSync
+        function onInputRejected(message) {
+            page.calInputError = message;
+        }
+        function onProviderChanged() {
+            page.resetCalFields();
+        }
+        function onServerUrlChanged() {
+            page.resetCalFields();
+        }
+        function onCalendarUrlChanged() {
+            page.resetCalFields();
+        }
+    }
     readonly property string calLastSuccess: {
         const d = CalendarSync ? CalendarSync.lastSuccess : null;
         if (!d) {
@@ -101,6 +128,291 @@ QQC2.Page {
             }
         }
         return -1;
+    }
+    // The calendar fields store what was typed when they lose the focus (editingFinished). A
+    // click on a button does not take it from them (SButton takes the focus by Tab only), so each
+    // button that uses what they hold calls this first: the focus moves here, the field being
+    // edited stores its text, and the action runs with what is on screen.
+    Item {
+        id: calFocusSink
+    }
+    function commitCalendarFields(): void {
+        calFocusSink.forceActiveFocus();
+    }
+
+    // The timers, for the Timers category: one group per category, in the order of the list
+    // (the timers without a category last, under "Other"). Read again whenever a timer changes.
+    property int presetsRevision: 0
+    Connections {
+        target: PresetModel
+        function onCountChanged() {
+            ++page.presetsRevision;
+        }
+        function onPresetChanged() {
+            ++page.presetsRevision;
+        }
+        function onRowsMoved() {
+            ++page.presetsRevision;
+        }
+        function onModelReset() {
+            ++page.presetsRevision;
+        }
+    }
+    readonly property var timerGroups: {
+        void presetsRevision;
+        const groups = [];
+        const byName = {};
+        const other = { title: i18n("Other"), timers: [] };
+        for (let i = 0; i < PresetModel.count; ++i) {
+            const uuid = PresetModel.uuidAt(i);
+            const preset = PresetModel.get(uuid);
+            const category = (preset.category || "").trim();
+            let group = other;
+            if (category.length > 0) {
+                group = byName[category];
+                if (!group) {
+                    group = { title: category, timers: [] };
+                    byName[category] = group;
+                    groups.push(group);
+                }
+            }
+            group.timers.push({ uuid: uuid, index: i, name: preset.name || "", summary: timerSummary(preset) });
+        }
+        if (other.timers.length > 0) {
+            groups.push(other);
+        }
+        return groups;
+    }
+    /// What a timer's row says under its name: its durations and when the long break comes.
+    function timerSummary(preset: var): string {
+        const work = Math.round(preset.workSeconds / 60);
+        const shortBreak = Math.round(preset.shortBreakSeconds / 60);
+        const longBreak = Math.round(preset.longBreakSeconds / 60);
+        const cycles = preset.cyclesBeforeLong;
+        if (cycles > 0 && longBreak > 0) {
+            return i18nc("a timer: work · short break · long break, in minutes; then when the long break comes",
+                         "%1 · %2 · %3 min · %4", work, shortBreak, longBreak,
+                         i18np("long break after %1", "long break after %1", cycles));
+        }
+        return i18nc("a timer: work · short break, in minutes; then that it has no long break",
+                     "%1 · %2 min · %3", work, shortBreak, i18n("no long break"));
+    }
+
+    // About: who we are, and the updates.
+    readonly property var aboutData: typeof appAboutData !== "undefined" ? appAboutData : ({
+        displayName: i18n("Sugo"),
+        shortDescription: i18n("A Pomodoro timer with time statistics"),
+        version: "",
+        copyrightStatement: ""
+    })
+    // Set when the user closes the update error message; cleared by every new check.
+    property bool updateStatusDismissed: false
+    // A check that found nothing new is acknowledged on the button itself for a few seconds.
+    property bool upToDateShown: false
+    Connections {
+        target: UpdateChecker
+        function onStatusChanged() {
+            if (UpdateChecker.checking) {
+                page.updateStatusDismissed = false;
+                page.upToDateShown = false;
+            } else if (UpdateChecker.status === UpdateChecker.UpToDate) {
+                page.upToDateShown = true;
+                upToDateTimer.restart();
+            }
+        }
+    }
+    Timer {
+        id: upToDateTimer
+        interval: 3000
+        onTriggered: page.upToDateShown = false
+    }
+
+    // Sugo Sync state, guarded because the singleton can be gone at shutdown.
+    readonly property int syncState: SyncController ? SyncController.state : 0
+    readonly property bool syncOff: !SyncController || syncState === SyncController.Off
+    readonly property bool syncSigningIn: SyncController !== null && syncState === SyncController.SigningIn
+    readonly property bool syncWaiting: SyncController !== null && syncState === SyncController.WaitingForApproval
+    readonly property bool syncSyncing: SyncController !== null && syncState === SyncController.Syncing
+    readonly property bool syncError: SyncController !== null && syncState === SyncController.Error
+    /// Linked, with the timers' key: the status, the devices and the recovery code.
+    readonly property bool syncLinked: SyncController !== null
+                                       && (syncState === SyncController.Idle || syncSyncing || syncError)
+    readonly property int syncErrorKind: SyncController ? SyncController.errorKind : 0
+    readonly property string syncStatusText: SyncController ? SyncController.statusText : ""
+    readonly property bool syncKeyring: SyncController ? SyncController.keyringAvailable : true
+    readonly property bool syncSignedOutRemotely: syncOff && SyncController !== null
+                                                  && syncErrorKind === SyncController.SignedOutRemotely
+    readonly property bool syncLimit: syncSigningIn && SyncController.deviceLimitReached
+    readonly property string syncLastSync: {
+        const d = SyncController ? SyncController.lastSync : null;
+        if (!d) {
+            return "";
+        }
+        const date = new Date(d);
+        return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
+    }
+    readonly property var syncDevices: SyncController ? SyncController.devices : []
+    readonly property string syncSignInText:
+        i18n("Your browser opens sugo.stream, where you sign in and enter a code that Sugo shows here.")
+    readonly property string syncSignedOutRemotelyText:
+        i18n("This device was disconnected on sugo.stream. Sign in again to keep syncing.")
+    readonly property string syncNoKeyringText: DesktopStyle.macos
+        ? i18n("Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use the Keychain, then restart Sugo.")
+        : i18n("Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock one (for example KWallet or GNOME Keyring), then restart Sugo.")
+    readonly property string syncEnterCodeText:
+        i18n("Sign in on sugo.stream in your browser and enter the code. Sugo goes on by itself once you have.")
+    readonly property string syncLimitText:
+        i18n("Your account already links as many devices as the plan allows. Disconnect one on sugo.stream to free a place: Sugo goes on by itself.")
+    // The device list is otherwise read only when this computer becomes ready and after an
+    // approval: read it again whenever the Sync tab is shown, so a device signed out or
+    // disconnected elsewhere since then disappears from it.
+    onCategoryChanged: {
+        // Another category starts at its top.
+        flickable.contentY = 0;
+        // When linked, onSyncDevicesShownChanged does it.
+        if (category === "sync" && SyncController && !syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    // While the tab is on screen, "Last seen" keeps up: read the list again when the window comes
+    // back, every minute (the server moves a device's last_seen at most every 5 minutes), and
+    // after each sync of this device, which the server counts as seeing it.
+    readonly property bool syncDevicesShown: category === "sync" && page.visible && syncLinked
+                                             && !!page.Window.window && page.Window.window.active
+    onSyncDevicesShownChanged: {
+        if (syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    Timer {
+        interval: 60 * 1000
+        repeat: true
+        running: page.syncDevicesShown
+        onTriggered: SyncController.refreshDevices()
+    }
+    onSyncLastSyncChanged: {
+        if (syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    function syncDate(value: var): string {
+        if (!value) {
+            return "";
+        }
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
+    }
+    function syncPlatformName(platform: string): string {
+        return platform === "macos" ? i18n("macOS") : platform === "linux" ? i18n("Linux") : platform;
+    }
+    /// What the list of devices says under a device's name.
+    function syncDeviceDetails(device: var): string {
+        const platform = syncPlatformName(device.platform || "");
+        const seen = syncDate(device.lastSeen);
+        const state = device.pending ? i18n("Waiting for approval")
+                    : seen.length > 0 ? i18n("Last seen %1", seen)
+                    : i18n("Not synced yet");
+        return platform.length > 0 ? i18nc("platform · last seen", "%1 · %2", platform, state) : state;
+    }
+
+    /// Signing out asks first.
+    function requestSyncSignOut(): void {
+        syncSignOutDialog.open();
+    }
+    readonly property bool syncSignOutConfirming: syncSignOutDialog.visible
+
+    ConfirmDialog {
+        id: syncSignOutDialog
+        title: i18n("Sign out of Sugo Sync?")
+        text: i18n("This computer stops syncing and leaves your list of devices. Your timers stay on this computer.")
+        confirmText: i18n("Sign Out")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncSignOutDialog.close();
+            if (SyncController) {
+                SyncController.signOut();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncDisconnectDialog
+        property string deviceId
+        property string deviceName
+        title: i18n("Disconnect “%1”?", deviceName)
+        text: i18n("That device stops syncing and its place on your plan is free again. Its timers stay on it, and it can sign in again later.")
+        confirmText: i18n("Disconnect")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncDisconnectDialog.close();
+            if (SyncController) {
+                SyncController.disconnectDevice(deviceId);
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncNewRecoveryDialog
+        title: i18n("Create a new recovery code?")
+        text: i18n("The recovery code you have now stops working. Sugo shows you the new one, to keep in a safe place.")
+        confirmText: i18n("Create New Code")
+        onConfirmed: {
+            syncNewRecoveryDialog.close();
+            if (SyncController) {
+                SyncController.regenerateRecoveryCode();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncShowRecoveryDialog
+        property string code
+        title: i18n("Recovery code")
+        text: i18n("With this code a new device opens your timers when none of your other devices is at hand. Keep it somewhere safe, away from this computer.")
+        confirmText: i18n("Copy")
+        cancelText: i18n("Close")
+        onConfirmed: {
+            syncRecoveryText.selectAll();
+            syncRecoveryText.copy();
+            syncRecoveryText.deselect();
+            syncShowRecoveryDialog.close();
+            applicationWindow().showPassiveNotification(i18n("Recovery code copied to the clipboard."));
+        }
+        onClosed: code = ""
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: syncRecoveryText.implicitHeight + Theme.spaceLg * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            TextEdit {
+                id: syncRecoveryText
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                verticalAlignment: TextEdit.AlignVCenter
+                readOnly: true
+                selectByMouse: true
+                text: syncShowRecoveryDialog.code
+                color: Theme.foreground
+                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Accessible.name: i18n("Recovery code")
+            }
+        }
+    }
+
+    // A copied sign-in code is shown on the Copy button itself (a check for a few seconds).
+    property bool syncCodeCopied: false
+    Timer {
+        id: syncCodeCopiedTimer
+        interval: 3000
+        onTriggered: page.syncCodeCopied = false
     }
 
     // The calendar list is not kept between runs, and calendars made on the server since the last
@@ -162,14 +474,6 @@ QQC2.Page {
         id: diagnosticsCopiedTimer
         interval: 3000
         onTriggered: page.diagnosticsCopied = false
-    }
-
-    // The result of an export, in a toast: a message in the card would move what is below it.
-    function showDiagnosticsResult(exported: bool, error: string): void {
-        applicationWindow().showPassiveNotification(
-            exported ? i18n("Diagnostic report successfully exported.")
-                     : (error.length > 0 ? error : i18n("Failed to export diagnostic report.")),
-            exported ? 3500 : "long");
     }
 
     Connections {
@@ -312,11 +616,62 @@ QQC2.Page {
     component SmallText: Text {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        font.pixelSize: Theme.fontCaption + 1
+        font.pixelSize: Theme.fontCaption
         color: Theme.muted
     }
 
-    /// A titled group of setting rows, shown when its category is chosen.
+    /// A code to read out or type elsewhere (Sugo Sync): large, spaced, with a caption above it.
+    /// While `code` is empty the place is kept and a busy indicator turns in it.
+    component SyncCode: ColumnLayout {
+        id: syncCode
+        property string caption
+        property string code
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.spaceXl
+        Layout.bottomMargin: Theme.spaceXl
+        spacing: Theme.spaceSm
+
+        Text {
+            Layout.fillWidth: true
+            text: syncCode.caption
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: codeText.implicitHeight
+            Text {
+                id: codeText
+                anchors.left: parent.left
+                anchors.right: parent.right
+                // "M" keeps the line's height while there is no code yet.
+                text: syncCode.code.length > 0 ? syncCode.code : "M"
+                opacity: syncCode.code.length > 0 ? 1 : 0
+                color: Theme.foreground
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontHero
+                font.weight: Font.DemiBold
+                font.letterSpacing: Theme.letterSpacingCaps * 2
+                horizontalAlignment: Text.AlignHCenter
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Theme.fontTitle
+                Accessible.role: Accessible.StaticText
+                Accessible.name: syncCode.caption + " " + syncCode.code
+            }
+            QQC2.BusyIndicator {
+                anchors.centerIn: parent
+                width: Theme.iconLg
+                height: Theme.iconLg
+                visible: syncCode.code.length === 0
+                running: visible && page.visible
+            }
+        }
+    }
+
+    /// A titled group of setting rows, shown when its category is chosen: a small heading over a
+    /// card of rows.
     component SettingsCard: ColumnLayout {
         id: card
         property string title
@@ -328,19 +683,21 @@ QQC2.Page {
 
         visible: card.available && page.category === card.category
         Layout.fillWidth: true
-        spacing: Theme.spaceMd
+        Layout.topMargin: card.title.length > 0 ? Theme.spaceLg : 0
+        spacing: Theme.spaceSm
 
         Text {
+            visible: card.title.length > 0
             text: card.title
-            color: Theme.foreground
-            font.pixelSize: Theme.fontHeading - 3
-            font.weight: Font.DemiBold
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            font.weight: Font.Medium
             Layout.fillWidth: true
             elide: Text.ElideRight
         }
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: rowsColumn.implicitHeight + Theme.spaceXs * 2
+            implicitHeight: rowsColumn.implicitHeight
             radius: Theme.radiusLg
             color: Theme.card
             border.width: Theme.hairline
@@ -351,39 +708,52 @@ QQC2.Page {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: Theme.spaceXl
-                anchors.topMargin: Theme.spaceXs
+                anchors.leftMargin: Theme.settingsRowPaddingX
+                anchors.rightMargin: Theme.settingsRowPaddingX
                 spacing: 0
             }
         }
     }
 
-    /// One setting: title and description on the left, controls on the right (stacked when narrow).
-    component SettingRow: ColumnLayout {
+    /// One setting: title and description on the left, controls on the right, or under the text
+    /// when they would leave it too little room.
+    component SettingRow: Item {
         id: row
         property string title
         property string description
         property bool first: false
+        /// The title as a heading (the first row of a card that explains the others).
+        property bool emphasized: false
         /// Every text `description` can show, when it changes with a state: the row keeps the
         /// height of the tallest, so nothing moves when the description changes.
         property var descriptionVariants: []
+        /// The height of the description shown, and the room the row keeps for its variants
+        /// (smoke checks: both follow the text at once, while the layout catches up later).
+        readonly property real descriptionHeight: descriptionText.implicitHeight
+        readonly property real descriptionRoom: descriptionText.reservedHeight
+        /// The controls sit beside the text (else under it).
+        readonly property bool sideBySide: controlBox.children.length > 0
+            && width - controlBox.implicitWidth - grid.columnSpacing >= Theme.settingsRowTextMinWidth
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
-        spacing: 0
+        implicitHeight: Math.max(Theme.settingsRowMinHeight, grid.implicitHeight + Theme.settingsRowPaddingY * 2)
 
+        // The line above the row, across the whole card.
         Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: Theme.hairline
-            color: Theme.border
             visible: !row.first
+            x: -Theme.settingsRowPaddingX
+            width: row.width + Theme.settingsRowPaddingX * 2
+            height: Theme.hairline
+            color: Theme.border
         }
 
         GridLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.spaceLg
-            Layout.bottomMargin: Theme.spaceLg
-            columns: page.wide ? 2 : 1
+            id: grid
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            columns: row.sideBySide ? 2 : 1
             columnSpacing: Theme.spaceXl
             rowSpacing: Theme.spaceMd
 
@@ -393,10 +763,11 @@ QQC2.Page {
                 Layout.preferredWidth: 0
                 Layout.alignment: Qt.AlignVCenter
                 // With variants, as tall as the title and the tallest of them; the text shown sits
-                // in the middle of that room, in line with the controls.
+                // in the middle of that room, in line with the controls. The two fillers make three
+                // gaps, all counted, or the tallest text would push the row taller.
                 Layout.minimumHeight: row.descriptionVariants.length > 0
-                                      ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
-                spacing: Theme.hairline * 2
+                                      ? titleText.implicitHeight + descriptionText.reservedHeight + spacing * 3 : 0
+                spacing: Theme.hairline
                 opacity: row.enabled ? 1 : 0.5
                 Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
                 Text {
@@ -405,8 +776,8 @@ QQC2.Page {
                     visible: text.length > 0
                     text: row.title
                     color: Theme.foreground
-                    font.pixelSize: Theme.fontBody + 1
-                    font.weight: Font.Medium
+                    font.pixelSize: row.emphasized ? Theme.fontTitle : Theme.fontBody
+                    font.weight: row.emphasized ? Font.DemiBold : Font.Normal
                     wrapMode: Text.WordWrap
                 }
                 SmallText {
@@ -443,33 +814,235 @@ QQC2.Page {
 
             RowLayout {
                 id: controlBox
-                Layout.alignment: page.wide ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
+                // A row of text only leaves the text the whole width.
+                visible: children.length > 0
+                Layout.alignment: row.sideBySide ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
+                // Under the text, a field takes the row's width.
+                Layout.fillWidth: !row.sideBySide
                 spacing: Theme.spaceSm
             }
         }
     }
 
+    /// A timer in the Timers category: its name and durations; a click opens its page.
+    component TimerRow: QQC2.AbstractButton {
+        id: timerRow
+        required property var timer
+        property bool first: false
+
+        objectName: "timerRow-" + timer.index
+        Layout.fillWidth: true
+        implicitHeight: Math.max(Theme.settingsRowMinHeight, timerRowContent.implicitHeight + Theme.settingsRowPaddingY * 2)
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        text: timer.name
+        Accessible.name: timer.name
+        Accessible.description: timer.summary
+        onClicked: applicationWindow().openTimer(timer.uuid)
+
+        background: Item {
+            // The line above the row, across the whole card.
+            Rectangle {
+                visible: !timerRow.first
+                x: -Theme.settingsRowPaddingX
+                width: parent.width + Theme.settingsRowPaddingX * 2
+                height: Theme.hairline
+                color: Theme.border
+            }
+            Rectangle {
+                visible: timerRow.visualFocus
+                anchors.fill: parent
+                anchors.topMargin: Theme.hairline * 2
+                anchors.bottomMargin: Theme.hairline
+                radius: Theme.radiusSm
+                color: "transparent"
+                border.width: Theme.hairline
+                border.color: Theme.focusRing
+            }
+        }
+        contentItem: RowLayout {
+            id: timerRowContent
+            spacing: Theme.spaceLg
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.hairline
+                Text {
+                    Layout.fillWidth: true
+                    text: timerRow.timer.name
+                    color: Theme.foreground
+                    font.pixelSize: Theme.fontBody
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: timerRow.timer.summary
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                    font.features: { "tnum": 1 }
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+            }
+            // The timer in use; faded rather than hidden, so the name keeps its room.
+            Text {
+                text: i18n("Selected")
+                opacity: PresetModel.currentUuid === timerRow.timer.uuid ? 1 : 0
+                color: Theme.subtle
+                font.pixelSize: Theme.fontCaption
+            }
+            LineIcon {
+                name: "chevron-right"
+                size: Theme.iconSm
+                color: timerRow.hovered ? Theme.foreground : Theme.subtle
+            }
+        }
+    }
+
+    /// A link of About: its name, and the sign of a page that opens in the browser.
+    component LinkRow: QQC2.AbstractButton {
+        id: linkRow
+        property string url
+        property bool first: false
+
+        Layout.fillWidth: true
+        implicitHeight: Theme.settingsRowMinHeight
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        Accessible.role: Accessible.Link
+        Accessible.name: text
+        onClicked: Qt.openUrlExternally(url)
+
+        background: Item {
+            // The line above the row, across the whole card.
+            Rectangle {
+                visible: !linkRow.first
+                x: -Theme.settingsRowPaddingX
+                width: parent.width + Theme.settingsRowPaddingX * 2
+                height: Theme.hairline
+                color: Theme.border
+            }
+            Rectangle {
+                visible: linkRow.visualFocus
+                anchors.fill: parent
+                anchors.topMargin: Theme.hairline * 2
+                anchors.bottomMargin: Theme.hairline
+                radius: Theme.radiusSm
+                color: "transparent"
+                border.width: Theme.hairline
+                border.color: Theme.focusRing
+            }
+        }
+        contentItem: RowLayout {
+            spacing: Theme.spaceLg
+            Text {
+                Layout.fillWidth: true
+                text: linkRow.text
+                color: Theme.foreground
+                font.pixelSize: Theme.fontBody
+                elide: Text.ElideRight
+            }
+            LineIcon {
+                name: "external"
+                size: Theme.iconSm
+                color: linkRow.hovered ? Theme.foreground : Theme.subtle
+            }
+        }
+    }
+
+    // The page's padding: less in a narrow window.
+    readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
+    readonly property real paddingY: narrow ? Theme.settingsBodyPaddingCompactY : Theme.settingsBodyPaddingY
+
     Flickable {
         id: flickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: content.implicitHeight + Theme.space2xl * 2
+        contentHeight: content.implicitHeight + page.paddingY * 2 + Theme.spaceMd
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
 
         ColumnLayout {
             id: content
-            x: (flickable.width - width) / 2
-            y: Theme.space2xl
-            width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.space2xl
+            x: page.paddingX
+            y: page.paddingY
+            width: Math.max(0, flickable.width - page.paddingX * 2)
+            spacing: Theme.spaceSm
 
-            // The categories: only the groups of the chosen one are shown.
-            Segmented {
-                model: page.categories
-                current: page.category
-                onActivated: id => page.category = id
+            // The category's title, with what it offers (New timer). A narrow window has no room
+            // for the list of the categories beside the page: they are chosen here instead.
+            RowLayout {
+                id: categoryHeader
+                visible: page.narrow || page.category !== "about"
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.spaceXs
+                spacing: Theme.spaceMd
+                SComboBox {
+                    id: categoryBox
+                    objectName: "settingsCategoryBox"
+                    visible: page.narrow
+                    textRole: "text"
+                    valueRole: "id"
+                    model: page.categories
+                    currentIndex: page.categoryIndex()
+                    Accessible.name: i18n("Settings")
+                    onActivated: {
+                        applicationWindow().openSettings(currentValue);
+                        currentIndex = Qt.binding(() => page.categoryIndex());
+                    }
+                }
+                Text {
+                    visible: !page.narrow
+                    Layout.fillWidth: true
+                    text: page.categories[page.categoryIndex()].text
+                    color: Theme.foreground
+                    font.pixelSize: Theme.fontSettingsTitle
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Accessible.role: Accessible.Heading
+                }
+                Item {
+                    visible: page.narrow
+                    Layout.fillWidth: true
+                }
+                // The button is taller than the title: it is centred on the row without making it
+                // taller, so the Timers page starts at the same height as the others.
+                Item {
+                    visible: page.category === "timers"
+                    Layout.fillHeight: true
+                    implicitWidth: newTimerButton.implicitWidth
+                    SButton {
+                        id: newTimerButton
+                        objectName: "newTimerButton"
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        kind: "primary"
+                        iconName: "plus"
+                        text: i18n("New timer")
+                        onClicked: applicationWindow().newTimer()
+                    }
+                }
+            }
+
+            // --- Timers -------------------------------------------------------------------
+            Repeater {
+                model: page.category === "timers" ? page.timerGroups : []
+                delegate: SettingsCard {
+                    id: timerGroup
+                    required property var modelData
+                    category: "timers"
+                    title: modelData.title
+                    Repeater {
+                        model: timerGroup.modelData.timers
+                        delegate: TimerRow {
+                            required property var modelData
+                            required property int index
+                            timer: modelData
+                            first: index === 0
+                        }
+                    }
+                }
             }
 
             SettingsCard {
@@ -492,6 +1065,11 @@ QQC2.Page {
                         Accessible.name: i18n("Color scheme")
                         onActivated: AppSettings.colorScheme = currentValue
                     }
+                }
+                SettingRow {
+                    title: i18n("Accent color")
+                    description: i18n("Buttons, switches and the running time. Breaks stay green (blue with a green accent).")
+                    AccentButton {}
                 }
             }
 
@@ -529,6 +1107,27 @@ QQC2.Page {
                     title: i18n("Check for updates automatically")
                     description: i18n("Sugo looks for a new version every few hours and tells you; it downloads it only when you click Install. Turned off, it only looks when you ask, in About.")
                     SettingSwitch { setting: "autoCheckUpdates" }
+                }
+                // Nightly builds are for people who want the newest changes and can live with bugs.
+                SettingRow {
+                    title: i18n("Update channel")
+                    description: AppSettings.updateChannel === "nightly"
+                                 ? i18n("Every new build, as soon as it is made. May have bugs.")
+                                 : UpdateChecker.currentVersion.indexOf("-nightly") >= 0
+                                   ? i18n("Tested releases. This nightly build stays until a newer release comes out.")
+                                   : i18n("Tested releases.")
+                    descriptionVariants: [i18n("Every new build, as soon as it is made. May have bugs."),
+                                          i18n("Tested releases. This nightly build stays until a newer release comes out."),
+                                          i18n("Tested releases.")]
+                    Segmented {
+                        model: [
+                            { id: "stable", text: i18n("Stable") },
+                            { id: "nightly", text: i18n("Nightly") }
+                        ]
+                        current: AppSettings.updateChannel
+                        Accessible.name: i18n("Update channel")
+                        onActivated: id => AppSettings.updateChannel = id
+                    }
                 }
             }
 
@@ -689,6 +1288,7 @@ QQC2.Page {
                         onActivated: AppSettings.soundTheme = currentValue
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Test")
                         iconName: "play"
                         onClicked: AppSettings.playSoundPreview(soundBox.currentValue, AppSettings.soundVolume)
@@ -699,7 +1299,7 @@ QQC2.Page {
                     SSlider {
                         id: soundVolumeSlider
                         objectName: "soundVolumeSlider"
-                        Layout.preferredWidth: Theme.space4xl * 3.5
+                        Layout.preferredWidth: page.narrow ? Theme.sliderWidthCompact : Theme.sliderWidth
                         from: 0
                         to: 100
                         value: AppSettings.soundVolume
@@ -740,6 +1340,7 @@ QQC2.Page {
                         onActivated: AppSettings.preAlarmSound = currentValue
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Test")
                         enabled: AppSettings.preAlarmEnabled
                         iconName: "play"
@@ -772,7 +1373,7 @@ QQC2.Page {
                     enabled: AppSettings.focusSoundMode > 0
                     SSlider {
                         id: focusVolumeSlider
-                        Layout.preferredWidth: Theme.space4xl * 3
+                        Layout.preferredWidth: page.narrow ? Theme.sliderWidthCompact : Theme.sliderWidth
                         from: 0
                         to: 100
                         value: AppSettings.focusSoundVolume
@@ -788,6 +1389,7 @@ QQC2.Page {
                         text: i18nc("volume percentage", "%1%", Math.round(focusVolumeSlider.value))
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Preview")
                         iconName: "play"
                         onClicked: FocusSoundController.preview(focusModeBox.currentValue, Math.round(focusVolumeSlider.value))
@@ -902,6 +1504,7 @@ QQC2.Page {
                             currentIndex: page.valueIndex(model, page.calProvider)
                             Accessible.name: i18n("Calendar service")
                             onActivated: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.provider = currentValue;
                                     // Each service keeps its own settings: if the one just chosen is
@@ -921,17 +1524,24 @@ QQC2.Page {
                         title: i18n("Server address")
                         enabled: !page.calConnected && !page.calWaiting
                         STextField {
+                            id: calServerField
                             Layout.fillWidth: !page.wide
                             Layout.preferredWidth: Theme.space4xl * 5
                             placeholderText: "https://cloud.example.org"
+                            objectName: "calendarServerField"
                             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                             text: CalendarSync ? CalendarSync.serverUrl : ""
                             Accessible.name: i18n("Server address")
+                            onTextEdited: page.calInputError = ""
                             onEditingFinished: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.serverUrl = text;
                                 }
-                                text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+                                // Refused: what was typed stays to be corrected, the message says why.
+                                if (page.calInputError.length === 0) {
+                                    text = Qt.binding(() => CalendarSync ? CalendarSync.serverUrl : "");
+                                }
                             }
                         }
                     }
@@ -950,7 +1560,10 @@ QQC2.Page {
                             visible: !page.calConnected && !page.calWaiting
                             text: i18n("Log in")
                             iconName: "external"
-                            onClicked: CalendarSync.startNextcloudLogin()
+                            onClicked: {
+                                page.commitCalendarFields();
+                                CalendarSync.startNextcloudLogin();
+                            }
                         }
                         SButton {
                             visible: page.calWaiting
@@ -959,6 +1572,7 @@ QQC2.Page {
                             onClicked: CalendarSync.cancelLogin()
                         }
                         SButton {
+                            kind: "ghost"
                             visible: page.calConnected && !page.calWaiting
                             text: i18n("Test")
                             iconName: page.calTestOk ? "check" : "refresh"
@@ -969,11 +1583,18 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
+                            kind: "ghost"
                             visible: page.calConnected && !page.calWaiting
                             text: i18n("Disconnect")
                             iconName: "close"
@@ -987,16 +1608,22 @@ QQC2.Page {
                         title: i18n("Calendar address (CalDAV)")
                         description: i18n("Use the CalDAV address of the calendar. A subscription link ending in .ics is read-only and cannot receive events.")
                         STextField {
+                            id: calUrlField
                             Layout.fillWidth: !page.wide
                             Layout.preferredWidth: Theme.space4xl * 5
                             inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText
                             text: CalendarSync ? CalendarSync.calendarUrl : ""
                             Accessible.name: i18n("Calendar address (CalDAV)")
+                            onTextEdited: page.calInputError = ""
                             onEditingFinished: {
+                                page.calInputError = "";
                                 if (CalendarSync) {
                                     CalendarSync.calendarUrl = text;
                                 }
-                                text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+                                // Refused: what was typed stays to be corrected, the message says why.
+                                if (page.calInputError.length === 0) {
+                                    text = Qt.binding(() => CalendarSync ? CalendarSync.calendarUrl : "");
+                                }
                             }
                         }
                     }
@@ -1031,7 +1658,9 @@ QQC2.Page {
                             Accessible.name: i18n("Password")
                             onTextEdited: dirty = true
                             onEditingFinished: {
-                                if (dirty && CalendarSync) {
+                                // Left empty, it keeps the stored password: only Disconnect, which
+                                // asks first, forgets it.
+                                if (dirty && text.length > 0 && CalendarSync) {
                                     CalendarSync.setPassword(text);
                                 }
                                 dirty = false;
@@ -1044,6 +1673,7 @@ QQC2.Page {
                         visible: page.calCustom && page.calConfigured
                         title: i18n("Connection")
                         SButton {
+                            kind: "ghost"
                             text: i18n("Test")
                             iconName: page.calTestOk ? "check" : "refresh"
                             // Not while any request runs: the test would not run, yet look passed.
@@ -1053,11 +1683,18 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "test";
                                 CalendarSync.testConnection();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                         SButton {
+                            kind: "ghost"
                             text: i18n("Disconnect")
                             iconName: "close"
                             onClicked: page.requestDisconnect()
@@ -1129,8 +1766,14 @@ QQC2.Page {
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
+                                page.commitCalendarFields();
                                 page.calAction = "refresh";
                                 CalendarSync.refreshCalendars();
+                                // Nothing was started (e.g. not signed in yet): a later request's
+                                // result must not be taken for this one's.
+                                if (!page.calWorking) {
+                                    page.calAction = "";
+                                }
                             }
                         }
                     }
@@ -1158,9 +1801,12 @@ QQC2.Page {
                     Layout.fillWidth: true
                     Layout.topMargin: Theme.spaceSm
                     Layout.bottomMargin: Theme.spaceSm
-                    shown: page.calFailed || (page.calNotConfigured && !page.calWaiting)
-                    tone: page.calFailed ? "danger" : "info"
+                    shown: page.calInputError.length > 0 || page.calFailed || (page.calNotConfigured && !page.calWaiting)
+                    tone: page.calInputError.length > 0 || page.calFailed ? "danger" : "info"
                     text: {
+                        if (page.calInputError.length > 0) {
+                            return page.calInputError;
+                        }
                         if (!CalendarSync) {
                             return "";
                         }
@@ -1198,7 +1844,329 @@ QQC2.Page {
                     }
                     FontMetrics {
                         id: calendarFooterMetrics
-                        font.pixelSize: Theme.fontCaption + 1
+                        font.pixelSize: Theme.fontCaption
+                    }
+                }
+            }
+
+            // Linked: whether the timers are up to date, and Sync now, under the title of the tab.
+            RowLayout {
+                visible: page.category === "sync" && page.syncLinked
+                Layout.fillWidth: true
+                spacing: Theme.spaceMd
+                StatusLine {
+                    objectName: "syncStatusText"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: implicitWidth
+                    labels: [i18n("Syncing"), i18n("Offline"), i18n("Not synced"), i18n("Up to date")]
+                    text: page.syncSyncing ? i18n("Syncing")
+                        : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
+                        : i18n("Up to date")
+                    iconName: page.syncSyncing ? "refresh" : page.syncError ? "warning" : "check"
+                    iconColor: page.syncError ? (page.syncErrorKind === SyncController.Network || page.syncErrorKind === SyncController.RateLimited
+                                                 ? Theme.warning : Theme.danger)
+                             : Theme.muted
+                    spinning: page.syncSyncing
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                SButton {
+                    objectName: "syncNowButton"
+                    labels: [i18n("Sync now"), i18n("Syncing…")]
+                    text: page.syncSyncing ? i18n("Syncing…") : i18n("Sync now")
+                    iconName: "refresh"
+                    enabled: !page.syncSyncing
+                    onClicked: SyncController.syncNow()
+                }
+            }
+
+            // Sugo Sync: signing in, approval by another device, then the status of the timers.
+            SettingsCard {
+                id: syncCard
+                objectName: "syncCard"
+                category: "sync"
+                title: i18n("Sugo Sync")
+                iconName: "refresh"
+
+                // --- Signed out -------------------------------------------------------------
+                SettingRow {
+                    first: true
+                    emphasized: true
+                    visible: page.syncOff
+                    title: i18n("Your timers on all your computers")
+                    description: i18n("Sugo Sync keeps your timers the same on every computer you sign in on. They are encrypted on this computer, so only your devices can read them. The free plan links 2 devices.")
+                }
+                SettingRow {
+                    visible: page.syncOff
+                    title: i18n("Device name")
+                    description: i18n("How this computer appears in your list of devices.")
+                    STextField {
+                        id: syncDeviceName
+                        Layout.fillWidth: !page.wide
+                        Layout.preferredWidth: Theme.space4xl * 5
+                        text: SyncController ? SyncController.deviceName : ""
+                        maximumLength: 64
+                        Accessible.name: i18n("Device name")
+                        onAccepted: syncSignInButton.clicked()
+                    }
+                }
+                // What keeps Sugo Sync from starting is said here, in a description that keeps the
+                // height of its longest text (the toast tells what happened once, this how things are).
+                SettingRow {
+                    objectName: "syncSignInRow"
+                    visible: page.syncOff
+                    title: i18n("Sign in")
+                    description: !page.syncKeyring ? page.syncNoKeyringText
+                               : page.syncSignedOutRemotely ? page.syncSignedOutRemotelyText
+                               : page.syncSignInText
+                    descriptionVariants: [page.syncSignInText, page.syncNoKeyringText, page.syncSignedOutRemotelyText]
+                    SButton {
+                        id: syncSignInButton
+                        objectName: "syncSignInButton"
+                        kind: "primary"
+                        text: i18n("Sign in")
+                        enabled: page.syncKeyring && syncDeviceName.text.trim().length > 0
+                        onClicked: {
+                            if (enabled && SyncController) {
+                                SyncController.signIn(syncDeviceName.text.trim());
+                            }
+                        }
+                    }
+                }
+
+                // --- Signing in: the code to enter on sugo.stream ---------------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncSigningIn
+                    title: i18n("Enter this code on sugo.stream")
+                    description: page.syncLimit ? page.syncLimitText : page.syncEnterCodeText
+                    descriptionVariants: [page.syncEnterCodeText, page.syncLimitText]
+                }
+                SyncCode {
+                    visible: page.syncSigningIn
+                    caption: i18n("Your code")
+                    code: SyncController ? SyncController.userCode : ""
+                }
+                RowLayout {
+                    visible: page.syncSigningIn
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.bottomMargin: Theme.spaceXl
+                    spacing: Theme.spaceSm
+                    SButton {
+                        kind: "primary"
+                        text: i18n("Open in browser")
+                        iconName: "external"
+                        enabled: SyncController !== null && SyncController.userCode.length > 0
+                        onClicked: {
+                            if (!SyncController.openVerificationPage()) {
+                                applicationWindow().showPassiveNotification(i18n("The browser could not be opened. Go to sugo.stream and enter the code."));
+                            }
+                        }
+                    }
+                    SButton {
+                        labels: [i18n("Copy"), i18n("Copied")]
+                        text: page.syncCodeCopied ? i18n("Copied") : i18n("Copy")
+                        iconName: page.syncCodeCopied ? "check" : "copy"
+                        enabled: SyncController !== null && SyncController.userCode.length > 0
+                        onClicked: {
+                            if (SyncController.copyUserCode()) {
+                                page.syncCodeCopied = true;
+                                syncCodeCopiedTimer.restart();
+                            }
+                        }
+                    }
+                    SButton {
+                        kind: "ghost"
+                        text: i18n("Cancel")
+                        onClicked: SyncController.cancelSignIn()
+                    }
+                }
+
+                // --- Waiting for another device, or for the recovery code -------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncWaiting
+                    title: i18n("Approve this computer on another device")
+                    description: SyncController && SyncController.verificationCode.length > 0
+                        ? i18n("Open Sugo on a device that already syncs and approve this computer there. Check that it shows the same code as here.")
+                        : i18n("Open Sugo on a device that already syncs and approve this computer there.")
+                    descriptionVariants: [i18n("Open Sugo on a device that already syncs and approve this computer there. Check that it shows the same code as here."),
+                                          i18n("Open Sugo on a device that already syncs and approve this computer there.")]
+                }
+                SyncCode {
+                    visible: page.syncWaiting
+                    caption: i18n("Check that your other device shows the same code")
+                    code: SyncController ? SyncController.verificationCode : ""
+                }
+                SettingRow {
+                    visible: page.syncWaiting
+                    title: i18n("Use recovery code")
+                    description: i18n("No other device at hand? Enter the recovery code you saved when you first signed in.")
+                    STextField {
+                        id: syncRecoveryField
+                        Layout.fillWidth: !page.wide
+                        Layout.preferredWidth: Theme.space4xl * 5
+                        font.family: Theme.monoFamily
+                        placeholderText: "XXXX-XXXX-…"
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                        Accessible.name: i18n("Recovery code")
+                        onAccepted: syncRecoveryButton.clicked()
+                    }
+                    SButton {
+                        id: syncRecoveryButton
+                        text: i18n("Use")
+                        Accessible.name: i18n("Use recovery code")
+                        enabled: syncRecoveryField.text.trim().length > 0
+                        onClicked: {
+                            if (enabled) {
+                                SyncController.useRecoveryCode(syncRecoveryField.text.trim());
+                            }
+                        }
+                    }
+                    // Kept while the device waits, so a wrong character is corrected rather than
+                    // the whole code typed again; cleared once the code opened the timers (or the
+                    // device stopped waiting some other way).
+                    Connections {
+                        target: page
+                        function onSyncWaitingChanged() {
+                            if (!page.syncWaiting) {
+                                syncRecoveryField.text = "";
+                            }
+                        }
+                    }
+                }
+
+                // --- Linked: the status of the timers ---------------------------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncLinked
+                    objectName: "syncTimersRow"
+                    title: i18n("Timers")
+                    // What went wrong, else when the timers last synced; as tall as the longest.
+                    description: page.syncError && page.syncStatusText.length > 0 ? page.syncStatusText
+                               : page.syncLastSync.length > 0 ? i18n("Last synced %1", page.syncLastSync)
+                               : i18n("Not synced yet")
+                    descriptionVariants: [i18n("Last synced %1", page.syncLastSync), i18n("Not synced yet")]
+                                         .concat(SyncController ? SyncController.errorTexts : [])
+                }
+            }
+
+            // The devices linked to the account: this one, and the others to disconnect.
+            SettingsCard {
+                objectName: "syncDevicesCard"
+                category: "sync"
+                available: page.syncLinked && page.syncDevices.length > 0
+                title: i18n("Devices")
+                iconName: "computer"
+
+                Repeater {
+                    model: page.syncDevices
+                    delegate: SettingRow {
+                        id: deviceRow
+                        required property var modelData
+                        required property int index
+                        first: index === 0
+                        title: modelData.name
+                        description: modelData.current
+                                     ? i18nc("this device · platform · last seen", "%1 · %2", i18n("This device"), page.syncDeviceDetails(modelData))
+                                     : page.syncDeviceDetails(modelData)
+                        // A device waiting for this one: the approval again, also after "Not Now"
+                        // (one that has never shown up yet has no code to compare).
+                        SButton {
+                            visible: !deviceRow.modelData.current && deviceRow.modelData.pending === true
+                                     && page.syncDate(deviceRow.modelData.lastSeen).length > 0
+                            kind: "primary"
+                            text: i18n("Approve…")
+                            Accessible.name: i18n("Approve %1", deviceRow.modelData.name)
+                            onClicked: SyncController.reviewDevice(deviceRow.modelData.id)
+                        }
+                        SButton {
+                            kind: "ghost"
+                            visible: !deviceRow.modelData.current
+                            text: i18n("Disconnect…")
+                            destructive: true
+                            Accessible.name: i18n("Disconnect %1", deviceRow.modelData.name)
+                            onClicked: {
+                                syncDisconnectDialog.deviceId = deviceRow.modelData.id;
+                                syncDisconnectDialog.deviceName = deviceRow.modelData.name;
+                                syncDisconnectDialog.open();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The recovery code and signing out.
+            SettingsCard {
+                objectName: "syncAccountCard"
+                category: "sync"
+                available: page.syncLinked || page.syncWaiting
+                title: i18n("Account")
+                iconName: "user-identity"
+
+                SettingRow {
+                    first: true
+                    visible: page.syncLinked
+                    title: i18n("Recovery code")
+                    description: i18n("With it, a new device opens your timers when none of your other devices is at hand. Without any device and without the code, the synced timers cannot be opened again.")
+                    SButton {
+                        kind: "ghost"
+                        visible: SyncController !== null && SyncController.recoveryCodeShowable
+                        text: i18n("Show")
+                        Accessible.name: i18n("Show recovery code")
+                        onClicked: {
+                            syncShowRecoveryDialog.code = SyncController.recoveryCode();
+                            syncShowRecoveryDialog.open();
+                        }
+                    }
+                    SButton {
+                        kind: "ghost"
+                        text: i18n("Create a new one…")
+                        Accessible.name: i18n("Create a new recovery code")
+                        // It needs the timers' key: not while the keyring has not given it.
+                        enabled: SyncController !== null && SyncController.keysLoaded
+                        onClicked: syncNewRecoveryDialog.open()
+                    }
+                }
+                SettingRow {
+                    first: !page.syncLinked
+                    title: i18n("Sign out")
+                    description: i18n("This computer stops syncing. Your timers stay on it.")
+                    SButton {
+                        kind: "ghost"
+                        objectName: "syncSignOutButton"
+                        text: i18n("Sign out…")
+                        destructive: true
+                        onClicked: page.requestSyncSignOut()
+                    }
+                }
+            }
+
+            // What Sugo Sync will carry next: shown, not offered yet.
+            SettingsCard {
+                objectName: "syncComingSoonCard"
+                category: "sync"
+                title: i18n("Coming to Sugo Sync")
+                iconName: "appointment-soon"
+
+                SettingRow {
+                    first: true
+                    title: i18n("Session history and statistics")
+                    description: i18n("Your finished sessions and their statistics, the same on every device.")
+                    Text {
+                        text: i18n("Coming soon")
+                        color: Theme.subtle
+                        font.pixelSize: Theme.fontCaption
+                    }
+                }
+                SettingRow {
+                    title: i18n("Task notes")
+                    description: i18n("The notes you write after a work session, on every device.")
+                    Text {
+                        text: i18n("Coming soon")
+                        color: Theme.subtle
+                        font.pixelSize: Theme.fontCaption
                     }
                 }
             }
@@ -1209,16 +2177,6 @@ QQC2.Page {
                 iconName: "server-database"
                 SettingRow {
                     first: true
-                    title: i18n("Database")
-                    description: DataManager ? DataManager.databasePath : ""
-                    SButton {
-                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
-                        iconName: "external"
-                        visible: DataManager !== null && !DataManager.usingTemporaryDatabase
-                        onClicked: DataManager.openDatabaseFolder()
-                    }
-                }
-                SettingRow {
                     title: i18n("Backup and restore")
                     description: TimerEngine.active
                         ? i18n("Stop the active timer before restoring a backup.")
@@ -1231,20 +2189,11 @@ QQC2.Page {
                         onClicked: backupDialog.open()
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Restore…")
                         iconName: "upload"
                         enabled: !TimerEngine.active
                         onClicked: restoreDialog.open()
-                    }
-                }
-                SettingRow {
-                    title: i18n("Export history")
-                    description: i18n("Save all recorded sessions as a spreadsheet (CSV) or JSON file.")
-                    SButton {
-                        text: i18n("Export…")
-                        iconName: "download"
-                        enabled: DataManager !== null && DataManager.sessionCount > 0
-                        onClicked: exportHistoryDialog.open()
                     }
                 }
                 SettingRow {
@@ -1259,6 +2208,7 @@ QQC2.Page {
                         Accessible.name: i18n("Sessions to remove")
                     }
                     SButton {
+                        kind: "ghost"
                         id: clearHistoryButton
                         destructive: true
                         text: i18n("Clear history…")
@@ -1290,95 +2240,16 @@ QQC2.Page {
                         : i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
                     SettingSwitch { setting: "allowExternalControl" }
                 }
-                SettingRow {
-                    title: DesktopStyle.macos ? i18n("Links") : i18n("D-Bus commands")
-                    description: DesktopStyle.macos
-                        ? i18n("Open a sugo:// link to control Sugo: in Terminal or a script with the command below, or in the Shortcuts app with the \"Open URLs\" action (give it a keyboard shortcut there). Available links: %1.",
-                               "sugo://toggle, start, pause, resume, stop, skip, show, start/<timer>, preset/<timer>")
-                        : i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
-                               "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
-                    Item { implicitWidth: 1 }
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
-                    Layout.preferredHeight: dbusRow.implicitHeight + Theme.spaceSm * 2
-                    color: Theme.background
-                    border.width: Theme.hairline
-                    border.color: Theme.border
-                    radius: Theme.radius
-                    RowLayout {
-                        id: dbusRow
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spaceMd
-                        anchors.rightMargin: Theme.spaceXs
-                        spacing: Theme.spaceSm
-                        TextEdit {
-                            id: dbusLabel
-                            Layout.fillWidth: true
-                            readOnly: true
-                            selectByMouse: true
-                            text: DesktopStyle.macos ? "open sugo://toggle" : "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
-                            color: Theme.foreground
-                            selectionColor: Theme.alpha(Theme.brand, 0.35)
-                            font.family: Theme.monoFamily
-                            font.pixelSize: Theme.fontCaption
-                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                            Accessible.name: text
-                        }
-                        SButton {
-                            kind: "ghost"
-                            iconOnly: true
-                            iconName: "copy"
-                            text: i18n("Copy command")
-                            Accessible.name: text
-                            QQC2.ToolTip.text: text
-                            QQC2.ToolTip.visible: hovered
-                            QQC2.ToolTip.delay: Theme.toolTipDelay
-                            onClicked: {
-                                dbusLabel.selectAll();
-                                dbusLabel.copy();
-                                dbusLabel.deselect();
-                                applicationWindow().showPassiveNotification(i18n("Command copied to the clipboard."));
-                            }
-                        }
-                    }
-                }
                 // System Settings' shortcut page exists on KDE Plasma only.
                 SettingRow {
                     visible: DesktopStyle.style === "kde"
                     title: i18n("Global shortcuts")
-                    description: i18n("Assign keys to these commands in Plasma's System Settings.")
+                    description: i18n("Assign keys to Sugo's commands in Plasma's System Settings.")
                     SButton {
+                        kind: "ghost"
                         text: i18n("Open Shortcut Settings")
                         iconName: "external"
                         onClicked: AppSettings.openShortcutsSettings()
-                    }
-                }
-            }
-
-            // Nightly builds are for people who want the newest changes and can live with bugs.
-            SettingsCard {
-                category: "advanced"
-                available: UpdateChecker.canInstall
-                title: i18n("Pre-release builds")
-                iconName: "system-software-update"
-                SettingRow {
-                    first: true
-                    title: i18n("Update channel")
-                    description: AppSettings.updateChannel === "nightly"
-                                 ? i18n("Every new build, as soon as it is made. May have bugs.")
-                                 : UpdateChecker.currentVersion.indexOf("-nightly") >= 0
-                                   ? i18n("Tested releases. This nightly build stays until a newer release comes out.")
-                                   : i18n("Tested releases.")
-                    Segmented {
-                        model: [
-                            { id: "stable", text: i18n("Stable") },
-                            { id: "nightly", text: i18n("Nightly") }
-                        ]
-                        current: AppSettings.updateChannel
-                        Accessible.name: i18n("Update channel")
-                        onActivated: id => AppSettings.updateChannel = id
                     }
                 }
             }
@@ -1391,12 +2262,6 @@ QQC2.Page {
                     first: true
                     title: i18n("Diagnostic report")
                     description: i18n("Generate a redacted report with system information and recent logs to share when reporting an issue.")
-                    Item { implicitWidth: 1 }
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
-                    spacing: Theme.spaceSm
                     SButton {
                         labels: [i18n("Copied"), i18n("Copy to Clipboard")]
                         text: page.diagnosticsCopied ? i18n("Copied") : i18n("Copy to Clipboard")
@@ -1406,42 +2271,210 @@ QQC2.Page {
                             page.showDiagnosticsCopied();
                         }
                     }
-                    SButton {
-                        text: i18n("Export Diagnostics…")
-                        iconName: "download"
-                        onClicked: exportDiagnosticsDialog.open()
-                    }
-                    SButton {
-                        text: i18n("View Report…")
-                        iconName: "search"
-                        onClicked: {
-                            diagnosticsPreviewDialog.reportText = Diagnostics.generateReport();
-                            diagnosticsPreviewDialog.open();
-                        }
-                    }
-                }
-                SettingRow {
-                    title: i18n("Verbose logging")
-                    description: i18n("Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce the problem, then copy the report.")
-                    SettingSwitch { setting: "verboseLogging" }
-                }
-                SettingRow {
-                    title: i18n("Welcome tour")
-                    description: i18n("Go through the introduction to Sugo again.")
-                    SButton {
-                        text: i18n("Show the Welcome Tour")
-                        iconName: "info"
-                        onClicked: applicationWindow().navigate("welcome")
-                    }
                 }
                 SettingRow {
                     title: i18n("Reset settings")
                     description: i18n("Put the settings back to what they were when you first started Sugo. Your timers, session history and calendar account are kept.")
                     SButton {
+                        kind: "ghost"
                         destructive: true
                         text: i18n("Reset Settings…")
                         iconName: "undo"
                         onClicked: resetSettingsDialog.open()
+                    }
+                }
+            }
+
+            // --- About --------------------------------------------------------------------
+            // Who we are: the logo, the name, the version and what Sugo is.
+            RowLayout {
+                visible: page.category === "about"
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.spaceSm
+                spacing: Theme.spaceLg
+
+                Image {
+                    source: "qrc:/icons/io.github.mineraleyt.sugo.svg"
+                    sourceSize.width: Theme.aboutLogo * 2
+                    sourceSize.height: Theme.aboutLogo * 2
+                    Layout.preferredWidth: Theme.aboutLogo
+                    Layout.preferredHeight: Theme.aboutLogo
+                    smooth: true
+                    mipmap: true
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.hairline
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.displayName
+                        color: Theme.foreground
+                        font.pixelSize: Theme.fontSection
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Accessible.role: Accessible.Heading
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.version.length > 0
+                              ? i18nc("the version · what the application is", "%1 · %2",
+                                      i18n("Version %1", page.aboutData.version), page.aboutData.shortDescription)
+                              : page.aboutData.shortDescription
+                        color: Theme.muted
+                        font.pixelSize: Theme.fontCaption
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("Updates")
+                iconName: "system-software-update"
+
+                // One row: what the updates are doing on the left, in a place of two lines whatever
+                // it says, and what can be done about it on the right, so the card keeps its height.
+                // The furthest step wins: ready, downloading, an error, a newer version found.
+                RowLayout {
+                    id: updateRow
+                    objectName: "updateMessage"
+                    readonly property string step: UpdateChecker.status === UpdateChecker.ReadyToRestart ? "ready"
+                        : UpdateChecker.status === UpdateChecker.Downloading ? "downloading"
+                        : !page.updateStatusDismissed && UpdateChecker.status === UpdateChecker.Error ? "error"
+                        : UpdateChecker.hasUpdate ? "available" : ""
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.settingsRowPaddingY
+                    Layout.bottomMargin: Theme.settingsRowPaddingY
+                    spacing: Theme.spaceSm
+
+                    Text {
+                        id: updateText
+                        text: {
+                            switch (updateRow.step) {
+                            case "ready":
+                                // On macOS the new Sugo.app waits next to this one and takes its place when Sugo quits.
+                                return DesktopStyle.macos ? i18n("Sugo %1 is ready. It replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                                          : i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion);
+                            case "downloading":
+                                return i18n("Downloading Sugo %1… %2%", UpdateChecker.latestVersion, Math.round(UpdateChecker.progress * 100));
+                            case "error":
+                                return i18n("Could not update Sugo: %1", UpdateChecker.errorMessage);
+                            case "available":
+                                return i18n("A newer version (%1) of Sugo is available.", UpdateChecker.latestVersion);
+                            }
+                            return page.upToDateShown ? i18n("Sugo is up to date.")
+                                 : !UpdateChecker.canInstall ? i18n("Look for a newer version on GitHub.")
+                                 : AppSettings.updateChannel === "nightly"
+                                   ? (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new nightly builds by itself.")
+                                                                     : i18n("Updates come from the nightly builds."))
+                                   : (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new releases by itself.")
+                                                                     : i18n("Updates come from the stable releases."));
+                        }
+                        color: updateRow.step === "error" ? Theme.danger
+                             : updateRow.step === "available" || updateRow.step === "ready" ? Theme.foreground
+                             : page.upToDateShown && updateRow.step === "" ? Theme.positive : Theme.muted
+                        font.pixelSize: Theme.fontBody
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: statusMetrics.lineSpacing * 2
+                        Accessible.role: updateRow.step.length > 0 ? Accessible.AlertMessage : Accessible.StaticText
+                        Accessible.name: text
+                        // A longer error is cut after two lines: all of it on hover.
+                        QQC2.ToolTip.text: text
+                        QQC2.ToolTip.visible: updateTextHover.hovered && truncated
+                        QQC2.ToolTip.delay: Theme.toolTipDelay
+                        HoverHandler { id: updateTextHover }
+                        FontMetrics {
+                            id: statusMetrics
+                            font.pixelSize: Theme.fontBody
+                        }
+                    }
+
+                    SButton {
+                        visible: updateRow.step === "" || updateRow.step === "downloading"
+                        iconName: page.upToDateShown ? "check" : "download"
+                        text: UpdateChecker.checking ? i18n("Checking for updates…") : i18n("Check for Updates")
+                        labels: [i18n("Checking for updates…"), i18n("Check for Updates")]
+                        enabled: !UpdateChecker.checking && updateRow.step === ""
+                        onClicked: {
+                            page.updateStatusDismissed = false;
+                            UpdateChecker.checkForUpdates();
+                        }
+                    }
+                    SButton {
+                        visible: updateRow.step === "available"
+                        kind: UpdateChecker.installable ? "ghost" : "primary"
+                        iconName: "external"
+                        text: i18n("View Release")
+                        onClicked: Qt.openUrlExternally(UpdateChecker.releaseUrl)
+                    }
+                    SButton {
+                        visible: updateRow.step === "available" && UpdateChecker.installable
+                        kind: "primary"
+                        text: i18n("Install")
+                        onClicked: UpdateChecker.installUpdate()
+                    }
+                    SButton {
+                        visible: updateRow.step === "ready"
+                        kind: "primary"
+                        text: i18n("Restart Now")
+                        onClicked: applicationWindow().requestRestart()
+                    }
+                    SButton {
+                        visible: updateRow.step === "error"
+                        kind: "ghost"
+                        text: i18n("Open Releases Page")
+                        onClicked: Qt.openUrlExternally("https://github.com/MineraleYT/sugo/releases")
+                    }
+                    SButton {
+                        visible: updateRow.step === "error"
+                        kind: "ghost"
+                        iconOnly: true
+                        iconName: "close"
+                        text: i18n("Dismiss")
+                        onClicked: page.updateStatusDismissed = true
+                    }
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("Links")
+                iconName: "external"
+                LinkRow {
+                    first: true
+                    text: i18n("Report a bug")
+                    url: "https://github.com/MineraleYT/sugo/issues"
+                }
+                LinkRow {
+                    text: i18n("Project website")
+                    url: "https://sugo.stream"
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("License & credits")
+                iconName: "license"
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.settingsRowPaddingY
+                    Layout.bottomMargin: Theme.settingsRowPaddingY
+                    spacing: Theme.hairline
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.copyrightStatement
+                        visible: text.length > 0
+                        color: Theme.foreground
+                        font.pixelSize: Theme.fontBody
+                        wrapMode: Text.WordWrap
+                    }
+                    SmallText {
+                        text: i18n("Licensed under GNU General Public License, version 3 or later.") + " "
+                              + i18n("Sugo is an independent, open source project.")
                     }
                 }
             }
@@ -1458,71 +2491,11 @@ QQC2.Page {
         }
 
         FileDialog {
-            id: exportHistoryDialog
-            title: i18n("Export session history")
-            fileMode: FileDialog.SaveFile
-            defaultSuffix: "csv"
-            nameFilters: [i18n("CSV spreadsheet (*.csv)"), i18n("JSON (*.json)")]
-            onAccepted: DataManager.exportHistory(selectedFile)
-        }
-
-        FileDialog {
             id: restoreDialog
             title: i18n("Choose a Sugo backup")
             fileMode: FileDialog.OpenFile
             nameFilters: [i18n("SQLite database (*.db)")]
             onAccepted: restoreConfirmDialog.open()
-        }
-
-        FileDialog {
-            id: exportDiagnosticsDialog
-            title: i18n("Export Diagnostics")
-            fileMode: FileDialog.SaveFile
-            defaultSuffix: "txt"
-            nameFilters: [i18n("Text files (*.txt)"), i18n("All files (*)")]
-            onAccepted: {
-                if (Diagnostics.exportReport(selectedFile)) {
-                    page.showDiagnosticsResult(true, "");
-                } else {
-                    page.showDiagnosticsResult(false, Diagnostics.lastExportError());
-                }
-            }
-        }
-
-        ConfirmDialog {
-            id: diagnosticsPreviewDialog
-            title: i18n("Diagnostics Report")
-            text: i18n("All personal details and usernames have been redacted.")
-            confirmText: i18n("Copy to Clipboard")
-            cancelText: i18n("Close")
-            width: Math.min(Theme.contentMaxWidth, (parent ? parent.width : Theme.contentMaxWidth) - Theme.space2xl * 2)
-            property string reportText: ""
-
-            QQC2.ScrollView {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Theme.space4xl * 6
-                QQC2.TextArea {
-                    readOnly: true
-                    text: diagnosticsPreviewDialog.reportText
-                    color: Theme.foreground
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontCaption
-                    wrapMode: Text.Wrap
-                    background: Rectangle {
-                        radius: Theme.radius
-                        color: Theme.background
-                        border.width: Theme.hairline
-                        border.color: Theme.border
-                    }
-                    Accessible.name: diagnosticsPreviewDialog.title
-                }
-            }
-
-            onConfirmed: {
-                Diagnostics.copyToClipboard();
-                diagnosticsPreviewDialog.close();
-                page.showDiagnosticsCopied();
-            }
         }
 
 }

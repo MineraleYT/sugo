@@ -17,16 +17,36 @@ QQC2.Page {
              longBreakSeconds: 15 * 60, cyclesBeforeLong: 4, builtin: false,
              options: ({ autoStartMode: 0, silenceWhileWorking: false, soundOnEnd: true, notifyOnEnd: true }) })
         : PresetModel.get(uuid)
-    property string selectedIcon: isNew ? "sugo-timer" : (preset.iconName || "sugo-timer")
+    /// The controls' starting values: what they show for `preset`.
+    readonly property var shown: shownFields(preset)
+    property string selectedIcon: shown.iconName
     readonly property var iconChoices: PresetModel.availableIcons()
     readonly property bool valid: nameField.text.trim().length > 0
     readonly property bool isCurrent: !isNew && PresetModel.currentUuid === uuid
     /// Deleting the running timer would switch timers, which stops the session.
     readonly property bool lockedByTimer: isCurrent && TimerEngine.active
 
-    /// The top bar shows "Timers / <name>".
-    readonly property string section: i18n("Timers")
-    title: isNew ? i18n("New Timer") : (preset.name || "")
+    // `preset` is read once, for the controls' starting values; what shows the stored name follows
+    // every change of the timer (a save, a rename elsewhere) through this count, and so do the
+    // controls the user has not changed (followStored()).
+    property int storedRevision: 0
+    Connections {
+        target: PresetModel
+        function onPresetChanged(changedUuid) {
+            if (changedUuid === page.uuid) {
+                ++page.storedRevision;
+                page.followStored();
+            }
+        }
+    }
+    /// The name as stored, not as being typed.
+    readonly property string storedName: {
+        void storedRevision;
+        return isNew ? "" : (PresetModel.get(uuid).name || "");
+    }
+
+    /// The header shows "‹ Timers / <name>".
+    title: isNew ? i18n("New Timer") : storedName
     background: null
 
     /// What Save would store, as the controls show it now.
@@ -46,18 +66,80 @@ QQC2.Page {
         };
     }
 
-    // The fields as the page opened, to tell whether anything was changed since.
+    /// What the controls show for the stored timer `p` (a PresetModel.get() map), as currentFields() reads them.
+    function shownFields(p: var): var {
+        const o = p.options || {};
+        return {
+            name: p.name || "",
+            category: p.category || "",
+            iconName: p.iconName || "sugo-timer",
+            workSeconds: Math.max(1, Math.round(p.workSeconds / 60)) * 60,
+            shortBreakSeconds: Math.round(p.shortBreakSeconds / 60) * 60,
+            longBreakSeconds: Math.round(p.longBreakSeconds / 60) * 60,
+            cyclesBeforeLong: p.cyclesBeforeLong,
+            autoStartMode: o.autoStartMode !== undefined ? Math.max(0, Math.min(2, Number(o.autoStartMode))) : 0,
+            silenceWhileWorking: o.silenceWhileWorking !== undefined ? Boolean(o.silenceWhileWorking) : false,
+            soundOnEnd: o.soundOnEnd !== undefined ? Boolean(o.soundOnEnd) : true,
+            notifyOnEnd: o.notifyOnEnd !== undefined ? Boolean(o.notifyOnEnd) : true
+        };
+    }
+
+    /// The timer changed while the page is open (Sugo Sync brought another computer's version, or a
+    /// save): the controls the user has not changed show the stored values, the others keep what
+    /// the user made of them.
+    function followStored(): void {
+        if (isNew || initialFields.length === 0) {
+            return;
+        }
+        const stored = PresetModel.get(uuid);
+        if (stored.uuid === undefined) {
+            return;
+        }
+        const was = JSON.parse(initialFields);
+        const now = currentFields();
+        const next = shownFields(stored);
+        const show = {
+            name: v => nameField.text = v,
+            category: v => categoryField.text = v,
+            iconName: v => page.selectedIcon = v,
+            workSeconds: v => workBox.value = v / 60,
+            shortBreakSeconds: v => shortBox.value = v / 60,
+            longBreakSeconds: v => longBox.value = v / 60,
+            cyclesBeforeLong: v => cyclesBox.value = v,
+            autoStartMode: v => autoStartBox.currentIndex = v,
+            silenceWhileWorking: v => silenceBox.checked = v,
+            soundOnEnd: v => soundBox.checked = v,
+            notifyOnEnd: v => notifyBox.checked = v
+        };
+        for (const key in show) {
+            if (now[key] === was[key] && next[key] !== was[key]) {
+                show[key](next[key]);
+            }
+        }
+        initialFields = JSON.stringify(next);
+    }
+
+    // The fields as stored when the page opened or last followed the timer, to tell what was changed since.
     property string initialFields: ""
     // Taken once every control has its starting value.
     Component.onCompleted: Qt.callLater(() => initialFields = JSON.stringify(currentFields()))
     readonly property bool modified: initialFields.length > 0 && JSON.stringify(currentFields()) !== initialFields
     /// A confirmation is showing (also read by the smoke test).
-    readonly property bool confirming: discardDialog.visible || resetDialog.visible
+    readonly property bool confirming: discardDialog.visible || resetDialog.visible || deleteDialog.visible
 
     /// Save does something: a new timer, or changes to store.
     readonly property bool canSave: valid && (isNew || modified)
 
+    /// Takes the numbers still being typed: clicking a button or a shortcut leaves the focus in the field.
+    function commitFields(): void {
+        workBox.commit();
+        shortBox.commit();
+        longBox.commit();
+        cyclesBox.commit();
+    }
+
     function save(): void {
+        commitFields();
         if (!canSave) {
             return;
         }
@@ -67,14 +149,28 @@ QQC2.Page {
             leaving = true;
             applicationWindow().openTimer(created);
         } else {
-            PresetModel.update(uuid, fields);
+            // Only what the user changed: the rest keeps what is stored, which may have come from
+            // another computer since the page opened.
+            const was = JSON.parse(initialFields);
+            const changed = {};
+            for (const key in fields) {
+                if (fields[key] !== was[key]) {
+                    changed[key] = fields[key];
+                }
+            }
+            if (!PresetModel.update(uuid, changed)) {
+                // Deleted meanwhile (on another computer, through Sugo Sync).
+                applicationWindow().showPassiveNotification(
+                    i18n("This timer no longer exists, so your changes were not saved."));
+                return;
+            }
             initialFields = JSON.stringify(currentFields());
         }
     }
 
-    /// Back to the timer page (a new timer that is not created after all).
+    /// Back to the list of the timers (a new timer that is not created after all).
     function close(): void {
-        applicationWindow().navigate("timer");
+        applicationWindow().openSettings("timers");
     }
 
     // Set once the page is being left for good, so leaving does not ask again.
@@ -92,8 +188,9 @@ QQC2.Page {
         }
     }
 
-    /// Escape and the sidebar: unsaved changes are only thrown away once confirmed.
+    /// Escape, the back link and the tabs: unsaved changes are only thrown away once confirmed.
     function requestClose(then: var): void {
+        commitFields();
         discardDialog.then = then ?? null;
         if (modified) {
             discardDialog.open();
@@ -102,12 +199,23 @@ QQC2.Page {
         }
     }
 
+    /// Opens a copy of the stored timer, once unsaved changes are confirmed thrown away: the
+    /// copy is not made while the question is open, nor when the answer is Keep Editing.
+    function duplicate(): void {
+        requestClose(() => {
+            const copy = PresetModel.duplicate(page.uuid);
+            applicationWindow().openTimer(copy.length > 0 ? copy : page.uuid, true);
+        });
+    }
+
     function requestReset(): void {
         resetDialog.open();
     }
 
     function start(): void {
-        if (TimerEngine.active) {
+        commitFields();
+        // Changes are saved first (Start is disabled meanwhile).
+        if (TimerEngine.active || modified) {
             return;
         }
         PresetModel.currentUuid = uuid;
@@ -132,7 +240,7 @@ QQC2.Page {
     ConfirmDialog {
         id: resetDialog
         title: i18n("Reset to Defaults?")
-        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.preset.name || "")
+        text: i18n("“%1” goes back to its original durations and options. Your changes to it are lost.", page.storedName)
         confirmText: i18n("Reset")
         onConfirmed: {
             resetDialog.close();
@@ -145,7 +253,7 @@ QQC2.Page {
     ConfirmDialog {
         id: deleteDialog
         title: i18n("Delete Timer")
-        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.preset.name || "")
+        text: i18n("Delete “%1”? Statistics already recorded with it are kept.", page.storedName)
         confirmText: i18n("Delete")
         confirmKind: "danger"
         onConfirmed: {
@@ -153,12 +261,12 @@ QQC2.Page {
             // The timer may have been started meanwhile (tray, shortcut, D-Bus).
             if (page.lockedByTimer) {
                 applicationWindow().showPassiveNotification(
-                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.preset.name));
+                    i18n("“%1” was started meanwhile, so it was not deleted. Stop it to delete it.", page.storedName));
                 return;
             }
             page.leaving = true;
             PresetModel.remove(page.uuid);
-            applicationWindow().navigate("timer");
+            applicationWindow().openSettings("timers");
         }
     }
 
@@ -170,92 +278,200 @@ QQC2.Page {
 
     Shortcut {
         sequences: [StandardKey.Cancel]
-        enabled: page.visible && !autoStartBox.popup.visible && !page.confirming && (page.modified || page.isNew)
+        enabled: page.visible && !autoStartBox.popup.visible && !iconPopup.visible && !page.confirming && (page.modified || page.isNew)
         onActivated: page.requestClose()
     }
 
-    // Shown while there is something to keep: a new timer, or changes.
-    footer: Rectangle {
-        visible: page.isNew || page.modified
-        implicitHeight: visible ? Theme.controlHeightLg + Theme.spaceLg * 2 : 0
-        color: Theme.background
+    /// The window is too narrow for the list of the settings' categories beside the page.
+    readonly property bool narrow: page.Window.width > 0 && page.Window.width < Theme.settingsNavBreakpoint
+    /// Too narrow for the timer's name in the header, and for the label of Start.
+    readonly property bool compact: width < Theme.compactBreakpoint
+    // The page's padding: less in a narrow window.
+    readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
+    readonly property real paddingY: narrow ? Theme.settingsBodyPaddingCompactY : Theme.settingsBodyPaddingY
 
-        Rectangle {
-            width: parent.width
-            height: Theme.hairline
-            color: Theme.border
-        }
+    // Back to the list of the timers, where the timer is, and what can be done with it. Above the
+    // page, so Save stays at hand however far the page is scrolled.
+    header: Item {
+        implicitHeight: page.paddingY + headerRow.implicitHeight + Theme.spaceMd
 
         RowLayout {
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(parent.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.spaceMd
+            id: headerRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: page.paddingX
+            anchors.rightMargin: page.paddingX
+            anchors.bottomMargin: Theme.spaceMd
+            spacing: Theme.spaceSm
 
+            // "‹ Timers": unsaved changes are only thrown away once confirmed.
+            QQC2.AbstractButton {
+                id: backLink
+                objectName: "timersBackLink"
+                implicitHeight: Theme.controlHeight
+                implicitWidth: backRow.implicitWidth + Theme.spaceXs * 2
+                leftPadding: Theme.spaceXs
+                rightPadding: Theme.spaceXs
+                hoverEnabled: true
+                focusPolicy: Qt.TabFocus
+                text: i18n("Timers")
+                Accessible.name: text
+                Layout.leftMargin: -Theme.spaceXs
+                onClicked: page.requestClose(() => applicationWindow().openSettings("timers"))
+                background: Rectangle {
+                    radius: Theme.radiusSm
+                    color: "transparent"
+                    border.width: backLink.visualFocus ? Theme.hairline : 0
+                    border.color: Theme.focusRing
+                }
+                contentItem: Item {
+                    implicitWidth: backRow.implicitWidth
+                    implicitHeight: backRow.implicitHeight
+                    Row {
+                        id: backRow
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.hairline * 2
+                        LineIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "chevron-left"
+                            size: Theme.iconSm
+                            color: backLink.hovered ? Theme.foreground : Theme.muted
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: backLink.text
+                            color: backLink.hovered ? Theme.foreground : Theme.muted
+                            font.pixelSize: Theme.fontSettingsTitle
+                            font.weight: Font.Medium
+                        }
+                    }
+                }
+            }
             Text {
-                text: page.isNew ? i18n("A new timer") : i18n("Unsaved changes")
-                color: Theme.muted
-                font.pixelSize: Theme.fontBody
+                visible: !page.compact
+                text: "/"
+                color: Theme.subtle
+                font.pixelSize: Theme.fontSettingsTitle
+            }
+            Text {
+                visible: !page.compact
+                Layout.fillWidth: true
+                text: page.title
+                color: Theme.foreground
+                font.pixelSize: Theme.fontSettingsTitle
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+                Accessible.role: Accessible.Heading
+            }
+            Item {
+                visible: page.compact
                 Layout.fillWidth: true
             }
+
+            // Only while there is something to drop; faded rather than hidden, so nothing moves.
+            // Its room, when it is faded, is the end of the title's.
             SButton {
+                readonly property bool shown: page.isNew || page.modified
                 kind: "ghost"
                 text: page.isNew ? i18n("Cancel") : i18n("Discard")
+                opacity: shown ? 1 : 0
+                enabled: shown
                 onClicked: page.requestClose()
+                Behavior on opacity {
+                    NumberAnimation { duration: Theme.durationShort }
+                }
+            }
+            // A disabled button gets no hover events, so the wrapper says why it cannot start.
+            Item {
+                visible: !page.isNew
+                implicitWidth: startButton.implicitWidth
+                implicitHeight: startButton.implicitHeight
+                HoverHandler {
+                    id: startHover
+                }
+                QQC2.ToolTip.visible: !startButton.enabled && startHover.hovered && startButton.blockedBy.length > 0
+                QQC2.ToolTip.text: startButton.blockedBy
+                QQC2.ToolTip.delay: Theme.toolTipDelay
+                SButton {
+                    id: startButton
+                    readonly property bool running: page.isCurrent && TimerEngine.active
+                    /// Why Start is disabled ("Running" says it for this timer).
+                    readonly property string blockedBy: running ? ""
+                        : TimerEngine.active ? i18n("Stop the timer to switch to a different timer.")
+                        : page.modified ? i18n("Save your changes to start this timer.")
+                        : ""
+                    anchors.fill: parent
+                    kind: running ? "ghost" : "secondary"
+                    iconOnly: page.compact
+                    iconName: running ? "dot" : "play"
+                    text: running ? i18n("Running") : i18n("Start")
+                    labels: [i18n("Start"), i18n("Running")]
+                    enabled: !TimerEngine.active && !page.modified
+                    onClicked: page.start()
+                }
+            }
+            SButton {
+                visible: !page.isNew
+                kind: "ghost"
+                iconOnly: true
+                iconName: "copy"
+                text: i18n("Duplicate")
+                onClicked: page.duplicate()
+            }
+            // A disabled button gets no hover events, so the wrapper says why it cannot be deleted.
+            Item {
+                visible: !page.isNew
+                implicitWidth: deleteButton.implicitWidth
+                implicitHeight: deleteButton.implicitHeight
+                HoverHandler {
+                    id: deleteHover
+                }
+                QQC2.ToolTip.visible: !deleteButton.enabled && deleteHover.hovered
+                QQC2.ToolTip.text: deleteButton.text
+                QQC2.ToolTip.delay: Theme.toolTipDelay
+                SButton {
+                    id: deleteButton
+                    objectName: "deleteButton-" + page.uuid
+                    anchors.fill: parent
+                    kind: "ghost"
+                    iconOnly: true
+                    destructive: true
+                    iconName: "trash"
+                    text: page.preset.builtin ? i18n("The default timer cannot be deleted")
+                        : page.lockedByTimer ? i18n("This timer is running. Stop it to delete it.")
+                        : i18n("Delete")
+                    enabled: !page.preset.builtin && !page.lockedByTimer
+                    onClicked: deleteDialog.open()
+                }
             }
             SButton {
                 kind: "primary"
                 text: page.isNew ? i18n("Create Timer") : i18n("Save")
-                shortcutText: DesktopStyle.shortcutText("Ctrl+S")
                 enabled: page.canSave
                 onClicked: page.save()
             }
         }
     }
 
-    /// The name and category, edited where they are shown: plain text at rest, a light box hugging
-    /// the text when hovered or focused. The padding never changes, so the text does not move.
-    component InlineField: QQC2.TextField {
-        id: inline
-        // As wide as the text (or the placeholder), plus room for the caret, never wider than the column.
-        implicitWidth: Math.ceil(widthMetrics.advanceWidth) + Theme.hairline * 2 + leftPadding + rightPadding
-        Layout.fillWidth: true
-        Layout.maximumWidth: implicitWidth
-        leftPadding: Theme.spaceSm
-        rightPadding: Theme.spaceSm
-        topPadding: Theme.spaceXs
-        bottomPadding: Theme.spaceXs
-        color: Theme.foreground
-        placeholderTextColor: Theme.subtle
-        selectionColor: Theme.alpha(Theme.brand, 0.35)
-        selectedTextColor: Theme.foreground
-        hoverEnabled: true
-        TextMetrics {
-            id: widthMetrics
-            font: inline.font
-            text: inline.text.length > 0 ? inline.text : inline.placeholderText
-        }
-        background: Rectangle {
-            radius: Theme.radius
-            color: inline.activeFocus || inline.hovered ? Theme.hover : "transparent"
-            border.width: inline.activeFocus ? Theme.hairline : 0
-            border.color: Theme.borderStrong
-        }
-    }
-
-    // The icons to choose from, under the tile.
+    // The icons to choose from, under the icon's button, right edges together.
     QQC2.Popup {
         id: iconPopup
         parent: iconTile
-        y: iconTile.height + Theme.spaceSm
+        x: iconTile.width - width
+        y: iconTile.height + Theme.menuOffset
         width: Theme.space4xl * 6.5
+        margins: Theme.menuEdgeMargin
         padding: Theme.spaceMd
         focus: true
+        // A press on the button is left to the button, which toggles the popup: closing on the
+        // press would have the click open it again.
+        closePolicy: QQC2.Popup.CloseOnEscape | QQC2.Popup.CloseOnPressOutsideParent
         background: Rectangle {
             radius: Theme.radiusLg
             color: Theme.raised
             border.width: Theme.hairline
-            border.color: Theme.borderStrong
+            border.color: Theme.border
         }
         contentItem: Flow {
             spacing: Theme.spaceXs
@@ -275,7 +491,7 @@ QQC2.Page {
                     QQC2.ToolTip.text: modelData.label
                     QQC2.ToolTip.delay: Theme.toolTipDelay
                     background: Rectangle {
-                        radius: Theme.radius + 2
+                        radius: Theme.radius
                         color: iconBtn.isSelected ? Theme.selected : (iconBtn.hovered ? Theme.hover : "transparent")
                         border.width: iconBtn.isSelected || iconBtn.visualFocus ? Theme.hairline : 0
                         border.color: iconBtn.visualFocus ? Theme.focusRing : Theme.borderStrong
@@ -300,131 +516,19 @@ QQC2.Page {
         id: flickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + Theme.space2xl * 2
+        contentHeight: column.implicitHeight + page.paddingY + Theme.spaceMd
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
 
         ColumnLayout {
             id: column
-            x: (flickable.width - width) / 2
-            y: Theme.space2xl
-            width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.space2xl
+            x: page.paddingX
+            y: 0
+            width: Math.max(0, flickable.width - page.paddingX * 2)
+            spacing: Theme.spaceSm
 
-            // The timer: its tile (click to change it), its name and category, edited in place.
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spaceLg
-
-                QQC2.AbstractButton {
-                    id: iconTile
-                    implicitWidth: Theme.iconXl + Theme.spaceLg
-                    implicitHeight: implicitWidth
-                    hoverEnabled: true
-                    focusPolicy: Qt.TabFocus
-                    text: i18n("Icon")
-                    Accessible.description: i18n("Choose the icon of this timer")
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: i18n("Change the icon")
-                    QQC2.ToolTip.delay: Theme.toolTipDelay
-                    onClicked: iconPopup.opened ? iconPopup.close() : iconPopup.open()
-                    background: Rectangle {
-                        radius: Theme.radiusLg
-                        color: iconTile.hovered || iconPopup.visible ? Theme.hover : "transparent"
-                        border.width: iconTile.hovered || iconPopup.visible || iconTile.visualFocus ? Theme.hairline : 0
-                        border.color: iconTile.visualFocus ? Theme.focusRing : Theme.borderStrong
-                    }
-                    contentItem: Item {
-                        TimerIcon {
-                            anchors.centerIn: parent
-                            iconName: page.selectedIcon
-                            size: Theme.iconXl + Theme.spaceXs
-                        }
-                    }
-                }
-
-                // The fields are only as wide as their text; the column still takes the rest of the row.
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.maximumWidth: Number.POSITIVE_INFINITY
-                    // The box around a field starts a little past the tile, the text a little further.
-                    Layout.leftMargin: -Theme.spaceXs
-                    spacing: 0
-                    InlineField {
-                        id: nameField
-                        text: page.preset.name
-                        maximumLength: PresetModel.maxNameLength
-                        placeholderText: i18n("Name this timer")
-                        font.pixelSize: Theme.fontHeading
-                        font.weight: Font.DemiBold
-                        Accessible.name: i18n("Name")
-                        onAccepted: page.save()
-                        Component.onCompleted: if (page.isNew) forceActiveFocus()
-                    }
-                    InlineField {
-                        id: categoryField
-                        text: page.preset.category
-                        maximumLength: PresetModel.maxNameLength
-                        placeholderText: i18n("Add a category, e.g. Work or Study")
-                        color: Theme.muted
-                        font.pixelSize: Theme.fontBody
-                        Accessible.name: i18n("Category")
-                        onAccepted: page.save()
-                    }
-                }
-
-                SButton {
-                    visible: !page.isNew
-                    kind: page.isCurrent && TimerEngine.active ? "ghost" : "primary"
-                    iconName: page.isCurrent && TimerEngine.active ? "dot" : "play"
-                    text: page.isCurrent && TimerEngine.active ? i18n("Running") : i18n("Start")
-                    enabled: !TimerEngine.active && !page.modified
-                    toolTipText: TimerEngine.active && !page.isCurrent ? i18n("Stop the timer to switch to a different timer.") : ""
-                    onClicked: page.start()
-                }
-                SButton {
-                    visible: !page.isNew
-                    kind: "ghost"
-                    iconOnly: true
-                    iconName: "copy"
-                    text: i18n("Duplicate")
-                    onClicked: {
-                        const copy = PresetModel.duplicate(page.uuid);
-                        if (copy.length > 0) {
-                            applicationWindow().openTimer(copy);
-                        }
-                    }
-                }
-                // A disabled button gets no hover events, so the wrapper says why it cannot be deleted.
-                Item {
-                    visible: !page.isNew
-                    implicitWidth: deleteButton.implicitWidth
-                    implicitHeight: deleteButton.implicitHeight
-                    HoverHandler {
-                        id: deleteHover
-                    }
-                    QQC2.ToolTip.visible: !deleteButton.enabled && deleteHover.hovered
-                    QQC2.ToolTip.text: deleteButton.text
-                    QQC2.ToolTip.delay: Theme.toolTipDelay
-                    SButton {
-                        id: deleteButton
-                        objectName: "deleteButton-" + page.uuid
-                        anchors.fill: parent
-                        kind: "ghost"
-                        iconOnly: true
-                        destructive: true
-                        iconName: "trash"
-                        text: page.preset.builtin ? i18n("The default timer cannot be deleted")
-                            : page.lockedByTimer ? i18n("This timer is running. Stop it to delete it.")
-                            : i18n("Delete")
-                        enabled: !page.preset.builtin && !page.lockedByTimer
-                        onClicked: deleteDialog.open()
-                    }
-                }
-            }
-
-            // One cycle as it will run: every phase as wide as it lasts.
+            // One cycle as it will run: every phase as long as it lasts, work in the accent colour.
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: cycleColumn.implicitHeight + Theme.spaceLg * 2
@@ -453,8 +557,11 @@ QQC2.Page {
                 ColumnLayout {
                     id: cycleColumn
                     anchors.fill: parent
-                    anchors.margins: Theme.spaceLg
-                    spacing: Theme.spaceMd
+                    anchors.topMargin: Theme.spaceLg
+                    anchors.bottomMargin: Theme.spaceLg
+                    anchors.leftMargin: Theme.settingsRowPaddingX
+                    anchors.rightMargin: Theme.settingsRowPaddingX
+                    spacing: Theme.spaceSm
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -478,37 +585,45 @@ QQC2.Page {
 
                     Item {
                         id: cycleRow
+                        objectName: "cyclePreview"
                         Layout.fillWidth: true
-                        implicitHeight: Theme.spaceXl + Theme.spaceSm
+                        // Taller than the track, to grab it.
+                        implicitHeight: Theme.spaceLg
+                        // A long set (up to 99 work phases) still fits: the gaps take at most half the
+                        // row, the blocks' minimum width shrinks to their share of the rest, and the
+                        // row clips what rounding leaves over.
+                        clip: true
                         readonly property var phases: cycleColumn.parent.phases
-                        readonly property real gaps: Theme.hairline * 3 * (phases.length - 1)
+                        readonly property int count: phases.length
+                        readonly property real total: Math.max(1, cycleColumn.parent.totalMinutes)
+                        readonly property real gap: count > 1 ? Math.min(Theme.cycleTrackGap, width / 2 / (count - 1)) : 0
+                        readonly property real available: Math.max(0, width - gap * (count - 1))
+                        readonly property real minBlock: Math.min(Theme.spaceXs, available / Math.max(1, count))
+                        // Each block as long as its phase, at least minBlock; when those minimums would
+                        // push the row past its box, each gets the minimum plus its share of what is left
+                        // (the hairline only absorbs floating-point error in a sum that fits).
+                        readonly property bool crowded: phases.reduce(
+                            (sum, p) => sum + Math.max(minBlock, available * p.minutes / total), 0) > available + Theme.hairline
+                        /// Pixels per minute of the blocks' variable part (what a drag moves).
+                        readonly property real pixelsPerMinute: (crowded ? available - minBlock * count : available) / total
                         Row {
                             id: cycleBlocks
-                            anchors.fill: parent
-                            spacing: Theme.hairline * 3
+                            objectName: "cycleBlocks"
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            height: Theme.cycleTrackHeight
+                            spacing: cycleRow.gap
                             Repeater {
                                 model: cycleRow.phases
                                 Rectangle {
                                     id: block
                                     required property var modelData
-                                    width: Math.max(Theme.spaceXs, (cycleRow.width - cycleRow.gaps) * modelData.minutes / Math.max(1, cycleColumn.parent.totalMinutes))
-                                    height: cycleRow.height
-                                    radius: Theme.radiusSm
-                                    color: modelData.work ? Theme.brand : Theme.alpha(Theme.breakColor, modelData.long ? 0.7 : 0.35)
-                                    gradient: modelData.work ? workGradient : null
-                                    Gradient {
-                                        id: workGradient
-                                        GradientStop { position: 0; color: Theme.brandPeach }
-                                        GradientStop { position: 1; color: Theme.brand }
-                                    }
-                                    Text {
-                                        anchors.centerIn: parent
-                                        visible: parent.width > implicitWidth + Theme.spaceMd
-                                        text: block.modelData.minutes
-                                        color: Theme.brandText
-                                        font.pixelSize: Theme.fontSmall
-                                        font.weight: Font.DemiBold
-                                    }
+                                    width: cycleRow.crowded ? cycleRow.minBlock + cycleRow.pixelsPerMinute * modelData.minutes
+                                                            : Math.max(cycleRow.minBlock, cycleRow.pixelsPerMinute * modelData.minutes)
+                                    height: cycleBlocks.height
+                                    radius: height / 2
+                                    color: modelData.work ? Theme.accent : Theme.alpha(Theme.breakAccent, modelData.long ? 1 : 0.55)
                                 }
                             }
                         }
@@ -527,7 +642,7 @@ QQC2.Page {
                             // Frozen at press, so the scale does not shift under the pointer while dragging.
                             property real pixelsPerMinute: 1
                             onPressed: mouse => {
-                                const block = cycleBlocks.childAt(mouse.x, mouse.y);
+                                const block = cycleBlocks.childAt(mouse.x, cycleBlocks.height / 2);
                                 box = block && block.modelData ? (block.modelData.work ? workBox : block.modelData.long ? longBox : shortBox) : null;
                                 if (!box) {
                                     mouse.accepted = false;
@@ -536,15 +651,98 @@ QQC2.Page {
                                 startValue = box.value;
                                 startX = mouse.x;
                                 direction = mouse.x < block.x + block.width / 2 ? -1 : 1;
-                                pixelsPerMinute = Math.max(1, (cycleRow.width - cycleRow.gaps) / Math.max(1, cycleColumn.parent.totalMinutes));
+                                pixelsPerMinute = Math.max(1, cycleRow.pixelsPerMinute);
                             }
                             onPositionChanged: mouse => {
                                 if (box) {
-                                    box.setValue(startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute));
+                                    // At least a minute: a phase dragged to nothing would leave no block to drag back.
+                                    box.setValue(Math.max(1, startValue + direction * Math.round((mouse.x - startX) / pixelsPerMinute)));
                                 }
                             }
                             onReleased: box = null
                             onCanceled: box = null
+                        }
+                    }
+                }
+            }
+
+            FormSection {
+                title: i18n("Timer")
+
+                FormRow {
+                    id: nameRow
+                    first: true
+                    title: i18n("Name")
+                    STextField {
+                        id: nameField
+                        Layout.preferredWidth: Theme.fieldWidthWide
+                        Layout.fillWidth: !nameRow.sideBySide
+                        text: page.shown.name
+                        maximumLength: PresetModel.maxNameLength
+                        placeholderText: i18n("Name this timer")
+                        Accessible.name: i18n("Name")
+                        onAccepted: page.save()
+                        Component.onCompleted: if (page.isNew) forceActiveFocus()
+                    }
+                }
+                FormRow {
+                    id: categoryRow
+                    title: i18n("Category")
+                    STextField {
+                        id: categoryField
+                        Layout.preferredWidth: Theme.fieldWidthWide
+                        Layout.fillWidth: !categoryRow.sideBySide
+                        text: page.shown.category
+                        maximumLength: PresetModel.maxNameLength
+                        placeholderText: i18n("Add a category, e.g. Work or Study")
+                        Accessible.name: i18n("Category")
+                        onAccepted: page.save()
+                    }
+                }
+                FormRow {
+                    title: i18n("Icon")
+                    // The icon in a button like a drop-down list's: a click shows them all.
+                    QQC2.AbstractButton {
+                        id: iconTile
+                        implicitHeight: Theme.controlHeightSm
+                        implicitWidth: iconTileRow.implicitWidth + leftPadding + rightPadding
+                        leftPadding: Theme.spaceSm
+                        rightPadding: Theme.spaceMd
+                        hoverEnabled: true
+                        focusPolicy: Qt.TabFocus
+                        text: i18n("Icon")
+                        Accessible.description: i18n("Choose the icon of this timer")
+                        QQC2.ToolTip.visible: hovered && !iconPopup.visible
+                        QQC2.ToolTip.text: i18n("Change the icon")
+                        QQC2.ToolTip.delay: Theme.toolTipDelay
+                        onClicked: iconPopup.opened ? iconPopup.close() : iconPopup.open()
+                        background: Rectangle {
+                            radius: Theme.radius
+                            color: iconTile.pressed ? Qt.tint(Theme.background, Theme.pressed)
+                                 : iconTile.hovered && !iconPopup.visible ? Qt.tint(Theme.background, Theme.hover) : Theme.background
+                            border.width: Theme.hairline
+                            border.color: iconTile.visualFocus ? Theme.focusRing : iconPopup.visible ? Theme.borderStrong : Theme.border
+                        }
+                        contentItem: Item {
+                            implicitWidth: iconTileRow.implicitWidth
+                            implicitHeight: iconTileRow.implicitHeight
+                            Row {
+                                id: iconTileRow
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spaceSm
+                                TimerIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    iconName: page.selectedIcon
+                                    size: Theme.iconMd
+                                }
+                                LineIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    name: "chevron-down"
+                                    size: Theme.iconSm
+                                    color: Theme.muted
+                                    rotation: iconPopup.visible ? 180 : 0
+                                }
+                            }
                         }
                     }
                 }
@@ -563,7 +761,7 @@ QQC2.Page {
                             id: chip
                             required property int modelData
                             readonly property bool on: workBox.value === modelData
-                            implicitHeight: Theme.controlHeight - Theme.spaceXs
+                            implicitHeight: Theme.controlHeightSm
                             leftPadding: Theme.spaceMd
                             rightPadding: Theme.spaceMd
                             hoverEnabled: true
@@ -589,10 +787,11 @@ QQC2.Page {
                     }
                     NumberField {
                         id: workBox
+                        objectName: "workField"
                         Layout.leftMargin: Theme.spaceSm
                         from: 1
                         to: PresetModel.maxWorkMinutes
-                        value: Math.max(1, Math.round(page.preset.workSeconds / 60))
+                        value: page.shown.workSeconds / 60
                         unit: i18nc("minutes, short", "min")
                         Accessible.name: i18n("Work")
                     }
@@ -601,10 +800,13 @@ QQC2.Page {
                     title: i18n("Short break")
                     NumberField {
                         id: shortBox
-                        from: 1
+                        objectName: "shortBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.shortBreakSeconds / 60))
+                        value: page.shown.shortBreakSeconds / 60
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Short break")
                     }
                 }
@@ -612,10 +814,13 @@ QQC2.Page {
                     title: i18n("Long break")
                     NumberField {
                         id: longBox
-                        from: 1
+                        objectName: "longBreakField"
+                        // 0 is no break (the engine goes straight back to work): typed, not dragged.
+                        from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.max(1, Math.round(page.preset.longBreakSeconds / 60))
+                        value: page.shown.longBreakSeconds / 60
                         unit: i18nc("minutes, short", "min")
+                        fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Long break")
                     }
                 }
@@ -624,10 +829,11 @@ QQC2.Page {
                     description: i18n("How many work sessions come before the long break.")
                     NumberField {
                         id: cyclesBox
+                        objectName: "cyclesField"
                         from: 0
                         to: PresetModel.maxCycles
-                        value: page.preset.cyclesBeforeLong
-                        unit: i18nc("work sessions, short", "sessions")
+                        value: page.shown.cyclesBeforeLong
+                        unit: i18ncp("work sessions, short", "session", "sessions", cyclesBox.value)
                         fromText: i18n("Never")
                         Accessible.name: i18n("Long break after")
                     }
@@ -645,20 +851,20 @@ QQC2.Page {
                         id: autoStartBox
                         Accessible.name: i18n("Start automatically")
                         model: [i18n("Manual"), i18n("Breaks only"), i18n("All phases")]
-                        currentIndex: (page.preset.options && page.preset.options.autoStartMode !== undefined)
-                            ? Math.max(0, Math.min(2, Number(page.preset.options.autoStartMode)))
-                            : 0
+                        currentIndex: page.shown.autoStartMode
                     }
                 }
                 FormRow {
                     title: i18n("Silence notifications while working")
-                    description: SilenceController.available
-                        ? (DesktopStyle.macos
-                           ? i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts.")
-                           : i18n("Turns off all system notifications for the work phase and back on for the break."))
-                        : DesktopStyle.macos
-                          ? i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")
-                          : i18n("Not available: this desktop's notification service cannot be silenced by applications.")
+                    // Availability can change while the page is open (the shortcuts installed, the
+                    // notification service appearing): the row keeps the height of the taller text.
+                    readonly property var silenceTexts: DesktopStyle.macos
+                        ? [i18n("Turns Do Not Disturb on for the work phase and off for the break, through the two Focus shortcuts."),
+                           i18n("Needs the two Focus shortcuts: install them in Settings → Focus.")]
+                        : [i18n("Turns off all system notifications for the work phase and back on for the break."),
+                           i18n("Not available: this desktop's notification service cannot be silenced by applications.")]
+                    description: silenceTexts[SilenceController.available ? 0 : 1]
+                    descriptionVariants: silenceTexts
                     enabled: SilenceController.available || DesktopStyle.macos
                     // macOS: until the shortcuts exist, a way to set them up instead of the switch.
                     SButton {
@@ -673,9 +879,7 @@ QQC2.Page {
                         visible: SilenceController.available || !DesktopStyle.macos
                         enabled: SilenceController.available
                         Accessible.name: i18n("Silence notifications while working")
-                        checked: (page.preset.options && page.preset.options.silenceWhileWorking !== undefined)
-                            ? Boolean(page.preset.options.silenceWhileWorking)
-                            : false
+                        checked: page.shown.silenceWhileWorking
                     }
                 }
                 FormRow {
@@ -683,9 +887,7 @@ QQC2.Page {
                     SSwitch {
                         id: soundBox
                         Accessible.name: i18n("Play a sound when a phase ends")
-                        checked: (page.preset.options && page.preset.options.soundOnEnd !== undefined)
-                            ? Boolean(page.preset.options.soundOnEnd)
-                            : true
+                        checked: page.shown.soundOnEnd
                     }
                 }
                 FormRow {
@@ -693,15 +895,14 @@ QQC2.Page {
                     SSwitch {
                         id: notifyBox
                         Accessible.name: i18n("Show a notification when a phase ends")
-                        checked: (page.preset.options && page.preset.options.notifyOnEnd !== undefined)
-                            ? Boolean(page.preset.options.notifyOnEnd)
-                            : true
+                        checked: page.shown.notifyOnEnd
                     }
                 }
             }
 
             SButton {
                 visible: page.preset.builtin === true
+                Layout.topMargin: Theme.spaceLg
                 kind: "ghost"
                 iconName: "undo"
                 text: i18n("Reset to Defaults")

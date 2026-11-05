@@ -4,8 +4,12 @@
 #include "SecretStore.h"
 
 #include "Localization.h"
+#include "RetryAfter.h"
+#include "UrlPolicy.h"
 
+#include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -68,12 +72,6 @@ QString appVersion()
 #endif
 }
 
-bool isLoopbackHost(const QString &host)
-{
-    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("::1")
-        || host == QLatin1String("[::1]");
-}
-
 /// The URL as text, without a trailing slash and without query or fragment.
 QString withoutTrailingSlash(QUrl url)
 {
@@ -85,6 +83,46 @@ QString withoutTrailingSlash(QUrl url)
     }
     url.setPath(path);
     return url.toString(QUrl::FullyEncoded);
+}
+
+/// The port, or the scheme's default one when the URL does not name it.
+int effectivePort(const QUrl &url)
+{
+    const QString scheme = url.scheme().toLower();
+    return url.port(scheme == QLatin1String("https") ? 443 : scheme == QLatin1String("http") ? 80 : -1);
+}
+
+/// Same scheme, host and port: credentials for one may go to the other.
+bool sameOrigin(const QUrl &a, const QUrl &b)
+{
+    return a.scheme() == b.scheme() && a.host() == b.host() && effectivePort(a) == effectivePort(b);
+}
+
+/// The first href inside the WebDAV property `property` (local name) of a multistatus, resolved
+/// against `requestUrl`; empty if there is none or it is on another server.
+QUrl hrefInProperty(const QByteArray &data, const QString &property, const QUrl &requestUrl)
+{
+    QXmlStreamReader xml(data);
+    bool inProperty = false;
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (xml.isStartElement()) {
+            const QString name = xml.name().toString();
+            if (name == property) {
+                inProperty = true;
+            } else if (inProperty && name == QLatin1String("href")) {
+                const QString href = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                if (href.isEmpty()) {
+                    return {};
+                }
+                const QUrl resolved = requestUrl.resolved(QUrl(href));
+                return sameOrigin(resolved, requestUrl) ? resolved : QUrl();
+            }
+        } else if (xml.isEndElement() && xml.name().toString() == property) {
+            inProperty = false;
+        }
+    }
+    return {};
 }
 
 QString lastSegment(const QString &url)
@@ -107,6 +145,75 @@ bool isSuccess(int http)
 QByteArray basicAuth(const QString &user, const QString &password)
 {
     return "Basic " + (user + QLatin1Char(':') + password).toUtf8().toBase64();
+}
+
+/// The colour Nextcloud's calendar app gives a calendar that has none of its own (uidToColor
+/// in nextcloud/calendar): one of 18 steps between its red, yellow and blue, picked by the sum
+/// of the hex digits of the MD5 of the lower-case name. The same name gets the same colour here
+/// as in the browser.
+QString nameColor(const QString &name)
+{
+    QString hash = name.toLower();
+    static const QRegularExpression md5Like(QStringLiteral("^([0-9a-f]{4}-?){8}$"));
+    if (!md5Like.match(hash).hasMatch()) {
+        hash = QString::fromLatin1(QCryptographicHash::hash(hash.toUtf8(), QCryptographicHash::Md5).toHex());
+    }
+    int sum = 0;
+    for (const QChar c : std::as_const(hash)) {
+        bool ok = false;
+        const int digit = QString(c).toInt(&ok, 16);
+        if (ok) {
+            sum += digit;
+        }
+    }
+    constexpr int steps = 6;
+    static const QColor ends[] = {QColor(182, 70, 157), QColor(221, 203, 85), QColor(0, 130, 201), QColor(182, 70, 157)};
+    const int index = sum % (steps * 3);
+    const QColor &from = ends[index / steps];
+    const QColor &to = ends[index / steps + 1];
+    const int i = index % steps;
+    // As the JavaScript does: parseInt() of a positive number drops the fraction.
+    const auto mix = [i](int a, int b) { return static_cast<int>(a + (b - a) / double(steps) * i); };
+    return QColor(mix(from.red(), to.red()), mix(from.green(), to.green()), mix(from.blue(), to.blue())).name(QColor::HexRgb);
+}
+
+/// A calendar-color as the interface can show it: "#rrggbb". Servers send it as #RRGGBBAA
+/// (Apple's property), which QML would read as #AARRGGBB: the alpha is left out; Nextcloud also
+/// keeps colours without their "#". A calendar without a colour QColor can read gets the one
+/// Nextcloud's web interface shows for it, made from its name; with no name either, none.
+QString calendarColor(const QString &value, const QString &name)
+{
+    static const QRegularExpression hex(QStringLiteral("^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"));
+    const QRegularExpressionMatch m = hex.match(value);
+    const QString digits = m.hasMatch() ? m.captured(1) : QString();
+    const QColor color = QColor::fromString(m.hasMatch() ? QLatin1Char('#') + digits.left(6) : value);
+    if (color.isValid()) {
+        return color.name(QColor::HexRgb);
+    }
+    return name.isEmpty() ? QString() : nameColor(name);
+}
+
+/// A 403 to an event (a real one or the test's): the server knows who we are, but the calendar
+/// does not take new events (shared read-only, a full quota). Not a rejected login.
+QString calendarRefusesEvents()
+{
+    return i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
+                "or choose another calendar.");
+}
+
+/// Some servers and authentication proxies answer a wrong password with 403 rather than 401.
+/// Trying it again every few minutes for ever could get the account locked: after this many
+/// 403s in a row, with nothing accepted between, sending waits for the user as after a 401.
+/// With the usual backoff that is about two and a half minutes after the first refusal.
+constexpr int kForbiddenBeforePause = 3;
+
+/// Why sending is paused after kForbiddenBeforePause 403s: either cause is possible.
+QString forbiddenTooOften()
+{
+    return i18n("Sending paused: the server refused %1 times in a row (HTTP 403). Either this calendar does not accept "
+                "new events, or the server rejects the username and app password this way. Check both, then test "
+                "the connection.",
+                kForbiddenBeforePause);
 }
 } // namespace
 
@@ -205,13 +312,10 @@ QByteArray CalendarSync::buildIcs(const SessionRecord &record, bool includeNote,
 
 bool CalendarSync::isUrlAllowed(const QUrl &url, QString *error)
 {
+    if (UrlPolicy::isAllowed(url)) {
+        return true;
+    }
     const QString scheme = url.scheme().toLower();
-    if (scheme == QLatin1String("https") && !url.host().isEmpty()) {
-        return true;
-    }
-    if (scheme == QLatin1String("http") && isLoopbackHost(url.host().toLower())) {
-        return true;
-    }
     if (error) {
         if (scheme == QLatin1String("http")) {
             *error = i18n("Plain %1 addresses are not allowed because the password would be sent unencrypted. Use an %2 address.", QStringLiteral("http://"), QStringLiteral("https://"));
@@ -228,14 +332,10 @@ QString CalendarSync::normalizeUrl(const QString &input, QString *error)
     if (trimmed.isEmpty()) {
         return {};
     }
+    // An address typed without its scheme ("cloud.example.org") is an https one.
     static const QRegularExpression schemeRe(QStringLiteral("^[A-Za-z][A-Za-z0-9+.-]*://"));
-    if (!schemeRe.match(trimmed).hasMatch()) {
-        if (error) {
-            *error = i18n("Please type the full address, starting with %1", QStringLiteral("https://"));
-        }
-        return {};
-    }
-    QUrl url(trimmed, QUrl::StrictMode);
+    const QString full = schemeRe.match(trimmed).hasMatch() ? trimmed : QStringLiteral("https://") + trimmed;
+    QUrl url(full, QUrl::StrictMode);
     if (!url.isValid() || url.host().isEmpty()) {
         if (error) {
             *error = i18n("This is not a valid web address.");
@@ -257,19 +357,25 @@ QString CalendarSync::normalizeUrl(const QString &input, QString *error)
 
 QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray &data, const QUrl &requestUrl)
 {
-    struct Response {
-        QString href;
+    struct Properties {
         QString name;
         QString color;
         bool isCalendar = false;
         bool hasComponentSet = false;
         bool vevent = false;
     };
+    struct Response {
+        QString href;
+        Properties props;
+    };
 
     QList<CalendarInfo> result;
     QXmlStreamReader xml(data);
     Response cur;
+    Properties stat; ///< Of the propstat being read; kept only if its status is a success.
     bool inResponse = false;
+    bool inPropstat = false;
+    bool statOk = true;
     bool inResourceType = false;
     bool inComponentSet = false;
 
@@ -280,27 +386,36 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
         xml.readNext();
         if (xml.isStartElement()) {
             const QString name = xml.name().toString();
+            Properties &props = inPropstat ? stat : cur.props;
             if (name == QLatin1String("response")) {
                 cur = Response();
                 inResponse = true;
             } else if (!inResponse) {
                 continue;
+            } else if (name == QLatin1String("propstat")) {
+                stat = Properties();
+                statOk = true; // a server that leaves out the status means success
+                inPropstat = true;
+            } else if (name == QLatin1String("status") && inPropstat) {
+                // "HTTP/1.1 404 Not Found": a property asked for that the collection does not have.
+                const QString statusLine = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                statOk = isSuccess(statusLine.section(QLatin1Char(' '), 1, 1, QString::SectionSkipEmpty).toInt());
             } else if (name == QLatin1String("href") && cur.href.isEmpty()) {
                 cur.href = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("displayname")) {
-                cur.name = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                props.name = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("calendar-color")) {
-                cur.color = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
+                props.color = xml.readElementText(QXmlStreamReader::SkipChildElements).trimmed();
             } else if (name == QLatin1String("resourcetype")) {
                 inResourceType = true;
             } else if (name == QLatin1String("calendar") && inResourceType) {
-                cur.isCalendar = true;
+                props.isCalendar = true;
             } else if (name == QLatin1String("supported-calendar-component-set")) {
-                cur.hasComponentSet = true;
+                props.hasComponentSet = true;
                 inComponentSet = true;
             } else if (name == QLatin1String("comp") && inComponentSet) {
                 if (xml.attributes().value(QLatin1String("name")).compare(QLatin1String("VEVENT"), Qt::CaseInsensitive) == 0) {
-                    cur.vevent = true;
+                    props.vevent = true;
                 }
             }
         } else if (xml.isEndElement()) {
@@ -309,14 +424,29 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 inResourceType = false;
             } else if (name == QLatin1String("supported-calendar-component-set")) {
                 inComponentSet = false;
+            } else if (name == QLatin1String("propstat") && inPropstat) {
+                inPropstat = false;
+                if (statOk) {
+                    Properties &props = cur.props;
+                    if (!stat.name.isEmpty()) {
+                        props.name = stat.name;
+                    }
+                    if (!stat.color.isEmpty()) {
+                        props.color = stat.color;
+                    }
+                    props.isCalendar = props.isCalendar || stat.isCalendar;
+                    props.hasComponentSet = props.hasComponentSet || stat.hasComponentSet;
+                    props.vevent = props.vevent || stat.vevent;
+                }
             } else if (name == QLatin1String("response") && inResponse) {
                 inResponse = false;
-                if (!cur.isCalendar || (cur.hasComponentSet && !cur.vevent) || cur.href.isEmpty()) {
+                inPropstat = false;
+                const Properties &props = cur.props;
+                if (!props.isCalendar || (props.hasComponentSet && !props.vevent) || cur.href.isEmpty()) {
                     continue;
                 }
                 const QUrl resolved = requestUrl.resolved(QUrl(cur.href));
-                if (resolved.scheme() != requestUrl.scheme() || resolved.host() != requestUrl.host()
-                    || resolved.port(0) != requestUrl.port(0)) {
+                if (!sameOrigin(resolved, requestUrl)) {
                     continue; // never hand our credentials to another server
                 }
                 const QString url = withoutTrailingSlash(resolved);
@@ -326,8 +456,8 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 }
                 CalendarInfo info;
                 info.url = url;
-                info.name = cur.name.isEmpty() ? segment : cur.name;
-                info.color = cur.color;
+                info.name = props.name.isEmpty() ? segment : props.name;
+                info.color = calendarColor(props.color, props.name);
                 result.append(info);
             }
         }
@@ -672,7 +802,7 @@ void CalendarSync::setServerUrl(const QString &url)
     QString error;
     const QString normalized = normalizeUrl(url, &error);
     if (!error.isEmpty()) {
-        setLastError(error);
+        rejectInput(error);
         return;
     }
     if (normalized == m_serverUrl) {
@@ -716,9 +846,9 @@ void CalendarSync::setUsername(const QString &username)
 
 void CalendarSync::setPassword(const QString &password)
 {
-    const QString pw = password.trimmed();
+    // Stored as typed: a space at either end may be part of it.
     const bool had = hasPassword();
-    storePassword(pw);
+    storePassword(password);
     if (had != hasPassword()) {
         Q_EMIT hasPasswordChanged();
     }
@@ -730,7 +860,7 @@ void CalendarSync::setCalendarUrl(const QString &url)
     QString error;
     const QString normalized = normalizeUrl(url, &error);
     if (!error.isEmpty() || !calendarOnServer(normalized, &error)) {
-        setLastError(error);
+        rejectInput(error);
         return;
     }
     if (normalized == m_calendarUrl) {
@@ -789,6 +919,7 @@ void CalendarSync::disconnect()
     m_retryTimer.stop();
     m_retryStep = 0;
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
 
     const bool hadPassword = hasPassword();
@@ -822,6 +953,7 @@ void CalendarSync::credentialsChanged()
 {
     // New credentials (or calendar) deserve a fresh attempt, immediately.
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
     m_retryTimer.stop();
     m_retryStep = 0;
@@ -898,6 +1030,12 @@ void CalendarSync::setLastError(const QString &error)
     Q_EMIT lastErrorChanged();
 }
 
+void CalendarSync::rejectInput(const QString &error)
+{
+    setLastError(error);
+    Q_EMIT inputRejected(scrub(error));
+}
+
 QString CalendarSync::scrub(const QString &text) const
 {
     QString out = text;
@@ -913,7 +1051,8 @@ void CalendarSync::refreshIdleStatus()
         return;
     }
     if (m_paused) {
-        setStatus(Failed, i18n("Login rejected: check username and app password"));
+        setStatus(Failed, m_forbiddenStreak >= kForbiddenBeforePause ? forbiddenTooOften()
+                                                                     : i18n("Login rejected: check username and app password"));
     } else if (!configured()) {
         if (!m_username.isEmpty() && !m_password.isEmpty()) {
             setStatus(NotConfigured, i18n("Signed in as %1. Choose a calendar to finish.", m_username));
@@ -930,10 +1069,16 @@ void CalendarSync::refreshIdleStatus()
 QString CalendarSync::describeFailure(const Result &result) const
 {
     QString text;
-    if (result.http == 401 || result.http == 403) {
+    if (result.http == 401) {
+        // Not 403: that one is the server refusing the request to someone it knows (a calendar
+        // shared read-only, an event that may not be removed), handled where it can happen.
         text = i18n("Login rejected: check username and app password");
     } else if (result.http == 404) {
         text = i18n("Calendar not found");
+    } else if (result.http == 409) {
+        text = i18n("Calendar not found (HTTP 409): it may have been deleted or renamed");
+    } else if (result.http == 423) {
+        text = i18n("The calendar is locked by another client (HTTP 423)");
     } else if (result.http > 0) {
         text = i18n("Server answered HTTP %1", result.http);
     } else {
@@ -1006,6 +1151,9 @@ void CalendarSync::request(const QByteArray &verb, const QUrl &url, const QByteA
         r.body = reply->readAll();
         if (r.http == 0) {
             r.networkError = reply->errorString();
+        }
+        if (!isSuccess(r.http)) {
+            r.retryAfter = RetryAfter::seconds(reply->rawHeader("Retry-After"));
         }
         done(r);
     });
@@ -1126,7 +1274,14 @@ void CalendarSync::enqueueWorkSession(const SessionRecord &record)
         }
     }
     appendBounded(item);
-    trySend();
+    // This runs while the timer is ending the phase. Asking the keyring for a password it could
+    // not give yet may show its unlock prompt and wait for the answer: that is left to the event
+    // loop, so the next phase and its notification are not held up meanwhile.
+    if (m_passwordUnread) {
+        trySendLater();
+    } else {
+        trySend();
+    }
 }
 
 void CalendarSync::onNoteChanged(qint64 sessionId, const QString &note)
@@ -1176,16 +1331,29 @@ void CalendarSync::trySend()
     m_inFlightRecord = it->record;
     const QByteArray ics = buildIcs(it->record, m_includeNote, it->uid);
     request("PUT", eventUrl(it->uid), ics, {{"Content-Type", "text/calendar; charset=utf-8"}}, true,
-            [this, account, password = m_password](const Result &r) {
-                onSendFinished(r, account != currentAccount() || password != m_password);
+            [this, account, password = m_password, calendar = m_calendarUrl](const Result &r) {
+                onSendFinished(r, account != currentAccount() || password != m_password || calendar != m_calendarUrl);
             });
 }
 
-void CalendarSync::scheduleRetry()
+void CalendarSync::trySendLater()
+{
+    if (m_sendLater) {
+        return;
+    }
+    m_sendLater = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_sendLater = false;
+        trySend();
+    });
+}
+
+void CalendarSync::scheduleRetry(int retryAfterSeconds)
 {
     const int index = std::min(m_retryStep, int(m_retryDelays.size()) - 1);
     ++m_retryStep;
-    m_retryTimer.start(m_retryDelays.at(index));
+    // A server asking for a longer pause (429, 503) is not asked again sooner.
+    m_retryTimer.start(std::max(m_retryDelays.at(index), retryAfterSeconds * 1000));
 }
 
 void CalendarSync::rememberSent(const Pending &item)
@@ -1222,6 +1390,7 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
             m_queue.removeAt(index);
         }
         m_retryStep = 0;
+        m_forbiddenStreak = 0;
         m_sendFailing = false;
         m_lastSuccess = QDateTime::currentDateTime();
         setLastError(QString());
@@ -1233,20 +1402,35 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
 
-    if ((r.http == 401 || r.http == 403) && credentialsChangedMeanwhile) {
-        // Refused with the old credentials: says nothing about the new ones, which get their turn now.
+    if (credentialsChangedMeanwhile) {
+        // Refused with the old credentials or by the calendar chosen before: says nothing about
+        // the new ones, which get their turn now (not paused, skipped or delayed for it).
         trySend();
         return;
     }
-    const QString message = describeFailure(r);
-    if (r.http == 401 || r.http == 403) {
+    if (r.http == 401) {
+        const QString message = describeFailure(r);
+        m_paused = true;
+        m_forbiddenStreak = 0;
+        setLastError(message);
+        setStatus(Failed, message);
+        return;
+    }
+    if (r.http == 403 && ++m_forbiddenStreak >= kForbiddenBeforePause) {
+        const QString message = forbiddenTooOften();
         m_paused = true;
         setLastError(message);
         setStatus(Failed, message);
         return;
     }
-    if (r.http >= 400 && r.http < 500 && r.http != 404 && r.http != 408 && r.http != 429) {
-        // This event will never be accepted; do not let it hold back the others.
+    // Refusals about the calendar rather than the event keep the queue and are tried again:
+    // 403 (read-only, quota), 404 (calendar not there), 408/429 (slow down), 409 (RFC 4918: the
+    // collection the event goes into does not exist, a calendar deleted or renamed) and 423
+    // (locked by another client). Skipping on those would drop every queued event in turn.
+    const bool aboutTheCalendar = r.http == 403 || r.http == 404 || r.http == 408 || r.http == 409 || r.http == 423
+        || r.http == 429;
+    if (r.http >= 400 && r.http < 500 && !aboutTheCalendar) {
+        // This event will never be accepted (400, 412, 413, 415...); do not let it hold back the others.
         m_queue.removeAt(index);
         setLastError(i18n("The server refused an event (HTTP %1); it was skipped.", r.http));
         queueChanged();
@@ -1254,9 +1438,12 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
     m_sendFailing = true;
-    setLastError(message);
+    // 403: most likely the server knows who we are, but the calendar does not take new events
+    // (shared read-only, a full quota). Sending is not paused on the first ones: the events wait,
+    // and go once the calendar accepts them or another one is chosen (see kForbiddenBeforePause).
+    setLastError(r.http == 403 ? calendarRefusesEvents() : describeFailure(r));
     refreshIdleStatus();
-    scheduleRetry();
+    scheduleRetry(r.retryAfter);
 }
 
 void CalendarSync::removeLeftoverTestEvents()
@@ -1307,12 +1494,26 @@ void CalendarSync::testConnection()
 
     auto fail = [this](const Result &r) {
         --m_busy;
-        const QString message = describeFailure(r);
-        if (r.http == 401 || r.http == 403) {
+        // As for a real event (onSendFinished()): a 401 is the login and pauses sending, a 403
+        // only once it comes kForbiddenBeforePause times in a row. Before that, a 403 lifts the
+        // pause of an earlier 401: this server answers a wrong password with 401, so it took the
+        // login this time, and the events waiting are tried again.
+        if (r.http == 401) {
             m_paused = true;
+            m_forbiddenStreak = 0;
+        } else if (r.http == 403) {
+            ++m_forbiddenStreak;
+            m_paused = m_forbiddenStreak >= kForbiddenBeforePause;
+        }
+        QString message = describeFailure(r);
+        if (r.http == 403) {
+            message = m_paused ? forbiddenTooOften() : calendarRefusesEvents();
         }
         setLastError(message);
         setStatus(Failed, message);
+        if (r.http == 403) {
+            trySend();
+        }
     };
 
     // The test event is removed from where it was put, even if the calendar changes meanwhile.
@@ -1353,6 +1554,7 @@ void CalendarSync::testConnection()
             }
             --m_busy;
             m_paused = false;
+            m_forbiddenStreak = 0;
             m_sendFailing = false;
             m_retryTimer.stop();
             m_retryStep = 0;
@@ -1383,17 +1585,97 @@ void CalendarSync::discover(std::function<void(bool)> done)
     ++m_busy;
     setLastError(QString());
     setStatus(Working, i18n("Looking for calendars…"));
+    // Asked for another server or account than the one set up now: neither its calendars nor a
+    // refusal apply to this one.
+    const std::function<bool()> stale = [this, url, username = m_username, password = m_password]() {
+        return url != discoveryUrl() || username != m_username || password != m_password;
+    };
+    if (m_provider != kNextcloud) {
+        listCalendars(url, stale, done);
+        return;
+    }
+
+    // Nextcloud names its DAV folders after the user id, which is not always the login name (an
+    // e-mail address, an LDAP login): the server says where the calendars are. A server that
+    // does not say, or does not let this account ask (403), gets the usual place of the login
+    // name's calendars (discoveryUrl()); one that refuses the login or cannot be reached is not
+    // asked again.
+    const auto abandon = [this, done]() {
+        --m_busy;
+        refreshIdleStatus();
+        done(false);
+    };
+    const std::function<void(const Result &)> failed = [this, stale, done, abandon](const Result &r) {
+        if (stale()) {
+            abandon();
+            return;
+        }
+        --m_busy;
+        discoveryFailed(r);
+        done(false);
+    };
+    findHref(
+        QUrl(m_serverUrl + QLatin1String("/remote.php/dav/")), "<d:current-user-principal/>", QStringLiteral("current-user-principal"),
+        [this, url, stale, done, abandon, failed](const QUrl &principal) {
+            if (stale()) {
+                abandon();
+                return;
+            }
+            if (principal.isEmpty()) {
+                listCalendars(url, stale, done);
+                return;
+            }
+            findHref(
+                principal, "<c:calendar-home-set/>", QStringLiteral("calendar-home-set"),
+                [this, url, stale, done, abandon](const QUrl &home) {
+                    if (stale()) {
+                        abandon();
+                        return;
+                    }
+                    listCalendars(home.isEmpty() ? url : home, stale, done);
+                },
+                failed);
+        },
+        [url, stale, done, failed, this](const Result &r) {
+            // A 403 to the root is the server keeping it from this account (an ACL, a proxy
+            // rule), not a refused login: the login name's calendars may still be readable.
+            if (r.http == 403 && !stale()) {
+                listCalendars(url, stale, done);
+                return;
+            }
+            failed(r);
+        });
+}
+
+void CalendarSync::findHref(const QUrl &url, const QByteArray &property, const QString &name, std::function<void(const QUrl &)> found,
+                            std::function<void(const Result &)> failed)
+{
+    const QByteArray body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
+                            "<d:propfind xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:prop>"
+        + property + "</d:prop></d:propfind>";
+    request("PROPFIND", url, body, {{"Depth", "0"}, {"Content-Type", "application/xml; charset=utf-8"}}, true,
+            [url, name, found, failed](const Result &r) {
+                if (r.http == 207) {
+                    found(hrefInProperty(r.body, name, url));
+                } else if (r.http == 404 || r.http == 405 || r.http == 501) {
+                    found(QUrl()); // not a place or a request this server knows
+                } else {
+                    failed(r); // refused, unreachable, broken: the fallback would fare no better
+                }
+            });
+}
+
+void CalendarSync::listCalendars(const QUrl &url, std::function<bool()> stale, std::function<void(bool)> done)
+{
     const QByteArray body =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
         "<d:propfind xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\" xmlns:a=\"http://apple.com/ns/ical/\">"
         "<d:prop><d:resourcetype/><d:displayname/><c:supported-calendar-component-set/><a:calendar-color/></d:prop>"
         "</d:propfind>";
     request("PROPFIND", url, body, {{"Depth", "1"}, {"Content-Type", "application/xml; charset=utf-8"}}, true,
-            [this, url, done, username = m_username, password = m_password](const Result &r) {
+            [this, url, stale, done](const Result &r) {
                 --m_busy;
-                if (url != discoveryUrl() || username != m_username || password != m_password) {
-                    // Asked for another server or account than the one set up now: neither its
-                    // calendars nor a refusal apply to this one.
+                if (stale()) {
                     refreshIdleStatus();
                     done(false);
                     return;
@@ -1404,18 +1686,37 @@ void CalendarSync::discover(std::function<void(bool)> done)
                     Q_EMIT calendarsChanged();
                     setLastError(QString());
                     m_paused = false;
+                    m_forbiddenStreak = 0; // the login was taken: the 403s were the calendar's
                     refreshIdleStatus();
                     done(true);
                     return;
                 }
-                if (r.http == 401 || r.http == 403) {
-                    m_paused = true;
-                }
-                const QString message = describeFailure(r);
-                setLastError(message);
-                setStatus(Failed, message);
+                discoveryFailed(r);
                 done(false);
             });
+}
+
+void CalendarSync::discoveryFailed(const Result &r)
+{
+    // Only a 401 is the login. A 403 to a PROPFIND is the server not letting this account list
+    // that place (an ACL on the principal or the calendar home, an address of someone else's):
+    // it says nothing about the calendar chosen, which keeps getting the events.
+    if (r.http == 401) {
+        m_paused = true;
+        m_forbiddenStreak = 0;
+    } else if (r.http == 403) {
+        // Lifts the pause of an earlier 401 (this server took the login this time), not the one
+        // of 403s in a row: a refused lookup says nothing more about those.
+        m_paused = m_forbiddenStreak >= kForbiddenBeforePause;
+    }
+    const QString message = r.http == 403
+        ? i18n("The server does not let this account list the calendars at this address (HTTP 403): check the address.")
+        : describeFailure(r);
+    setLastError(message);
+    setStatus(Failed, message);
+    if (r.http == 403) {
+        trySend();
+    }
 }
 
 void CalendarSync::refreshCalendars()
@@ -1648,6 +1949,7 @@ void CalendarSync::finishLogin(const QByteArray &json)
         Q_EMIT hasPasswordChanged();
     }
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
 
     discover([this](bool ok) {

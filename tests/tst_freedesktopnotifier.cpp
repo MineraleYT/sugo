@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "FakeNotifier.h"
 #include "FreedesktopNotifier.h"
 #include "PrivateDBus.h"
 
@@ -203,6 +204,34 @@ private Q_SLOTS:
         QVERIFY(log.isEmpty());
     }
 
+    void theBodyIsEscapedWhereTheServerReadsMarkup_data()
+    {
+        QTest::addColumn<bool>("markup");
+        QTest::addColumn<QString>("body");
+        const QString text = QStringLiteral("Next: <Deep work> & \"notes\"");
+        QTest::newRow("body-markup") << true << QStringLiteral("Next: &lt;Deep work&gt; &amp; &quot;notes&quot;");
+        QTest::newRow("plain text") << false << text;
+    }
+
+    void theBodyIsEscapedWhereTheServerReadsMarkup()
+    {
+        // A server that lists body-markup reads the body as markup: a timer name or a task note
+        // with "<" or "&" would be cut or mangled. The summary is plain text in either case.
+        QFETCH(bool, markup);
+        QFETCH(QString, body);
+        if (markup) {
+            m_server->capabilities << QStringLiteral("body-markup");
+        }
+        QStringList log;
+        auto notification = sample(&log);
+        notification.title = QStringLiteral("Break <is> over & out");
+        notification.text = QStringLiteral("Next: <Deep work> & \"notes\"");
+        QVERIFY(show(notification) > 0);
+        const auto &call = m_server->calls.constLast();
+        QCOMPARE(call.body, body);
+        QCOMPARE(call.summary, QStringLiteral("Break <is> over & out"));
+    }
+
     void anInvokedActionRunsItsHandlerWithTheActivationToken()
     {
         QStringList log;
@@ -310,6 +339,29 @@ private Q_SLOTS:
         QTest::qWait(200);
         QVERIFY(m_server->calls.isEmpty());
         publishServer(); // for cleanup()
+    }
+
+    void withoutAServerTheFallbackShowsIt()
+    {
+        // A window manager with a tray but no notification daemon: the phase-end message
+        // goes to the tray (the fallback) instead of being lost.
+        auto fallback = std::make_unique<FakeNotifier>();
+        FakeNotifier *tray = fallback.get();
+        m_notifier->setFallback(std::move(fallback));
+        unpublishServer();
+        QStringList log;
+        m_notifier->notify(m_context.get(), sample(&log));
+        QTRY_COMPARE(tray->shown.size(), 1);
+        QCOMPARE(tray->last().title, QStringLiteral("Work session finished"));
+        QCOMPARE(tray->lastContext.data(), m_context.get());
+        // Its handlers are the notification's own: a click on the message runs the default action.
+        tray->last().defaultAction(QString());
+        QCOMPARE(log, QStringList{QStringLiteral("default:")});
+
+        // With a server again, the server shows it and the fallback is left alone.
+        publishServer();
+        QVERIFY(show(sample(&log)) > 0);
+        QCOMPARE(tray->shown.size(), 1);
     }
 };
 

@@ -17,7 +17,7 @@ out=$2
 here=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$out/linux" "$out/macos"
 
-screens="timer presets stats about settings/general settings/sounds settings/focus settings/calendar settings/advanced welcome/0 welcome/1 welcome/2 welcome/3"
+screens="timer presets stats settings/general settings/timers settings/sounds settings/focus settings/calendar settings/sync settings/advanced settings/about welcome/0 welcome/1 welcome/2 welcome/3"
 
 # The environment of one isolated, offscreen run; the welcome tour shows only on request.
 # $1: data directory, $2: whether the tour was seen.

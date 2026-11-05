@@ -18,8 +18,8 @@
   [![macOS](https://img.shields.io/badge/macOS-13%2B-555555?logo=apple)](docs/USAGE.md#macos)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-  **[Download for Linux](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-x86_64.AppImage)** ·
-  **[Download for macOS](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg)** ·
+  **[Download for Linux](https://github.com/MineraleYT/sugo/releases/latest)** ·
+  **[Download for macOS](https://github.com/MineraleYT/sugo/releases/latest)** ·
   **[User guide](docs/USAGE.md)**
 
 </div>
@@ -41,9 +41,9 @@
 
 | | Get it | |
 |:---|:---|:---|
-| **Linux** | [AppImage](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-x86_64.AppImage) (recommended) | One file for any recent x86_64 Linux, updates itself |
+| **Linux** | [AppImage](https://github.com/MineraleYT/sugo/releases/latest) (recommended) | One file for any recent x86_64 Linux, updates itself |
 | | [Flatpak](https://github.com/MineraleYT/sugo/releases/latest) | Bundle attached to each release |
-| **macOS** | [Disk image](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg) | macOS 13 or later, Apple Silicon and Intel, updates itself |
+| **macOS** | [Disk image](https://github.com/MineraleYT/sugo/releases/latest) | macOS 13 or later, Apple Silicon and Intel, updates itself |
 
 Step-by-step instructions for each package, including the first launch on macOS, are in the [user guide](docs/USAGE.md#installing).
 

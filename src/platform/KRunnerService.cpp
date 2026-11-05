@@ -2,6 +2,7 @@
 #include "KRunnerService.h"
 
 #include "PresetModel.h"
+#include "TimerCommands.h"
 #include "TimerEngine.h"
 
 #include "Localization.h"
@@ -80,6 +81,9 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         return matches;
     }
     const QString subCommand = keywordMatch.captured(1).trimmed().toLower();
+    if (!m_timer) {
+        return matches; // not attached yet
+    }
 
     if (!controlAllowed()) {
         RemoteMatch info = commandMatch(kControlDisabledId, i18n("Sugo: control from other programs is turned off"),
@@ -128,6 +132,8 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
     }
 
     // 2. One-off work phase: e.g. "pomodoro 15". The preset's own duration is not changed.
+    // While a phase is active it would throw that phase away, so (as a preset below) it is
+    // refused: it is still listed, saying why.
     // ASCII digits only (\\d would also take other scripts' digits, which toInt() cannot read).
     static const QRegularExpression numRegex(QStringLiteral("^([0-9]+)$"));
     const auto matchNum = numRegex.match(subCommand);
@@ -135,8 +141,12 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         bool ok = false;
         const int mins = matchNum.captured(1).toInt(&ok); // ok is false on overflow
         if (ok && mins > 0 && mins <= kMaxCustomMinutes) {
-            matches.append(commandMatch(QStringLiteral("custom:") + QString::number(mins), i18n("Start %1-minute timer", mins),
-                                        i18n("Start custom focus session"), QStringLiteral("chronometer")));
+            const bool blocked = m_timer->isActive();
+            matches.append(commandMatch(QStringLiteral("custom:") + QString::number(mins),
+                                        blocked ? i18n("%1-minute timer", mins) : i18n("Start %1-minute timer", mins),
+                                        blocked ? i18n("A timer is running. Stop it before choosing another timer.")
+                                                : i18n("Start custom focus session"),
+                                        QStringLiteral("chronometer")));
         } else {
             // Say why nothing can start, instead of showing nothing at all.
             matches.append(commandMatch(kInvalidMinutesId, i18n("Choose between 1 and %1 minutes", kMaxCustomMinutes),
@@ -146,8 +156,10 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         return matches;
     }
 
-    // 3. Presets by name: "pomodoro deep" starts "Deep work".
+    // 3. Presets by name: "pomodoro deep" starts "Deep work". While a phase is active another
+    // preset would throw it away, so (as over D-Bus) it is refused: it is still listed, saying why.
     if (!subCommand.isEmpty()) {
+        const QString currentUuid = m_presets ? m_presets->currentUuid() : QString();
         for (int row = 0; m_presets && row < m_presets->count(); ++row) {
             const QModelIndex index = m_presets->index(row, 0);
             const QString name = index.data(PresetModel::NameRole).toString();
@@ -155,10 +167,13 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
             if (!lowerName.contains(subCommand)) {
                 continue;
             }
-            RemoteMatch m = commandMatch(QStringLiteral("preset:") + index.data(PresetModel::UuidRole).toString(),
-                                         i18n("Start preset %1", name),
-                                         i18np("%1 minute of work", "%1 minutes of work",
-                                               index.data(PresetModel::WorkMinutesRole).toInt()),
+            const QString uuid = index.data(PresetModel::UuidRole).toString();
+            const bool blocked = m_timer->isActive() && uuid != currentUuid;
+            RemoteMatch m = commandMatch(QStringLiteral("preset:") + uuid,
+                                         blocked ? i18n("Preset %1", name) : i18n("Start preset %1", name),
+                                         blocked ? i18n("A timer is running. Stop it before choosing another timer.")
+                                                 : i18np("%1 minute of work", "%1 minutes of work",
+                                                         index.data(PresetModel::WorkMinutesRole).toInt()),
                                          index.data(PresetModel::IconNameRole).toString());
             if (m.iconName.isEmpty()) {
                 m.iconName = QStringLiteral("io.github.mineraleyt.sugo");
@@ -223,8 +238,8 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
         Q_EMIT openRequested();
         return;
     }
-    if (!controlAllowed()) {
-        return; // a match, or a button, from before the setting changed
+    if (!m_timer || !controlAllowed()) {
+        return; // not attached yet, or a match (or a button) from before the setting changed
     }
     // A button on a match runs that button's command, not the match's own one.
     if (!actionId.isEmpty()) {
@@ -238,14 +253,17 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
 
     if (id.startsWith(QStringLiteral("custom:"))) {
         const int mins = id.mid(7).toInt();
-        if (mins > 0 && mins <= kMaxCustomMinutes) {
+        // Refused while a phase is active (see Match()): starting would end it as interrupted.
+        if (mins > 0 && mins <= kMaxCustomMinutes && !m_timer->isActive()) {
             m_timer->startCustomWork(mins * 60);
         }
     } else if (id.startsWith(QStringLiteral("preset:"))) {
         const QString uuid = id.mid(7);
         if (m_presets && m_presets->indexOf(uuid) >= 0) {
-            m_presets->setCurrentUuid(uuid);
-            m_timer->start();
+            // The rule of D-Bus startPreset: the current preset starts, or resumes when paused;
+            // another one is chosen and started only while no phase is active (choosing it
+            // resets the timer, which would throw the phase away). A refusal does nothing.
+            TimerCommands(m_timer, m_presets).startPreset(uuid);
         }
     } else {
         runCommand(id);

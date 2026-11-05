@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "StatsModel.h"
 
+#include <algorithm>
+
 #include "Localization.h"
 
 #include "SessionRecorder.h"
@@ -51,6 +53,8 @@ StatsModel::StatsModel(QObject *parent)
     connect(&m_dateCheckTimer, &QTimer::timeout, this, &StatsModel::checkDateChange);
     m_dateCheckTimer.start();
     armMidnightTimer();
+    // The notes follow everything the period's figures follow.
+    connect(this, &StatsModel::statsChanged, this, &StatsModel::rebuildNotes);
 }
 
 void StatsModel::attach(SessionRepository *repository, SessionRecorder *recorder)
@@ -110,6 +114,11 @@ void StatsModel::checkDateChange()
     const QDate newToday = todayDate();
     armMidnightTimer();
     if (newToday == m_today && !zoneChanged && !localeChanged) {
+        // Same day, but a period under way still moves on: the bar of "now" and the point of the
+        // period before that it is compared with.
+        if (isCurrent()) {
+            recompute();
+        }
         return;
     }
 
@@ -126,6 +135,7 @@ void StatsModel::checkDateChange()
     }
     recompute();
     recomputeStreaks();
+    recomputeToday();
     Q_EMIT periodChanged();
 }
 
@@ -151,7 +161,7 @@ void StatsModel::setBreakdownMode(BreakdownMode mode)
     }
     m_breakdownMode = mode;
     Q_EMIT breakdownModeChanged();
-    Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 QString StatsModel::title() const
@@ -226,9 +236,7 @@ bool StatsModel::canGoNext() const
 
 void StatsModel::previousPeriod()
 {
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, -1);
-    recompute();
-    Q_EMIT periodChanged();
+    moveAnchor(-1);
 }
 
 void StatsModel::nextPeriod()
@@ -236,7 +244,20 @@ void StatsModel::nextPeriod()
     if (!canGoNext()) {
         return;
     }
-    m_anchorDate = Stats::shifted(toStatsPeriod(m_period), m_anchorDate, 1);
+    moveAnchor(1);
+}
+
+void StatsModel::moveAnchor(int steps)
+{
+    const StatsPeriod sp = toStatsPeriod(m_period);
+    m_anchorDate = Stats::shifted(sp, m_anchorDate, steps);
+    // Months and years clamp the day (31 March - 1 month = 28 February), so coming back would
+    // land on 28 March: the period under way is anchored on today, as it was before.
+    const QDate current = todayDate();
+    const PeriodRange range = Stats::rangeFor(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone);
+    if (current >= range.firstDay && current <= range.lastDay) {
+        m_anchorDate = current;
+    }
     recompute();
     Q_EMIT periodChanged();
 }
@@ -258,6 +279,7 @@ void StatsModel::refresh()
     reloadCompletedStarts();
     recompute();
     recomputeStreaks();
+    recomputeToday();
 }
 
 void StatsModel::onSessionRecorded()
@@ -266,6 +288,7 @@ void StatsModel::onSessionRecorded()
     loadNewCompletedStarts();
     recompute();
     recomputeStreaks();
+    recomputeToday();
 }
 
 void StatsModel::reloadCompletedStarts()
@@ -308,6 +331,7 @@ void StatsModel::recompute()
         m_bucketsVariant.clear();
         m_daysVariant.clear();
         Q_EMIT statsChanged();
+        Q_EMIT breakdownChanged();
         return;
     }
 
@@ -322,10 +346,11 @@ void StatsModel::recompute()
     {
         const QDate previousAnchor = Stats::shifted(sp, m_anchorDate, -1);
         const PeriodRange previous = Stats::rangeFor(sp, previousAnchor, m_env.firstDayOfWeek, m_env.timeZone);
-        const qint64 nowMs = m_env.now().toMSecsSinceEpoch();
+        const QDateTime now = m_env.now();
+        const qint64 nowMs = now.toMSecsSinceEpoch();
         qint64 endMs = previous.endMs;
         if (range.startMs <= nowMs && nowMs < range.endMs) {
-            endMs = std::min(endMs, previous.startMs + (nowMs - range.startMs));
+            endMs = Stats::samePointInPreviousPeriod(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone, now);
         }
         m_previousWorkSeconds = 0;
         const QList<SessionRecord> records = m_repository->between(previous.startMs, endMs);
@@ -395,7 +420,8 @@ void StatsModel::recompute()
             map[QStringLiteral("name")] = m_env.locale.standaloneDayName(b.date.dayOfWeek(), QLocale::LongFormat);
             break;
         case Period::Month:
-            map[QStringLiteral("name")] = m_env.locale.toString(b.date, QStringLiteral("d MMMM"));
+            map[QStringLiteral("name")] = m_env.locale.toString(
+                b.date, i18nc("QDate::toString() format of a day of the month, e.g. \"30 October\"", "d MMMM"));
             break;
         case Period::Year:
             map[QStringLiteral("name")] = m_env.locale.standaloneMonthName(b.date.month(), QLocale::LongFormat);
@@ -432,6 +458,7 @@ void StatsModel::recompute()
         m_daysVariant.append(map);
     }
     Q_EMIT statsChanged();
+    Q_EMIT breakdownChanged();
 }
 
 void StatsModel::recomputeStreaks()
@@ -440,7 +467,6 @@ void StatsModel::recomputeStreaks()
         m_currentStreak = 0;
         m_bestStreak = 0;
         Q_EMIT streaksChanged();
-        Q_EMIT statsChanged();
         return;
     }
 
@@ -457,8 +483,8 @@ void StatsModel::recomputeStreaks()
     m_currentStreak = Stats::currentStreak(days, today, m_protectWeekendStreak);
     m_bestStreak = Stats::bestStreak(days, m_protectWeekendStreak);
 
+    // Only the streaks: every statsChanged property comes from recompute().
     Q_EMIT streaksChanged();
-    Q_EMIT statsChanged();
 }
 
 void StatsModel::setProtectWeekendStreak(bool protect)
@@ -534,3 +560,77 @@ QString StatsModel::formatDuration(qint64 seconds) const
     return i18n("%1s", secs);
 }
 
+
+// --- Today, whatever period is shown ---------------------------------------------------------
+
+void StatsModel::recomputeToday()
+{
+    qint64 workSeconds = 0;
+    int completed = 0;
+    if (m_repository) {
+        // The real today (not m_today, which checkDateChange() compares against to notice a new
+        // day), as recomputeStreaks() does.
+        const QDate today = todayDate();
+        const PeriodRange range = Stats::rangeFor(StatsPeriod::Day, today, m_env.firstDayOfWeek, m_env.timeZone);
+        const StatsSummary summary = Stats::summarize(m_repository->between(range.startMs, range.endMs), StatsPeriod::Day,
+                                                      today, m_env.firstDayOfWeek, m_env.timeZone, m_env.locale, m_env.now());
+        workSeconds = summary.workSeconds;
+        completed = summary.completedWorkSessions;
+    }
+    if (workSeconds != m_todayWorkSeconds || completed != m_todayCompletedSessions) {
+        m_todayWorkSeconds = workSeconds;
+        m_todayCompletedSessions = completed;
+        Q_EMIT todayChanged();
+    }
+}
+
+// --- The task notes of the shown period ------------------------------------------------------
+
+void StatsModel::rebuildNotes()
+{
+    const StatsPeriod sp = toStatsPeriod(m_period);
+    const PeriodRange range = Stats::rangeFor(sp, m_anchorDate, m_env.firstDayOfWeek, m_env.timeZone);
+
+    QList<const SessionRecord *> withNotes;
+    for (const SessionRecord &record : std::as_const(m_currentRecords)) {
+        if (record.kind == SessionKind::Work && record.startedAtMs >= range.startMs
+            && record.startedAtMs < range.endMs && !record.note.trimmed().isEmpty()) {
+            withNotes.append(&record);
+        }
+    }
+    std::sort(withNotes.begin(), withNotes.end(), [](const SessionRecord *a, const SessionRecord *b) {
+        return a->startedAtMs != b->startedAtMs ? a->startedAtMs > b->startedAtMs : a->id > b->id;
+    });
+
+    const QDate today = todayDate();
+    QVariantList notes;
+    for (const SessionRecord *record : std::as_const(withNotes)) {
+        if (notes.size() >= kMaxNotes) {
+            break;
+        }
+        const QDateTime start = QDateTime::fromMSecsSinceEpoch(record->startedAtMs, m_env.timeZone);
+        const QString time = m_env.locale.toString(start.time(), QLocale::ShortFormat);
+        QString label;
+        if (m_period == Period::Day || start.date() == today) {
+            label = time;
+        } else if (m_period == Period::Week) {
+            label = m_env.locale.dayName(start.date().dayOfWeek(), QLocale::ShortFormat);
+        } else {
+            label = m_env.locale.toString(
+                start.date(), i18nc("QDate::toString() format of the day of a task note, e.g. \"5 Oct\"", "d MMM"));
+        }
+        QVariantMap map;
+        map[QStringLiteral("sessionId")] = record->id;
+        map[QStringLiteral("note")] = record->note.trimmed();
+        map[QStringLiteral("time")] = start;
+        map[QStringLiteral("label")] = label;
+        map[QStringLiteral("when")] = i18nc("when a task note was written: date, time", "%1, %2",
+                                            m_env.locale.toString(start.date(), QLocale::LongFormat), time);
+        notes.append(map);
+    }
+
+    if (notes != m_notesVariant) {
+        m_notesVariant = notes;
+        Q_EMIT notesChanged();
+    }
+}

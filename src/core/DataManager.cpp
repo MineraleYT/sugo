@@ -11,6 +11,7 @@
 
 #include "Localization.h"
 
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
@@ -73,6 +74,9 @@ bool hasSqliteHeader(const QString &path)
 struct RestoredTable {
     QString name;
     QString columns;
+    /// The rows a restore replaces, if not all: the others belong to this computer's file, not to
+    /// the user's data, and are neither deleted here nor copied from the backup.
+    QString rows = {};
 };
 
 const QList<RestoredTable> &restoredTables()
@@ -86,7 +90,9 @@ const QList<RestoredTable> &restoredTables()
         {QStringLiteral("session"),
          QStringLiteral("id, kind, started_at, ended_at, duration_sec, planned_sec, completed, preset_id, "
                         "preset_name, category, note")},
-        {QStringLiteral("meta"), QStringLiteral("key, value")},
+        // The one-time look for Sugo 1.0.0's data (Database::recoverSugo100Database()) was made
+        // for this file: a backup from before it, or from another computer, must not undo it.
+        {QStringLiteral("meta"), QStringLiteral("key, value"), QStringLiteral("key <> 'sugo100_recovery'")},
     };
     return tables;
 }
@@ -99,6 +105,17 @@ DataManager::DataManager(Database *database, SessionRepository *sessions, Preset
     : QObject(parent), m_database(database), m_sessions(sessions), m_presetsRepository(presetsRepository),
       m_presets(presets), m_stats(stats)
 {
+    if (m_database) {
+        m_movedAsidePath = m_database->movedAsidePath();
+        m_movedAsideCorrupt = m_database->movedAsideWasCorrupt();
+        m_sugo100ReplacedPath = m_database->replacedPath();
+    }
+}
+
+void DataManager::setMovedAsideDatabase(const QString &path, bool corrupt)
+{
+    m_movedAsidePath = path;
+    m_movedAsideCorrupt = corrupt;
 }
 
 QString DataManager::databasePath() const
@@ -183,6 +200,11 @@ void DataManager::setNowProvider(std::function<QDateTime()> provider)
     m_now = std::move(provider);
 }
 
+void DataManager::setTimerActiveProvider(std::function<bool()> provider)
+{
+    m_timerActive = std::move(provider);
+}
+
 bool DataManager::clearHistoryOlderThan(int months)
 {
     if (!m_sessions || months < 1) {
@@ -221,8 +243,14 @@ bool DataManager::exportHistory(const QUrl &fileUrl)
         return false;
     }
 
+    // A history that cannot be read is not an empty one: an existing file is left as it was.
+    bool readOk = false;
     const QList<SessionRecord> records =
-        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max());
+        m_sessions->between(std::numeric_limits<qint64>::min(), std::numeric_limits<qint64>::max(), &readOk);
+    if (!readOk) {
+        Q_EMIT operationFailed(i18n("Could not read the session history."));
+        return false;
+    }
     QByteArray data;
     if (csv) {
         QString out = QStringLiteral("id,kind,started_at,ended_at,duration_sec,planned_sec,completed,preset_name,category,note\r\n");
@@ -346,9 +374,9 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
     bool valid = false;
     {
         QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection);
+        // `path` is the private copy: opening it read-write lets SQLite read its write-ahead log
+        // (and create the -shm file it needs for that), wherever the user's backup lies.
         db.setDatabaseName(path);
-        // Read-only: never create the file, or -wal/-shm files, next to the user's backup.
-        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
         if (!db.open()) {
             *error = db.lastError().text();
         } else {
@@ -357,7 +385,10 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
             int version = -1;
             if (query.exec(QStringLiteral("PRAGMA application_id")) && query.next()) appId = query.value(0).toInt();
             if (query.exec(QStringLiteral("PRAGMA user_version")) && query.next()) version = query.value(0).toInt();
-            if (appId != Database::kApplicationId || version < 1) {
+            // A backup of Sugo 1.0.0 carries its id and its own numbering; Database converts it below.
+            const bool sugo100 = appId == Database::kSugo100ApplicationId;
+            const bool ours = sugo100 ? version <= Database::kSugo100SchemaVersion : appId == Database::kApplicationId;
+            if (!ours || version < 1) {
                 *error = i18n("This file is not a Sugo database.");
             } else if (version > Database::latestSchemaVersion()) {
                 *error = i18n("This backup was created by a newer version of Sugo.");
@@ -373,6 +404,12 @@ bool DataManager::validateBackup(const QString &path, QString *error) const
 
 bool DataManager::restoreDatabase(const QUrl &fileUrl)
 {
+    // The settings page asks for this too, but a timer can start (tray, D-Bus, shortcut) while
+    // its file and confirm dialogs are open.
+    if (m_timerActive && m_timerActive()) {
+        Q_EMIT operationFailed(i18n("Stop the active timer before restoring a backup."));
+        return false;
+    }
     const QString path = fileUrl.toLocalFile();
     if (path.isEmpty() || !m_database) {
         Q_EMIT operationFailed(i18n("Choose a local backup file."));
@@ -383,24 +420,42 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         return false;
     }
     QString error;
-    if (!validateBackup(path, &error)) {
-        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
+    if (!QFileInfo(path).isFile()) {
+        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", i18n("This file is not a Sugo database.")));
         return false;
     }
 
-    // Work on a private copy: the Database class brings an older schema up to date there,
-    // and the user's file is never written to.
+    // Work on a private copy: it is checked there, the Database class brings an older schema up
+    // to date there, and the user's files are never written to. The write-ahead log goes with
+    // the file: a database in WAL mode (as Sugo's is) keeps its latest changes there until a checkpoint.
     QTemporaryDir workDir;
     const QString copyPath = workDir.filePath(QStringLiteral("restore.db"));
-    if (!workDir.isValid() || !QFile::copy(path, copyPath)) {
+    const QString walSuffix = QStringLiteral("-wal");
+    const bool hasWal = QFileInfo(path + walSuffix).isFile();
+    if (!workDir.isValid() || !QFile::copy(path, copyPath)
+        || (hasWal && !QFile::copy(path + walSuffix, copyPath + walSuffix))) {
         Q_EMIT operationFailed(i18n("Could not read the backup file."));
         return false;
     }
     QFile::setPermissions(copyPath, QFile::ReadOwner | QFile::WriteOwner);
+    if (hasWal) {
+        QFile::setPermissions(copyPath + walSuffix, QFile::ReadOwner | QFile::WriteOwner);
+    }
+    if (!validateBackup(copyPath, &error)) {
+        Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
+        return false;
+    }
     {
         Database migrated(copyPath);
         if (!migrated.open() || !migrated.movedAsidePath().isEmpty()) {
-            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", migrated.lastError()));
+            // A copy that had to be moved aside was damaged (or, past the checks above, not ours):
+            // say so rather than repeat the low-level reason, if any.
+            QString reason = migrated.lastError();
+            if (!migrated.movedAsidePath().isEmpty()) {
+                reason = migrated.movedAsideWasCorrupt() ? i18n("The backup is damaged.")
+                                                         : i18n("This file is not a Sugo database.");
+            }
+            Q_EMIT operationFailed(i18n("Could not restore the backup: %1", reason));
             return false;
         }
     } // closing the connection folds the WAL back into the file before it is attached
@@ -426,12 +481,25 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         return false;
     }
 
-    QStringList statements;
+    // The timers the backup does not have are deleted by the restore, as by the user: Sugo Sync
+    // must hear of it, or it brings them back from the other computers. A timer the backup brings
+    // back is no longer deleted.
+    QStringList statements = {
+        QStringLiteral("INSERT INTO main.preset_tombstone (uuid, deleted_at, deleted_by) "
+                       "SELECT uuid, %1, '' FROM main.preset WHERE is_builtin = 0 "
+                       "AND uuid NOT IN (SELECT uuid FROM restore_db.preset) "
+                       "ON CONFLICT(uuid) DO UPDATE SET deleted_at = excluded.deleted_at, deleted_by = excluded.deleted_by")
+            .arg(QDateTime::currentMSecsSinceEpoch()),
+        QStringLiteral("DELETE FROM main.preset_tombstone WHERE uuid IN (SELECT uuid FROM restore_db.preset)"),
+    };
     for (auto it = restoredTables().crbegin(); it != restoredTables().crend(); ++it) {
-        statements.append(QStringLiteral("DELETE FROM main.%1").arg(it->name));
+        const QString where = it->rows.isEmpty() ? QString() : QStringLiteral(" WHERE ") + it->rows;
+        statements.append(QStringLiteral("DELETE FROM main.%1%2").arg(it->name, where));
     }
     for (const RestoredTable &table : restoredTables()) {
-        statements.append(QStringLiteral("INSERT INTO main.%1 (%2) SELECT %2 FROM restore_db.%1").arg(table.name, table.columns));
+        const QString where = table.rows.isEmpty() ? QString() : QStringLiteral(" WHERE ") + table.rows;
+        statements.append(QStringLiteral("INSERT INTO main.%1 (%2) SELECT %2 FROM restore_db.%1%3")
+                              .arg(table.name, table.columns, where));
     }
     bool ok = true;
     for (const QString &statement : std::as_const(statements)) {
@@ -467,7 +535,11 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
         return false;
     }
-    if (m_presets && m_presetsRepository) m_presets->setPresets(presets, currentUuid);
+    if (m_presets && m_presetsRepository) {
+        m_presets->setPresets(presets, currentUuid);
+        // Restoring is the user's choice: Sugo Sync publishes these timers over newer ones elsewhere.
+        m_presets->markAllModified();
+    }
     if (m_recorder) m_recorder->forgetHistory();
     if (m_stats) m_stats->refresh();
     Q_EMIT dataChanged();

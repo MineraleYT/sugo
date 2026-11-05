@@ -28,6 +28,11 @@ const QString kInterface = QStringLiteral("org.freedesktop.ScreenSaver");
 constexpr int kMaxRetries = 3;
 constexpr int kRetryDelayMs = 1000;
 constexpr int kShutdownWaitMs = 1000;
+// libdbus's DBUS_TIMEOUT_INFINITE. The Inhibit reply is the only place the cookie appears: after
+// a timeout it would be dropped (and a retry would take a second cookie), leaving screen sleep
+// blocked until Sugo quits. So Inhibit waits as long as the service takes; a service that goes
+// away ends the wait (onOwnerChanged()), and shutdown() waits only kShutdownWaitMs.
+constexpr int kNoTimeout = 0x7fffffff;
 } // namespace
 
 PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
@@ -40,7 +45,9 @@ PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
     if (m_bus.isConnected()) {
         m_watcher = new QDBusServiceWatcher(kService, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
         connect(m_watcher, &QDBusServiceWatcher::serviceOwnerChanged, this,
-                [this](const QString &, const QString &, const QString &newOwner) { onOwnerChanged(newOwner); });
+                [this](const QString &, const QString &oldOwner, const QString &newOwner) {
+                    onOwnerChanged(oldOwner, newOwner);
+                });
     }
 }
 #endif
@@ -114,12 +121,11 @@ void PowerInhibitor::sync()
         m_retries = 0;
         m_retryTimer.stop();
     }
-    if (m_wanted && m_cookie == 0 && !m_pending) {
+    if (m_wanted && !m_hasCookie && !m_pending) {
         sendInhibit();
-    } else if (!m_wanted && m_cookie != 0) {
-        const uint cookie = m_cookie;
-        m_cookie = 0;
-        sendUnInhibit(cookie);
+    } else if (!m_wanted && m_hasCookie) {
+        m_hasCookie = false;
+        sendUnInhibit(m_cookie);
     }
     // !m_wanted while a request is pending: the reply handler returns the cookie.
 #endif
@@ -137,7 +143,7 @@ void PowerInhibitor::sendInhibit()
 
     m_pending = true;
     const quint64 generation = m_generation;
-    QDBusPendingCall call = m_bus.asyncCall(msg);
+    QDBusPendingCall call = m_bus.asyncCall(msg, kNoTimeout);
     auto *watcher = new QDBusPendingCallWatcher(call, this);
     m_pendingWatcher = watcher;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher *w) {
@@ -164,13 +170,14 @@ void PowerInhibitor::sendInhibit()
             return;
         }
         m_cookie = cookie;
+        m_hasCookie = true;
         qCDebug(lcPowerInhibit) << "Screen sleep inhibited with cookie" << m_cookie;
     });
 }
 
 void PowerInhibitor::sendUnInhibit(uint cookie)
 {
-    if (cookie == 0 || !m_bus.isConnected()) {
+    if (!m_bus.isConnected()) {
         return;
     }
     QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kInterface, QStringLiteral("UnInhibit"));
@@ -179,12 +186,16 @@ void PowerInhibitor::sendUnInhibit(uint cookie)
     qCDebug(lcPowerInhibit) << "Screen sleep inhibition released for cookie" << cookie;
 }
 
-void PowerInhibitor::onOwnerChanged(const QString &newOwner)
+void PowerInhibitor::onOwnerChanged(const QString &oldOwner, const QString &newOwner)
 {
-    // A cookie belongs to the process that issued it; the new owner does not know it.
-    ++m_generation;
-    m_pending = false;
-    m_cookie = 0;
+    // A cookie belongs to the process that issued it; the new owner does not know it. A service
+    // that has only just appeared took nothing with it, and an Inhibit in flight may be the very
+    // call that started it (D-Bus activation): its reply, a cookie of the new owner, is kept.
+    if (!oldOwner.isEmpty()) {
+        ++m_generation;
+        m_pending = false;
+        m_hasCookie = false;
+    }
     if (!newOwner.isEmpty()) {
         sync();
     }

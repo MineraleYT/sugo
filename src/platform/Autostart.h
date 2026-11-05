@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
 #include <memory>
 
 /// Starting the application automatically when the user logs in.
@@ -20,6 +21,24 @@ public:
     virtual bool setEnabled(bool enabled) = 0;
     /// Brings an existing entry up to date, e.g. after the program moved. No-op if disabled.
     virtual void repair() {}
+    /// This copy of the program will be gone by the next login (macOS: run from the disk image
+    /// or a translocated copy), so an entry starting it cannot be set up: setEnabled(true) fails.
+    virtual bool runsFromTemporaryLocation() const { return false; }
+
+    /// Called when isEnabled() changes outside setEnabled(), e.g. when the answer to a request
+    /// that setEnabled() gave up waiting for comes after all.
+    void setChangedCallback(std::function<void()> callback) { m_changed = std::move(callback); }
+
+protected:
+    void notifyChanged() const
+    {
+        if (m_changed) {
+            m_changed();
+        }
+    }
+
+private:
+    std::function<void()> m_changed;
 };
 
 /**

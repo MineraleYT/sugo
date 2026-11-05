@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include "Localization.h"
 
 #include <limits>
 #include <memory>
 
+#include "DamagedDatabase.h"
 #include "Database.h"
 #include "FakeClock.h"
 #include "PresetModel.h"
@@ -63,6 +68,13 @@ private:
     QList<SessionRecord> all() const
     {
         return sessions->between(0, kForever);
+    }
+
+    /// Runs the application's event loop and quits it, so aboutToQuit is emitted as when the program quits.
+    static void quitApplication()
+    {
+        QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        QCOMPARE(QCoreApplication::exec(), 0);
     }
 
 private Q_SLOTS:
@@ -263,6 +275,44 @@ private Q_SLOTS:
         QCOMPARE(r.at(0).kind, SessionKind::Work);
     }
 
+    void quittingWhileIdleStoresTheSessionsStillWaiting()
+    {
+        SessionRecorder::connectQuit(qApp, engine.get(), recorder.get()); // as main() does
+        QSignalSpy workRecorded(recorder.get(), &SessionRecorder::workSessionRecorded);
+        recorder->setRetryIntervalForTesting(60 * 60 * 1000); // no retry before the quit
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60);
+        QVERIFY(engine->isIdle()); // the break is not started: quitting ends no phase
+        QVERIFY(recorder->isSaveFailing());
+
+        failSessionInserts(false); // the database works again, but no phase will end before the quit
+        quitApplication();
+        QVERIFY(!recorder->isSaveFailing());
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QVERIFY(r.at(0).completed);
+        QCOMPARE(workRecorded.count(), 1);
+    }
+
+    void quittingLogsTheSessionsThatAreStillRefused()
+    {
+        SessionRecorder::connectQuit(qApp, engine.get(), recorder.get());
+        recorder->setRetryIntervalForTesting(60 * 60 * 1000);
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60); // a Work phase the database refuses
+        engine->start();
+        elapse(60); // a break still running at the quit
+
+        // Both are counted: the running break was ended (and refused) before the last try.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Quitting with 2 sessions that could not be stored")));
+        quitApplication();
+        QVERIFY(engine->isIdle());
+        QVERIFY(all().isEmpty());
+    }
+
     void completedWorkPhaseIsRecorded()
     {
         engine->start();
@@ -412,6 +462,22 @@ private Q_SLOTS:
         QCOMPARE(recent.at(1), QStringLiteral("Task 1"));
     }
 
+    void noteForAMissingSessionIsRefused()
+    {
+        qint64 id = 0;
+        QVERIFY(sessions->insert(makeRecord(1000), &id));
+        QVERIFY(sessions->deleteAll());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("there is no session")));
+        QVERIFY(!sessions->updateNote(id, QStringLiteral("Lost")));
+        QVERIFY(sessions->recentNotes(5).isEmpty());
+
+        // Saving the note a session already has still counts as stored.
+        QVERIFY(sessions->insert(makeRecord(2000), &id));
+        QVERIFY(sessions->updateNote(id, QStringLiteral("Same")));
+        QVERIFY(sessions->updateNote(id, QStringLiteral("Same")));
+    }
+
     void recentNotesAreTrimmedDedupedAndOrderedByLastUse()
     {
         const QStringList notes = {QStringLiteral("Alpha"), QStringLiteral("Beta"), QStringLiteral("  Alpha "),
@@ -494,6 +560,33 @@ private Q_SLOTS:
         engine->stop();
         QCOMPARE(all().size(), 2);
         QCOMPARE(recorder->lastWorkSessionId(), -1);
+    }
+    // A page that cannot be read ends the query partway: the cursor must not move past the rows
+    // that were never read, or the statistics would never count them.
+    void completedWorkStartsAfterKeepsItsPlaceWhenAPageCannotBeRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            SessionRepository writer(file.connectionName());
+            for (int i = 0; i < 300; ++i) {
+                SessionRecord r = makeRecord(1000 * (i + 1));
+                r.note = QStringLiteral("session-note-%1").arg(i, 4, 10, QLatin1Char('0'));
+                QVERIFY(writer.insert(r));
+            }
+            QCOMPARE(writer.completedWorkStartsAfter(0).size(), 300);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, QByteArray("session-note-0280")) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        SessionRepository reader(damaged.name());
+        qint64 maxId = -1;
+        QVERIFY(reader.completedWorkStartsAfter(0, &maxId).isEmpty());
+        QCOMPARE(maxId, 0);
     }
 };
 

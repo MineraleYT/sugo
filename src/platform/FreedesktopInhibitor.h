@@ -37,7 +37,7 @@ public:
 
 private:
     void sync();
-    void startCall(const QDBusMessage &message, void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *));
+    void startCall(const QDBusMessage &message, int timeoutMs, void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *));
     void onInhibitFinished(QDBusPendingCallWatcher *watcher);
     void onUnInhibitFinished(QDBusPendingCallWatcher *watcher);
     void onOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);
@@ -51,6 +51,8 @@ private:
     QString m_reason;
     bool m_hasCookie = false; ///< An inhibition is held on the server.
     quint32 m_cookie = 0;
+    QString m_owner;          ///< Unique bus name of the notification server; empty if none or not known yet.
+    QString m_cookieOwner;    ///< Where the Inhibit went: the unique name of the server holding the cookie.
     bool m_busy = false;      ///< A D-Bus call is in flight; only one at a time.
     int m_unInhibitTimeouts = 0; ///< UnInhibit calls in a row left unanswered.
     bool m_reported = false;  ///< Last value announced through inhibitedChanged().

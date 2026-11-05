@@ -15,6 +15,8 @@ Rectangle {
     }
 
     property bool shown: false
+    /// The message shown last (smoke checks read it).
+    readonly property string message: label.text
 
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.bottom

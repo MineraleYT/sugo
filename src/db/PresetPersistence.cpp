@@ -39,11 +39,31 @@ PresetPersistence::PresetPersistence(PresetModel *model, PresetRepository *repos
 
 void PresetPersistence::savePresets()
 {
-    const bool saved = m_repository->saveAll(m_model->presets());
-    setSaveFailing(!saved);
-    if (saved) {
-        saveSelection();
+    save();
+}
+
+bool PresetPersistence::save(const QList<PresetTombstone> &received)
+{
+    // Deletions received with a save that failed are kept, a newer one for the same timer replacing it;
+    // saveAll() drops those of timers the model has again.
+    QList<PresetTombstone> tombstones = m_pendingReceived;
+    for (const PresetTombstone &t : received) {
+        tombstones.removeIf([&t](const PresetTombstone &pending) { return pending.uuid == t.uuid; });
+        tombstones.append(t);
     }
+    const bool stored = m_repository->saveAll(m_model->presets(), tombstones);
+    if (stored) {
+        m_pendingReceived.clear();
+    } else {
+        // Without them the retry would stamp each of these timers as deleted here, now.
+        m_pendingReceived = tombstones;
+    }
+    setSaveFailing(!stored);
+    if (stored) {
+        saveSelection();
+        Q_EMIT saved();
+    }
+    return stored;
 }
 
 void PresetPersistence::saveSelection()

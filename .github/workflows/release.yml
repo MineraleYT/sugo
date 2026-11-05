@@ -67,7 +67,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             appstream cmake ninja-build g++ dbus-daemon dbus-bin \
             qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
-            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
+            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules libsodium-dev pkgconf
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
@@ -147,13 +147,28 @@ jobs:
           name: sugo-macos
           path: release-assets
 
+      # Every file carries the version, the same way for each package: the release page shows
+      # which one it is, and so does the file once downloaded. The feed carries the full address,
+      # so the installed programs follow any name.
+      - name: Name the files after the version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        working-directory: release-assets
+        run: |
+          mv Sugo-x86_64.AppImage "Sugo-$VERSION-x86_64.AppImage"
+          mv "sugo-$GITHUB_REF_NAME-x86_64.flatpak" "Sugo-$VERSION-x86_64.flatpak"
+          if [ -f Sugo-macOS-universal.dmg ]; then
+            mv Sugo-macOS-universal.dmg "Sugo-$VERSION-macOS-universal.dmg"
+          fi
+          ls -l
+
       - name: Write the stable feed
         env:
           REPO: ${{ github.repository }}
           VERSION: ${{ needs.check.outputs.version }}
         working-directory: release-assets
         run: |
-          file=Sugo-x86_64.AppImage
+          file=Sugo-$VERSION-x86_64.AppImage
           jq -n --arg version "$VERSION" \
                 --arg url "https://github.com/$REPO/releases/download/$GITHUB_REF_NAME/$file" \
                 --arg sha256 "$(sha256sum "$file" | cut -d' ' -f1)" \
@@ -161,7 +176,7 @@ jobs:
                 --arg page "https://github.com/$REPO/releases/tag/$GITHUB_REF_NAME" \
                 '{version: $version, url: $url, sha256: $sha256, size: $size, page: $page}' > stable.json
           # The disk image, when it was built, under its own key: the AppImages read only the others.
-          dmg=Sugo-macOS-universal.dmg
+          dmg=Sugo-$VERSION-macOS-universal.dmg
           if [ -f "$dmg" ]; then
             jq --arg url "https://github.com/$REPO/releases/download/$GITHUB_REF_NAME/$dmg" \
                --arg sha256 "$(sha256sum "$dmg" | cut -d' ' -f1)" \
@@ -179,15 +194,17 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
         working-directory: release-assets
         run: |
-          assets=(Sugo-x86_64.AppImage "sugo-$GITHUB_REF_NAME-x86_64.flatpak")
+          dmg=Sugo-$VERSION-macOS-universal.dmg
+          assets=("Sugo-$VERSION-x86_64.AppImage" "Sugo-$VERSION-x86_64.flatpak")
           # Put before the generated notes of a new release.
           : > notes.md
-          if [ -f Sugo-macOS-universal.dmg ]; then
-            assets+=(Sugo-macOS-universal.dmg)
-            cat > notes.md <<'EOF'
-          **macOS** (13 or later, Apple Silicon or Intel): open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS installs its updates by itself when it is in a folder it can write to (Applications for an administrator).
+          if [ -f "$dmg" ]; then
+            assets+=("$dmg")
+            cat > notes.md <<EOF
+          **macOS** (13 or later, Apple Silicon or Intel): open $dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run \`xattr -dr com.apple.quarantine /Applications/Sugo.app\` in Terminal. Sugo for macOS installs its updates by itself when it is in a folder it can write to (Applications for an administrator).
           EOF
           fi
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then

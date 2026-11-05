@@ -2,6 +2,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWindow>
@@ -204,7 +205,17 @@ private Q_SLOTS:
         QVERIFY(!timers->isEnabled());
         start->trigger();
         QCOMPARE(start->text(), QStringLiteral("Resume"));
+        // Stop and Skip ask the window, which asks first when work would be cut short.
+        QSignalSpy endPhase(dock.get(), SIGNAL(endPhaseRequested(bool)));
+        QVERIFY(endPhase.isValid());
+        skip->trigger();
         stop->trigger();
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QCOMPARE(endPhase.count(), 2);
+        QCOMPARE(endPhase.at(0).at(0).toBool(), true);
+        QCOMPARE(endPhase.at(1).at(0).toBool(), false);
+        engine->stop();
         QCOMPARE(engine->state(), TimerEngine::State::Idle);
         QCOMPARE(start->text(), QStringLiteral("Start"));
     }
@@ -218,6 +229,34 @@ private Q_SLOTS:
         reading->trigger();
         QCOMPARE(presets->currentUuid(), other);
         QVERIFY(reading->isChecked());
+    }
+
+    void timerNamesKeepTheirAmpersand()
+    {
+        // "&" marks a mnemonic in menu texts: "R&D" must not show as "RD".
+        presets->create({{QStringLiteral("name"), QStringLiteral("R&D")}});
+        QAction *timers = actionNamed(dock->menu(), QStringLiteral("Timer"));
+        QAction *entry = actionNamed(timers->menu(), QStringLiteral("R&&D"));
+        QVERIFY(entry);
+        QCOMPARE(entry->iconText(), QStringLiteral("R&D"));
+    }
+
+    void menuKeepsTheTimerWhileAPhaseRuns()
+    {
+        const QString current = presets->currentUuid();
+        presets->create({{QStringLiteral("name"), QStringLiteral("Reading")}});
+        QCOMPARE(presets->currentUuid(), current);
+        QAction *timers = actionNamed(dock->menu(), QStringLiteral("Timer"));
+        QAction *reading = actionNamed(timers->menu(), QStringLiteral("Reading"));
+        QVERIFY(reading);
+
+        engine->start();
+        QVERIFY(!timers->isEnabled());
+        // A copy of the menu shown before the start can still trigger the entry itself.
+        reading->trigger();
+        QCOMPARE(presets->currentUuid(), current);
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(!reading->isChecked());
     }
 };
 

@@ -18,9 +18,21 @@ void macSetDockBadge(const QString &label);
 /// it again (a regular application). Showing it again does not activate the application.
 void macSetDockIconHidden(bool hidden);
 
+#include "QuitPolicy.h"
+
+/// Where the request to quit being handled comes from, told by the Apple event Cocoa is handling
+/// (call it while applicationShouldTerminate: runs, i.e. from the QEvent::Quit Qt sends then):
+/// a `quit` event (the Dock's Quit, Activity Monitor, AppleScript) is External, or SessionEnding
+/// when it carries a reason (kAEQuitReason: logging out, restarting, shutting down); no Apple
+/// event means Sugo's own QCoreApplication::quit() (Application).
+QuitPolicy::Origin macCurrentQuitOrigin();
+
 class QWindow;
-/// Hides the title text the system draws in the window's title bar (the traffic lights stay):
-/// the sidebar already shows the name. The title still names the window in the Window menu and
-/// Mission Control. Does nothing without the cocoa platform (offscreen runs).
-void macHideWindowTitle(QWindow *window);
+/// Fits the system's transparent title bar to Sugo's own: hides the title text it draws (the
+/// title bar of the window already shows the name; the title still names the window in the
+/// Window menu and Mission Control) and gives the window an empty toolbar in the unified compact
+/// style, so the strip of the traffic lights is as tall as a compact toolbar and the lights sit
+/// in its middle, which the title bar takes as its height (its safe area). Does nothing without
+/// the cocoa platform (offscreen runs).
+void macSetUpTitleBar(QWindow *window);
 #endif

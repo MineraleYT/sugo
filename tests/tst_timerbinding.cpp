@@ -95,6 +95,21 @@ private Q_SLOTS:
         QCOMPARE(autoStartBehaviour(), TimerEngine::AutoStartMode::All);
     }
 
+    void editingThePendingBreakToZeroLeavesWorkWaiting()
+    {
+        engine->start();
+        clock.advanceSeconds(engine->workSeconds());
+        engine->refresh();
+        QCOMPARE(engine->state(), TimerEngine::State::Idle);
+        QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
+
+        // Editing the current timer while Idle is allowed: no 0:00 break may stay pending.
+        presets->update(PresetModel::DefaultUuid, {{QStringLiteral("shortBreakSeconds"), 0}});
+        QCOMPARE(engine->state(), TimerEngine::State::Idle);
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QCOMPARE(engine->remainingSeconds(), engine->workSeconds());
+    }
+
     void editingOtherPresetLeavesEngineAlone()
     {
         const QString other = presets->create({{QStringLiteral("workSeconds"), 10 * 60}});

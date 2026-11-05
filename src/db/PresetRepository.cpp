@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "PresetRepository.h"
 
-#include <QDateTime>
+#include "PresetModel.h"
+
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -10,6 +11,8 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+
+#include <algorithm>
 
 Q_LOGGING_CATEGORY(lcPresetRepo, "sugo.db.presets")
 
@@ -42,6 +45,16 @@ PresetRepository::PresetRepository(const QString &connectionName)
 {
 }
 
+void PresetRepository::setNowProvider(std::function<QDateTime()> provider)
+{
+    m_now = std::move(provider);
+}
+
+qint64 PresetRepository::nowMs() const
+{
+    return (m_now ? m_now() : QDateTime::currentDateTimeUtc()).toMSecsSinceEpoch();
+}
+
 QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
 {
     if (ok) {
@@ -64,10 +77,17 @@ QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
             qCWarning(lcPresetRepo) << "Ignoring an unreadable value of timer option" << optionQuery.value(1).toString();
         }
     }
+    // A row that cannot be read (a damaged page, an I/O error) ends the loop early: fail rather
+    // than return part of the timers, which the next save would take for deletions.
+    if (optionQuery.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the timer options:" << optionQuery.lastError().text();
+        return {};
+    }
 
     QSqlQuery query(db);
     if (!query.exec(QStringLiteral("SELECT id, uuid, name, category, work_sec, short_break_sec, long_break_sec, "
-                                   "cycles_before_long, is_builtin FROM preset ORDER BY sort_order, id"))) {
+                                   "cycles_before_long, is_builtin, created_at, updated_at, updated_by "
+                                   "FROM preset ORDER BY sort_order, id"))) {
         qCWarning(lcPresetRepo) << query.lastError().text();
         return {};
     }
@@ -83,8 +103,15 @@ QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
         p.longBreakSeconds = query.value(6).toInt();
         p.cyclesBeforeLong = query.value(7).toInt();
         p.builtin = query.value(8).toBool();
+        p.createdAt = query.value(9).toLongLong();
+        p.updatedAt = query.value(10).toLongLong();
+        p.updatedBy = query.value(11).toString();
         p.options = optionsById.value(query.value(0).toLongLong());
         result.append(p);
+    }
+    if (query.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the timers:" << query.lastError().text();
+        return {};
     }
     if (ok) {
         *ok = true;
@@ -92,7 +119,7 @@ QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
     return result;
 }
 
-bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
+bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<PresetTombstone> &received)
 {
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
     if (!db.transaction()) {
@@ -109,12 +136,13 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
     QSqlQuery upsert(db);
     upsert.prepare(QStringLiteral(
         "INSERT INTO preset (uuid, name, category, work_sec, short_break_sec, long_break_sec, "
-        "cycles_before_long, is_builtin, sort_order, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "cycles_before_long, is_builtin, sort_order, created_at, updated_at, updated_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(uuid) DO UPDATE SET name = excluded.name, category = excluded.category, "
         "work_sec = excluded.work_sec, short_break_sec = excluded.short_break_sec, "
         "long_break_sec = excluded.long_break_sec, cycles_before_long = excluded.cycles_before_long, "
-        "is_builtin = excluded.is_builtin, sort_order = excluded.sort_order"));
+        "is_builtin = excluded.is_builtin, sort_order = excluded.sort_order, "
+        "created_at = excluded.created_at, updated_at = excluded.updated_at, updated_by = excluded.updated_by"));
 
     QSqlQuery findId(db);
     findId.prepare(QStringLiteral("SELECT id FROM preset WHERE uuid = ?"));
@@ -126,7 +154,7 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
     insertOption.prepare(QStringLiteral("INSERT INTO preset_option (preset_id, key, value) VALUES (?, ?, ?)"));
 
     QSet<QString> keep;
-    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    const qint64 now = nowMs();
     for (int i = 0; i < presets.size(); ++i) {
         const TimerPreset &p = presets.at(i);
         keep.insert(p.uuid);
@@ -140,7 +168,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
         upsert.addBindValue(p.cyclesBeforeLong);
         upsert.addBindValue(p.builtin ? 1 : 0);
         upsert.addBindValue(i);
-        upsert.addBindValue(now);
+        upsert.addBindValue(p.createdAt);
+        upsert.addBindValue(p.updatedAt);
+        upsert.addBindValue(text(p.updatedBy));
         if (!upsert.exec()) {
             return fail(upsert);
         }
@@ -165,6 +195,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
                 replaced.append(key);
             }
         }
+        if (storedOptions.lastError().isValid()) {
+            return fail(storedOptions);
+        }
         storedOptions.finish();
         for (const QString &key : std::as_const(replaced)) {
             clearOptions.addBindValue(id);
@@ -185,14 +218,20 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
 
     // Drop presets that no longer exist (the built-in one is never removed).
     QSqlQuery existing(db);
-    if (!existing.exec(QStringLiteral("SELECT uuid FROM preset WHERE is_builtin = 0"))) {
+    if (!existing.exec(QStringLiteral("SELECT uuid, updated_at FROM preset WHERE is_builtin = 0"))) {
         return fail(existing);
     }
     QStringList stale;
+    QHash<QString, qint64> staleUpdatedAt;
     while (existing.next()) {
-        if (!keep.contains(existing.value(0).toString())) {
-            stale.append(existing.value(0).toString());
+        const QString uuid = existing.value(0).toString();
+        if (!keep.contains(uuid)) {
+            stale.append(uuid);
+            staleUpdatedAt.insert(uuid, existing.value(1).toLongLong());
         }
+    }
+    if (existing.lastError().isValid()) {
+        return fail(existing);
     }
     existing.finish();
     for (const QString &uuid : std::as_const(stale)) {
@@ -204,12 +243,77 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets)
         }
     }
 
+    // Tombstones: the received ones as they are, then one stamped now for each preset deleted
+    // here without one; none for a preset that exists, nor for the built-in one.
+    QHash<QString, PresetTombstone> tombstones;
+    for (const PresetTombstone &t : received) {
+        if (!t.uuid.isEmpty() && !keep.contains(t.uuid) && t.uuid != PresetModel::DefaultUuid) {
+            tombstones.insert(t.uuid, t);
+        }
+    }
+    for (const QString &uuid : std::as_const(stale)) {
+        if (!tombstones.contains(uuid)) {
+            // After the version deleted, even when this computer's clock is behind its author's.
+            tombstones.insert(uuid, PresetTombstone{uuid, std::max(now, staleUpdatedAt.value(uuid) + 1), QString()});
+        }
+    }
+    QSqlQuery writeTombstone(db);
+    writeTombstone.prepare(QStringLiteral(
+        "INSERT INTO preset_tombstone (uuid, deleted_at, deleted_by) VALUES (?, ?, ?) "
+        "ON CONFLICT(uuid) DO UPDATE SET deleted_at = excluded.deleted_at, deleted_by = excluded.deleted_by"));
+    for (const PresetTombstone &t : std::as_const(tombstones)) {
+        writeTombstone.addBindValue(t.uuid);
+        writeTombstone.addBindValue(t.deletedAt);
+        writeTombstone.addBindValue(text(t.deletedBy));
+        if (!writeTombstone.exec()) {
+            return fail(writeTombstone);
+        }
+    }
+    QSqlQuery dropTombstone(db);
+    dropTombstone.prepare(QStringLiteral("DELETE FROM preset_tombstone WHERE uuid = ?"));
+    for (const QString &uuid : std::as_const(keep)) {
+        dropTombstone.addBindValue(uuid);
+        if (!dropTombstone.exec()) {
+            return fail(dropTombstone);
+        }
+    }
+    QSqlQuery expire(db);
+    expire.prepare(QStringLiteral("DELETE FROM preset_tombstone WHERE deleted_at < ?"));
+    expire.addBindValue(now - TombstoneLifetimeMs);
+    if (!expire.exec()) {
+        return fail(expire);
+    }
+
     if (!db.commit()) {
         qCWarning(lcPresetRepo) << db.lastError().text();
         db.rollback();
         return false;
     }
     return true;
+}
+
+QList<PresetTombstone> PresetRepository::tombstones(bool *ok) const
+{
+    if (ok) {
+        *ok = false;
+    }
+    QSqlQuery query(QSqlDatabase::database(m_connection, false));
+    if (!query.exec(QStringLiteral("SELECT uuid, deleted_at, deleted_by FROM preset_tombstone ORDER BY deleted_at, uuid"))) {
+        qCWarning(lcPresetRepo) << query.lastError().text();
+        return {};
+    }
+    QList<PresetTombstone> result;
+    while (query.next()) {
+        result.append(PresetTombstone{query.value(0).toString(), query.value(1).toLongLong(), query.value(2).toString()});
+    }
+    if (query.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the deleted timers:" << query.lastError().text();
+        return {};
+    }
+    if (ok) {
+        *ok = true;
+    }
+    return result;
 }
 
 QString PresetRepository::currentUuid() const

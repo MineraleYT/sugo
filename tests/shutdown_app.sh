@@ -39,11 +39,14 @@ cat >"$runtime_dir/bus.conf" <<'EOF'
 </busconfig>
 EOF
 exec 3< <(dbus-daemon --config-file="$runtime_dir/bus.conf" --nofork --print-address=1 --print-pid=1)
-read -r address <&3
-read -r daemon_pid <&3
+read -t 5 -r address <&3 || { echo "no private bus"; exit 77; }
+read -t 5 -r daemon_pid <&3 || { echo "no private bus"; exit 77; }
 export DBUS_SESSION_BUS_ADDRESS=$address
 
+# SUGO_DATA_DIR, read before the XDG variables, must not reach the user's real data either.
+mkdir -p "$runtime_dir/data/sugo"
 env QT_QPA_PLATFORM=offscreen \
+    SUGO_DATA_DIR="$runtime_dir/data/sugo" \
     XDG_DATA_HOME="$runtime_dir/data" \
     XDG_CONFIG_HOME="$runtime_dir/config" \
     MALLOC_CHECK_=3 MALLOC_PERTURB_=165 \
@@ -74,6 +77,16 @@ while kill -0 "$app_pid" 2>/dev/null; do
 done &
 caller_pid=$!
 timeout 10 tail --pid="$app_pid" -f /dev/null
+if [[ $? -eq 124 ]]; then
+    kill -9 "$app_pid" 2>/dev/null
+    wait "$app_pid" 2>/dev/null
+    app_pid=
+    kill "$caller_pid" 2>/dev/null
+    wait "$caller_pid" 2>/dev/null
+    echo "Sugo did not quit within 10 s of SIGTERM" >&2
+    cat "$runtime_dir/out.log" >&2
+    exit 1
+fi
 wait "$caller_pid" 2>/dev/null
 wait "$app_pid"
 status=$?

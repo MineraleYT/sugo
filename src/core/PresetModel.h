@@ -2,8 +2,11 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QDateTime>
 #include <QList>
 #include <QtQml/qqmlregistration.h>
+
+#include <functional>
 
 #include "TimerPreset.h"
 
@@ -52,8 +55,14 @@ public:
     Q_ENUM(Role)
 
     static const QString DefaultUuid;
+    /// The built-in timer as it comes, before any change.
+    static TimerPreset makeDefaultPreset();
 
     explicit PresetModel(QObject *parent = nullptr);
+
+    /// The wall clock that stamps createdAt and updatedAt (tests set their own). Not the
+    /// timer's monotonic Clock: these times are compared with other computers'.
+    void setNowProvider(std::function<QDateTime()> provider);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -78,8 +87,9 @@ public:
     Q_INVOKABLE static QString iconSource(const QString &iconName);
 
     /// Replaces the whole list (used when loading from storage). Guarantees that the
-    /// built-in preset exists and that no other preset claims to be built-in. Does not
-    /// emit modified(), so loading never writes back.
+    /// built-in preset exists, that no other preset claims to be built-in and that every
+    /// value is within PresetLimits. Does not emit modified(), so loading never writes back;
+    /// emits presetChanged() for each timer that was there before and whose content changed.
     void setPresets(const QList<TimerPreset> &presets, const QString &currentUuid);
 
     Q_INVOKABLE int indexOf(const QString &uuid) const;
@@ -97,8 +107,13 @@ public:
     Q_INVOKABLE QString duplicate(const QString &uuid);
     /// Refuses (returns false) for the built-in preset.
     Q_INVOKABLE bool remove(const QString &uuid);
-    /// Restores the built-in preset to its factory values. No-op for other presets.
+    /// Restores the built-in preset to its factory values (changed now, for Sugo Sync). No-op for
+    /// other presets.
     Q_INVOKABLE bool reset(const QString &uuid);
+
+    /// Stamps every preset as changed now by this computer and emits modified(): after a backup
+    /// restore, so Sugo Sync publishes the restored timers over what other computers hold.
+    void markAllModified();
 
     Q_INVOKABLE QVariant option(const QString &uuid, const QString &key) const;
     /// Unknown keys are rejected. Values are coerced to the option's type.
@@ -117,11 +132,15 @@ Q_SIGNALS:
     void valuesAdjusted(const QString &uuid, const QStringList &fields);
 
 private:
-    static TimerPreset makeDefaultPreset();
     /// Returns the keys whose value was out of range or unreadable and had to be adjusted.
     static QStringList applyFields(TimerPreset &preset, const QVariantMap &fields);
     static QString iconNameFor(const TimerPreset &preset);
+    qint64 nowMs() const;
+    /// The time of a change to a version of `previous`: now, but always after it, so that the
+    /// change wins over the version it was made from even when this computer's clock is behind.
+    qint64 changeTime(qint64 previous) const;
 
     QList<TimerPreset> m_presets;
+    std::function<QDateTime()> m_now;
     QString m_currentUuid;
 };

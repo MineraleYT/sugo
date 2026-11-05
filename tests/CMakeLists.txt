@@ -16,23 +16,26 @@ sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS} 
 sugo_add_test(tst_datamanager Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetmodel Qt6::Core Qt6::Qml)
 sugo_add_test(tst_timerbinding Qt6::Core Qt6::Qml)
-sugo_add_test(tst_database Qt6::Core Qt6::Sql)
+sugo_add_test(tst_database Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetrepository Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
 sugo_add_test(tst_autostart Qt6::Core Qt6::Gui ${SUGO_DBUS})
 sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
+sugo_add_test(tst_alertsound Qt6::Core Qt6::Multimedia)
 sugo_add_test(tst_traypresenter Qt6::Core Qt6::Qml)
 sugo_add_test(tst_statsaggregator Qt6::Core Qt6::Sql)
 sugo_add_test(tst_statsmodel Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_updatechecker Qt6::Core Qt6::Qml Qt6::Network)
 sugo_add_test(tst_screenlockwatcher Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
-sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Sql ${SUGO_DBUS})
+sugo_add_test(tst_diagnostics Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network Qt6::Sql ${SUGO_DBUS})
 # The test builds a QGuiApplication (clipboard access): run it without a display, e.g. on CI.
 set_tests_properties(tst_diagnostics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_calendarsync Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network ${SUGO_DBUS})
 set_tests_properties(tst_calendarsync PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+sugo_add_test(tst_askoncesecretstore Qt6::Core ${SUGO_DBUS})
+sugo_add_test(tst_secrethandoff Qt6::Core)
 
 sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 # A GUI application (AppSettings); no display on CI.
@@ -51,10 +54,24 @@ sugo_add_test(tst_themeicons Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
+sugo_add_test(tst_unixsignals Qt6::Core)
+sugo_add_test(tst_quitpolicy Qt6::Core)
+
+# Sugo Sync: no D-Bus, the same tests on Linux and macOS.
+sugo_add_test(tst_synccrypto Qt6::Core)
+sugo_add_test(tst_presetsyncformat Qt6::Core Qt6::Qml)
+sugo_add_test(tst_syncsecrets Qt6::Core)
+sugo_add_test(tst_syncapi Qt6::Core Qt6::Network)
+sugo_add_test(tst_syncaccount Qt6::Core Qt6::Network)
+sugo_add_test(tst_synccontroller Qt6::Core Qt6::Qml Qt6::Network Qt6::Sql)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
     COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
+)
+# KRunner skips a query shorter than the runner's minimum: it must let the bare keyword "sugo" through.
+add_test(NAME tst_runner_min_letters
+    COMMAND grep -qx "X-Plasma-Runner-Min-Letter-Count=[1-4]" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
 )
 
 # Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,
@@ -62,7 +79,8 @@ add_test(NAME tst_runner_version
 if(NOT APPLE)
     # macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion).
     sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
+    # Gui: the factory it also checks names the inhibitor after the application's desktop file.
+    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::Gui Qt6::DBus)
     sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
     sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
     sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)
@@ -96,32 +114,48 @@ set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 30)
 add_test(NAME tst_stats_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> stats
 )
-set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_about_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> about
 )
-set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_settings_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> settings
 )
-set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_presets_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> presets
 )
-set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_timer_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> timer
 )
-set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 15)
+
+# Started on a damaged sugo.db: it is moved aside, and the window says so.
+add_test(NAME tst_damaged_database_ui
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> damaged-db
+)
+set_tests_properties(tst_damaged_database_ui PROPERTIES TIMEOUT 10)
+
+# Started next to a database of Sugo 1.0.0 that 1.0.1 moved aside: its data is taken back, and the
+# window says so. The script writes that database with Python's sqlite3.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME tst_sugo100_database_ui
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> sugo100-db ${Python3_EXECUTABLE}
+    )
+    set_tests_properties(tst_sugo100_database_ui PROPERTIES TIMEOUT 15)
+endif()
 
 add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )
-set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 15)
 
 # Ended with SIGTERM, Sugo quits cleanly by itself (on every system; without D-Bus).
 add_test(NAME tst_app_quit
@@ -161,7 +195,7 @@ target_compile_definitions(tst_shortcutsfocusinstaller PRIVATE SUGO_SHORTCUTS_SO
 
 # These use QStandardPaths' test mode, whose folders (~/.qttest) every test process shares, and
 # write the default settings file there: `ctest --parallel` runs them one at a time.
-set_tests_properties(tst_appsettings tst_calendarsync tst_desktopstyle tst_phasenotifier tst_screenlockwatcher
+set_tests_properties(tst_alertsound tst_appsettings tst_calendarsync tst_desktopstyle tst_phasenotifier tst_screenlockwatcher
     PROPERTIES RESOURCE_LOCK qt_test_mode_dirs)
 
 # --- Platform parity ---

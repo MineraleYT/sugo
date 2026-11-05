@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds Sugo for macOS 13 or later as a universal (arm64 + x86_64) app in a disk image, with Qt
-# from qt.io (the same version as the AppImage). Runs on a Mac with the Xcode command line tools,
-# CMake, Python 3 and git (a GitHub macos runner has them all):
+# from qt.io (the same version as the AppImage) and libsodium built from source
+# (build-libsodium.sh). Runs on a Mac with the Xcode command line tools, CMake, Python 3 and git
+# (a GitHub macos runner has them all; Ninja and pkg-config come from Homebrew if missing):
 #
 #   bash packaging/macos/build.sh 1.0.0 out
 #
@@ -12,9 +13,11 @@
 #
 # The app is signed ad hoc (Apple Silicon runs no unsigned code, and macdeployqt's changes break
 # the linker's signature), so Gatekeeper asks the user to confirm the first launch. SIGN_IDENTITY
-# set to a "Developer ID Application" identity signs it for distribution instead (notarization is
-# a separate step, not done here).
+# set to a "Developer ID Application" identity signs it for distribution instead, with the hardened
+# runtime and the entitlements in entitlements.plist (notarization is a separate step, not done here).
 set -euo pipefail
+# With pipefail, "producer | grep -q" fails when grep stops at the first match and the producer,
+# still writing, dies of SIGPIPE: searched output is read into a variable (or a here-string) first.
 
 VERSION=${1:?version}
 OUT=${2:?output directory}
@@ -33,6 +36,8 @@ DMG_NAME=Sugo-macOS-universal.dmg
 fail() { echo "error: $*" >&2; exit 1; }
 
 mkdir -p "$WORK" "$OUT"
+# Absolute: the script works in WORK, and APP and the exit trap name paths under it.
+WORK=$(cd "$WORK" && pwd)
 OUT=$(cd "$OUT" && pwd)
 cd "$WORK"
 
@@ -67,13 +72,27 @@ if [ ! -d "$WORK/ecm" ]; then
     cmake --install ecm-build >/dev/null
 fi
 
+# --- libsodium (the sync's encryption) -----------------------------------------------------------
+# A universal static library, found by CMake through pkg-config before any other libsodium
+# (Homebrew's is a dylib for one architecture). Pinned in build-libsodium.sh.
+if ! command -v pkg-config >/dev/null 2>&1; then
+    command -v brew >/dev/null 2>&1 || fail "pkg-config is missing (brew install pkgconf)"
+    brew install pkgconf >/dev/null
+fi
+MACOSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET bash "$SRC/packaging/macos/build-libsodium.sh" "$WORK/sodium"
+export PKG_CONFIG_PATH="$WORK/sodium/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+[ "$(pkg-config --variable=libdir libsodium)" = "$WORK/sodium/lib" ] \
+    || fail "pkg-config finds a libsodium other than the one in $WORK/sodium"
+
 # --- Sugo ----------------------------------------------------------------------------------------
 cmake -S "$SRC" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
     -DCMAKE_PREFIX_PATH="$QT;$WORK/ecm" \
     -DCMAKE_OSX_ARCHITECTURES="$ARCHS" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-    -DSUGO_VERSION="$VERSION" >/dev/null
+    -DSUGO_VERSION="$VERSION" -DSUGO_INSTALLS_UPDATES=ON >/dev/null
 cmake --build build
 [ -x build/bin/Sugo.app/Contents/MacOS/Sugo ] || fail "build/bin/Sugo.app was not built"
+[ "$(plutil -extract SugoInstallsUpdates raw build/bin/Sugo.app/Contents/Info.plist 2>/dev/null)" = true ] \
+    || fail "Sugo.app does not install its updates (SugoInstallsUpdates in Info.plist)"
 
 # A copy, so that a rebuild never sees a bundle macdeployqt has already changed.
 rm -rf app
@@ -85,7 +104,7 @@ CONTENTS="$APP/Contents"
 # The libraries a Mach-O file loads, once each (a universal file lists them for each architecture,
 # under a header line per architecture; the dependencies are the indented lines).
 deps() {
-    otool -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
+    otool -arch all -L "$1" | awk '/^[[:space:]]/ { print $1 }' | sort -u
 }
 
 # --- Qt in the bundle ----------------------------------------------------------------------------
@@ -117,7 +136,7 @@ done
 # The build's own rpaths to Qt would make the app look for Qt where it was built; the bundled
 # frameworks are found through @executable_path/../Frameworks.
 rpaths() {
-    otool -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
+    otool -arch all -l "$CONTENTS/MacOS/Sugo" | awk '/cmd LC_RPATH/ { getline; getline; print $2 }' | sort -u
 }
 rpaths | while read -r rpath; do
     case "$rpath" in
@@ -125,7 +144,7 @@ rpaths | while read -r rpath; do
         *) install_name_tool -delete_rpath "$rpath" "$CONTENTS/MacOS/Sugo" ;;
     esac
 done
-if ! rpaths | grep -qx '@executable_path/../Frameworks'; then
+if ! grep -qx '@executable_path/../Frameworks' <<<"$(rpaths)"; then
     install_name_tool -add_rpath @executable_path/../Frameworks "$CONTENTS/MacOS/Sugo"
 fi
 
@@ -148,22 +167,36 @@ done
 # D-Bus is Linux-only: Sugo itself must not link QtDBus on macOS. Qt from qt.io is built with
 # its dbus feature, though, and QtGui links QtDBus.framework, so macdeployqt has to ship it: name
 # what pulls it in instead of deleting it (QtGui would not load without it).
-if deps "$CONTENTS/MacOS/Sugo" | grep -q 'QtDBus\.framework/'; then
+sugo_deps=$(deps "$CONTENTS/MacOS/Sugo")
+if grep -q 'QtDBus\.framework/' <<<"$sugo_deps"; then
     fail "Sugo links QtDBus.framework: D-Bus code is built on macOS (see SUGO_DBUS in CMakeLists.txt)"
 fi
 if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
     users=$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -not -path '*/QtDBus.framework/*' -print0 \
         | while IFS= read -r -d '' f; do
-              if otool -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
+              if grep -q 'QtDBus\.framework/' <<<"$(otool -arch all -L "$f" 2>/dev/null)"; then echo "${f#"$CONTENTS"/}"; fi
           done)
     [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
     echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
 fi
 
+# libsodium is linked statically: no libsodium dylib in the program (macdeployqt would copy one
+# for a single architecture from wherever CMake found it), and, once the sources use it, its code
+# in the program.
+if grep -qi 'libsodium' <<<"$sugo_deps"; then
+    fail "Sugo links a libsodium dylib: CMake did not find the static library of $WORK/sodium"
+fi
+if grep -rqs --include='*.cpp' --include='*.mm' '#include <sodium' "$SRC/src"; then
+    for arch in arm64 x86_64; do
+        symbols=$(nm -arch "$arch" -g "$CONTENTS/MacOS/Sugo") || fail "cannot list the symbols of Sugo ($arch)"
+        grep -q ' _sodium_init$' <<<"$symbols" || fail "libsodium is not linked into Sugo ($arch)"
+    done
+fi
+
 # HTTPS (update checks, CalDAV): a TLS backend that needs nothing outside the bundle.
 if [ ! -e "$CONTENTS/PlugIns/tls/libqsecuretransportbackend.dylib" ]; then
     [ -e "$CONTENTS/PlugIns/tls/libqopensslbackend.dylib" ] || fail "no TLS backend in PlugIns/tls"
-    find "$CONTENTS/Frameworks" -name 'libssl*.dylib' | grep -q . \
+    [ -n "$(find "$CONTENTS/Frameworks" -name 'libssl*.dylib')" ] \
         || fail "only the OpenSSL TLS backend was deployed, without OpenSSL"
 fi
 
@@ -176,9 +209,9 @@ done
 # the system's own libraries.
 macho_files() {
     find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 | while IFS= read -r -d '' f; do
-        if file -b "$f" | grep -q 'Mach-O'; then
-            printf '%s\0' "$f"
-        fi
+        case "$(file -b "$f")" in
+            *Mach-O*) printf '%s\0' "$f" ;;
+        esac
     done
 }
 problems=0
@@ -192,7 +225,7 @@ while IFS= read -r -d '' f; do
     done
     dir=$(dirname "$f")
     # A library lists its own install name among its dependencies: skip it.
-    own=$(otool -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
+    own=$(otool -arch all -D "$f" 2>/dev/null | awk '!/:$/ && !found { print; found = 1 }')
     while read -r dep; do
         [ -n "$dep" ] && [ "$dep" != "$own" ] || continue
         case "$dep" in
@@ -213,7 +246,9 @@ xattr -cr "$APP"
 if [ "$SIGN_IDENTITY" = - ]; then
     codesign --force --deep --sign - "$APP"
 else
-    codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+    # The hardened runtime: entitlements.plist lets Qt's QML engine use its JIT.
+    codesign --force --deep --options runtime --timestamp --entitlements "$SRC/packaging/macos/entitlements.plist" \
+        --sign "$SIGN_IDENTITY" "$APP"
 fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 

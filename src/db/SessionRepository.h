@@ -35,20 +35,23 @@ public:
     /// Returns false (and logs) on failure. On success `insertedId` (if given) receives the row id.
     bool insert(const SessionRecord &record, qint64 *insertedId = nullptr);
 
-    /// Updates the task note for an existing session.
+    /// Updates the task note for an existing session. Returns false (and logs) on failure or
+    /// when there is no session with that id.
     bool updateNote(qint64 sessionId, const QString &note);
 
     /// Recent unique non-empty task notes (trimmed), most recently used first.
     QStringList recentNotes(int limit = 5) const;
 
-    /// Sessions that started in [fromMs, toMs), oldest first.
-    QList<SessionRecord> between(qint64 fromMs, qint64 toMs) const;
+    /// Sessions that started in [fromMs, toMs), oldest first. On a read error the list is empty
+    /// (or cut short) and `ok` (if given) is false.
+    QList<SessionRecord> between(qint64 fromMs, qint64 toMs, bool *ok = nullptr) const;
 
     /// Started timestamps (Unix ms) of completed work sessions with an id greater than `afterId`,
     /// oldest first, so callers can keep a cache up to date. `maxId` (if given) receives the highest id seen, or
-    /// `afterId` when there are no new rows.
+    /// `afterId` when there are no new rows, or when they cannot be read (then the list is empty).
     QList<qint64> completedWorkStartsAfter(qint64 afterId, qint64 *maxId = nullptr) const;
 
+    /// The number of sessions, or -1 if it cannot be read.
     int count() const;
     bool deleteAll();
     /// Deletes the sessions that started before `ms` (Unix ms). Returns how many rows were

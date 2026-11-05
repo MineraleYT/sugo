@@ -15,6 +15,7 @@
 #endif
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -29,6 +30,9 @@
 #include "Localization.h"
 #include "Settings.h"
 #include <algorithm>
+#include <cmath>
+#include <iterator>
+#include <memory>
 
 
 namespace
@@ -52,6 +56,7 @@ const char kProtectWeekendStreak[] = "ProtectWeekendStreak";
 const char kFirstRunCompleted[] = "FirstRunCompleted";
 const char kPromptTaskNote[] = "PromptTaskNote";
 const char kColorScheme[] = "ColorScheme";
+const char kAccentColor[] = "AccentColor";
 const char kUpdateChannel[] = "UpdateChannel";
 const char kAutoCheckUpdates[] = "AutoCheckUpdates";
 const char kVerboseLogging[] = "VerboseLogging";
@@ -68,11 +73,99 @@ QString validColorScheme(const QString &scheme)
     return QStringLiteral("system");
 }
 
+QString validAccentColor(const QString &id)
+{
+    const QString s = id.trimmed().toLower();
+    if (AppSettings::accentColors().contains(s)) {
+        return s;
+    }
+    return QStringLiteral("red");
+}
+
+/// An integer setting, or `fallback` when it is missing, empty or not a number: a hand-edited or
+/// half-written "SoundVolume=" must not read as 0 and mute every alert.
+int intSetting(const QSettings &settings, const char *key, int fallback)
+{
+    bool ok = false;
+    const int value = settings.value(QLatin1String(key), fallback).toInt(&ok);
+    return ok ? value : fallback;
+}
+
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
+/// After the player stops, how long the end of the media or an error may take to be reported.
+constexpr int kAlertStoppedGraceMs = 1000;
+int alertPlayerLifetimeForTestingMs = 0;
 
-/// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume.
-void playWithPlayerProgram(const QString &file, int vol)
+/// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
+/// backend; a file it cannot decode falls back to AppSettings::playWithPlayerProgram().
+bool playWithFade(const QString &file, int vol, QObject *parent);
+
+#ifndef Q_OS_MACOS
+/// A player program that exits with an error sooner than this after starting did not play the
+/// sound (pw-play with no PipeWire daemon, a file it cannot decode): the next one plays it instead.
+constexpr qint64 kQuickPlayerFailureMs = 2000;
+
+/// Player programs that cannot play here, not tried again in this session: those that failed to
+/// start, and those that failed at once on a file the next player then played. One that only
+/// failed on a file no player could play (a broken file) keeps its chances.
+QStringList &unusableAlertPlayers()
+{
+    static QStringList players;
+    return players;
+}
+
+/// Plays a file with the first usable player program from `first` on: pw-play, then paplay.
+/// failedHere: the players that failed at once on this file before.
+void playWithPlayerFrom(int first, const QString &file, int vol, const QStringList &failedHere = {})
+{
+    const QString programs[] = {QStringLiteral("pw-play"), QStringLiteral("paplay")};
+    for (int i = first; i < int(std::size(programs)); ++i) {
+        const QString &program = programs[i];
+        if (unusableAlertPlayers().contains(program) || QStandardPaths::findExecutable(program).isEmpty()) {
+            continue;
+        }
+        const QStringList arguments = i == 0
+            ? QStringList{QStringLiteral("--volume"), QString::number(vol / 100.0, 'f', 2), file}
+            // paplay's volume is linear, 65536 = 100 %.
+            : QStringList{QStringLiteral("--volume=%1").arg(vol * 65536 / 100), file};
+
+        // Not detached, to see it fail. No parent: a sound still playing at quit plays to its end.
+        auto *process = new QProcess;
+        process->setProcessChannelMode(QProcess::ForwardedChannels);
+        process->setStandardInputFile(QProcess::nullDevice());
+        auto clock = std::make_shared<QElapsedTimer>();
+        QObject::connect(process, &QProcess::errorOccurred, process, [process, i, program, file, vol, failedHere](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart) {
+                process->deleteLater();
+                qWarning().noquote() << program << "failed to start - trying the next player";
+                unusableAlertPlayers().append(program);
+                playWithPlayerFrom(i + 1, file, vol, failedHere);
+            }
+        });
+        QObject::connect(process, &QProcess::finished, process,
+                         [process, clock, i, program, file, vol, failedHere](int exitCode, QProcess::ExitStatus status) {
+            process->deleteLater();
+            if (status == QProcess::NormalExit && exitCode == 0) {
+                // It played what those before it could not: they cannot play here.
+                unusableAlertPlayers().append(failedHere);
+            } else if (status == QProcess::NormalExit && clock->elapsed() < kQuickPlayerFailureMs) {
+                // An error right away: it did not play this file. Later, or killed, it was playing.
+                qWarning().noquote() << program << "cannot play" << file << QStringLiteral("(exit code %1)").arg(exitCode)
+                                     << "- trying the next player";
+                playWithPlayerFrom(i + 1, file, vol, failedHere + QStringList{program});
+            }
+        });
+        clock->start();
+        process->start(program, arguments);
+        return;
+    }
+    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could play it";
+}
+#endif
+} // namespace
+
+void AppSettings::playWithPlayerProgram(const QString &file, int vol)
 {
 #ifdef Q_OS_MACOS
     if (AppSettings::afplayCanPlay(file)
@@ -81,25 +174,12 @@ void playWithPlayerProgram(const QString &file, int vol)
     }
     qWarning() << "Cannot play" << file << "- afplay could not be started or cannot read the format";
 #else
-    if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
-        const double volFactor = vol / 100.0;
-        if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
-            return;
-        }
-    }
-    if (!QStandardPaths::findExecutable(QStringLiteral("paplay")).isEmpty()) {
-        // paplay's volume is linear, 65536 = 100 %.
-        const int paVolume = vol * 65536 / 100;
-        if (QProcess::startDetached(QStringLiteral("paplay"), {QStringLiteral("--volume=%1").arg(paVolume), file})) {
-            return;
-        }
-    }
-    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+    playWithPlayerFrom(0, file, vol);
 #endif
 }
 
-/// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
-/// backend; a file it cannot decode falls back to playWithPlayerProgram().
+namespace
+{
 bool playWithFade(const QString &file, int vol, QObject *parent)
 {
     auto *player = new QMediaPlayer(parent);
@@ -124,8 +204,33 @@ bool playWithFade(const QString &file, int vol, QObject *parent)
     QObject::connect(player, &QMediaPlayer::errorOccurred, player, [player, file, vol]() {
         player->disconnect(); // errors can come more than once: play the fallback only once
         player->deleteLater();
-        playWithPlayerProgram(file, vol);
+        AppSettings::playWithPlayerProgram(file, vol);
     });
+
+    // A backend that reports neither the end nor an error (a source that stalls, an audio device
+    // that goes away) would keep the player, and its fade timer, until Sugo quits: one per alert.
+    // It is released at the latest a little after the sound should have ended. A stopped player
+    // still has a moment for the end of the media or an error (the fallback) to be reported.
+    auto *expiry = new QTimer(player);
+    expiry->setSingleShot(true);
+    const auto lifetime = [](qint64 durationMs) {
+        return alertPlayerLifetimeForTestingMs > 0 ? alertPlayerLifetimeForTestingMs : int(AppSettings::alertPlayerLifetimeMs(durationMs));
+    };
+    QObject::connect(expiry, &QTimer::timeout, player, [player, file]() {
+        qWarning() << "The alert sound" << file << "did not end in time; its player is released";
+        player->disconnect();
+        player->deleteLater();
+    });
+    QObject::connect(player, &QMediaPlayer::durationChanged, expiry, [expiry, lifetime](qint64 durationMs) {
+        expiry->start(lifetime(durationMs));
+    });
+    QObject::connect(player, &QMediaPlayer::playbackStateChanged, expiry, [expiry](QMediaPlayer::PlaybackState state) {
+        if (state == QMediaPlayer::StoppedState && (!expiry->isActive() || expiry->remainingTime() > kAlertStoppedGraceMs)) {
+            expiry->start(kAlertStoppedGraceMs);
+        }
+    });
+    expiry->start(lifetime(0));
+
     player->setSource(QUrl::fromLocalFile(file));
     fade->start();
     player->play();
@@ -154,13 +259,13 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_startMinimized = settings.value(QLatin1String(kStartMinimized), Defaults::startMinimized).toBool();
     m_showDockBadge = settings.value(QLatin1String(kShowDockBadge), Defaults::showDockBadge).toBool();
     m_hideDockIcon = settings.value(QLatin1String(kHideDockIcon), Defaults::hideDockIcon).toBool();
-    m_trayBadgeStyle = std::clamp(settings.value(QLatin1String(kTrayBadgeStyle), Defaults::trayBadgeStyle).toInt(), 0, 2);
+    m_trayBadgeStyle = std::clamp(intSetting(settings, kTrayBadgeStyle, Defaults::trayBadgeStyle), 0, 2);
     m_soundTheme = settings.value(QLatin1String(kSoundTheme), QString(Defaults::soundTheme)).toString();
-    m_soundVolume = std::clamp(settings.value(QLatin1String(kSoundVolume), Defaults::soundVolume).toInt(), 0, 100);
+    m_soundVolume = std::clamp(intSetting(settings, kSoundVolume, Defaults::soundVolume), 0, 100);
     m_preAlarmEnabled = settings.value(QLatin1String(kPreAlarmEnabled), Defaults::preAlarmEnabled).toBool();
     m_preAlarmSound = settings.value(QLatin1String(kPreAlarmSound), QString(Defaults::preAlarmSound)).toString();
-    m_focusSoundMode = std::clamp(settings.value(QLatin1String(kFocusSoundMode), Defaults::focusSoundMode).toInt(), 0, FocusSoundController::LastMode);
-    m_focusSoundVolume = std::clamp(settings.value(QLatin1String(kFocusSoundVolume), Defaults::focusSoundVolume).toInt(), 0, 100);
+    m_focusSoundMode = std::clamp(intSetting(settings, kFocusSoundMode, Defaults::focusSoundMode), 0, FocusSoundController::LastMode);
+    m_focusSoundVolume = std::clamp(intSetting(settings, kFocusSoundVolume, Defaults::focusSoundVolume), 0, 100);
     m_keepScreenAwake = settings.value(QLatin1String(kKeepScreenAwake), Defaults::keepScreenAwake).toBool();
     m_autoPauseOnScreenLock = settings.value(QLatin1String(kAutoPauseOnScreenLock), Defaults::autoPauseOnScreenLock).toBool();
     m_protectWeekendStreak = settings.value(QLatin1String(kProtectWeekendStreak), Defaults::protectWeekendStreak).toBool();
@@ -168,6 +273,7 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_promptTaskNote = settings.value(QLatin1String(kPromptTaskNote), Defaults::promptTaskNote).toBool();
     m_colorScheme = validColorScheme(settings.value(QLatin1String(kColorScheme), QString(Defaults::colorScheme)).toString());
     applyColorScheme();
+    m_accentColor = validAccentColor(settings.value(QLatin1String(kAccentColor), QString(Defaults::accentColor)).toString());
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
     m_verboseLogging = settings.value(QLatin1String(kVerboseLogging), Defaults::verboseLogging).toBool();
@@ -185,6 +291,16 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     // on macOS it would point at the copy being tried.
     if (m_autostart && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
         m_autostart->repair();
+    }
+    // The entry can change after setStartAtLogin() reported a failure: the Background portal's
+    // dialog answered after Sugo stopped waiting.
+    if (m_autostart) {
+        m_autostart->setChangedCallback([this]() {
+            if (!startAtLogin()) {
+                setStartMinimized(false); // as when switched off from here
+            }
+            Q_EMIT startAtLoginChanged();
+        });
     }
 }
 
@@ -304,16 +420,27 @@ void AppSettings::setStartAtLogin(bool enabled)
     if (!m_autostart) {
         return;
     }
-    if (enabled != startAtLogin() && !m_autostart->setEnabled(enabled)) {
-        Q_EMIT autostartFailed(enabled ? i18n("Could not set up starting Sugo at login.")
-                                       : i18n("Could not remove the entry that starts Sugo at login."));
-    } else if (!enabled) {
+    QString failure;
+    if (enabled != startAtLogin()) {
+        if (enabled && m_autostart->runsFromTemporaryLocation()) {
+            // Opened from the disk image (or a copy macOS moved aside): it is gone at the next login.
+            failure = i18n("To start Sugo at login, move it to the Applications folder and open it from there.");
+        } else if (!m_autostart->setEnabled(enabled)) {
+            failure = enabled ? i18n("Could not set up starting Sugo at login.")
+                              : i18n("Could not remove the entry that starts Sugo at login.");
+        }
+    }
+    if (failure.isEmpty() && !enabled) {
         // "Start minimized" only means something for the start at login: switched off with it,
         // it never stays on unseen behind the disabled row.
         setStartMinimized(false);
     }
-    // Always announced: after a failure this makes views show the real state again.
+    // Always announced: after a failure this makes views show the real state again. Before the
+    // failure, so a view that clears its message on a change (the welcome tour) keeps this one.
     Q_EMIT startAtLoginChanged();
+    if (!failure.isEmpty()) {
+        Q_EMIT autostartFailed(failure);
+    }
 }
 
 void AppSettings::setStartMinimized(bool minimized)
@@ -463,6 +590,40 @@ void AppSettings::setColorScheme(const QString &scheme)
     Q_EMIT colorSchemeChanged();
 }
 
+void AppSettings::setAccentColor(const QString &id)
+{
+    const QString valid = validAccentColor(id);
+    if (m_accentColor == valid) {
+        return;
+    }
+    m_accentColor = valid;
+    storeString(kAccentColor, valid);
+    Q_EMIT accentColorChanged();
+}
+
+QStringList AppSettings::accentColors()
+{
+    // Around the colour wheel, so the menu reads as a spectrum.
+    static const QStringList ids{
+        QStringLiteral("red"), QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("lime"), QStringLiteral("green"),
+        QStringLiteral("teal"), QStringLiteral("cyan"), QStringLiteral("blue"), QStringLiteral("violet"), QStringLiteral("pink"),
+    };
+    return ids;
+}
+
+QString AppSettings::accentColorName(const QString &id)
+{
+    // In the order of accentColors().
+    const QStringList names{
+        i18nc("accent colour", "Red"),  i18nc("accent colour", "Orange"), i18nc("accent colour", "Yellow"),
+        i18nc("accent colour", "Lime"), i18nc("accent colour", "Green"),  i18nc("accent colour", "Teal"),
+        i18nc("accent colour", "Cyan"), i18nc("accent colour", "Blue"),   i18nc("accent colour", "Violet"),
+        i18nc("accent colour", "Pink"),
+    };
+    const qsizetype at = accentColors().indexOf(id);
+    return at >= 0 && at < names.size() ? names.at(at) : id;
+}
+
 void AppSettings::setUpdateChannel(const QString &channel)
 {
     const QString valid = channel == QLatin1String("nightly") ? channel : QStringLiteral("stable");
@@ -586,7 +747,7 @@ void AppSettings::installFocusShortcuts()
 {
     if (!m_focusInstaller) {
         m_focusInstallStatus = QStringLiteral("failed");
-        m_focusInstallDetail = QStringLiteral("not supported on this system");
+        m_focusInstallDetail = i18nc("why the Focus shortcuts could not be installed", "not supported on this system");
         Q_EMIT focusShortcutsInstallChanged();
         return;
     }
@@ -620,6 +781,7 @@ void AppSettings::resetToDefaults()
     setProtectWeekendStreak(Defaults::protectWeekendStreak);
     setPromptTaskNote(Defaults::promptTaskNote);
     setColorScheme(QString(Defaults::colorScheme));
+    setAccentColor(QString(Defaults::accentColor));
     setUpdateChannel(QString(Defaults::updateChannel));
     setAutoCheckUpdates(Defaults::autoCheckUpdates);
     setVerboseLogging(Defaults::verboseLogging);
@@ -655,9 +817,13 @@ void AppSettings::playSoundPreview(const QString &soundName, int volume)
     }
     const QString file = findSoundFile(soundName, soundSearchRoots());
     if (file.isEmpty()) {
-        // Not a file we can find: let libcanberra resolve the event sound name.
+        // Not a file we can find: let libcanberra resolve the event sound name. Its volume is in
+        // decibels, and none is low enough for silence: a muted alert is not played at all.
+        if (vol == 0) {
+            return;
+        }
         if (QStandardPaths::findExecutable(QStringLiteral("canberra-gtk-play")).isEmpty()
-            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName))) {
+            || !QProcess::startDetached(QStringLiteral("canberra-gtk-play"), canberraArguments(soundName, vol))) {
             qWarning() << "Sound" << soundName << "not found and canberra-gtk-play is unavailable";
         }
         return;
@@ -680,6 +846,16 @@ double AppSettings::alertFadeGain(qint64 positionMs, qint64 durationMs)
         }
     }
     return gain;
+}
+
+qint64 AppSettings::alertPlayerLifetimeMs(qint64 durationMs)
+{
+    return durationMs > 0 ? durationMs + kAlertPlayerGraceMs : kAlertPlayerUnknownDurationMs;
+}
+
+void AppSettings::setAlertPlayerLifetimeForTesting(int ms)
+{
+    alertPlayerLifetimeForTestingMs = ms;
 }
 
 QStringList AppSettings::soundSearchRoots()
@@ -737,9 +913,13 @@ bool AppSettings::isUsableSoundName(const QString &soundName)
     return name.match(soundName).hasMatch() && !soundName.contains(QStringLiteral(".."));
 }
 
-QStringList AppSettings::canberraArguments(const QString &soundName)
+QStringList AppSettings::canberraArguments(const QString &soundName, int volume)
 {
-    return {QStringLiteral("--id=") + soundName};
+    // canberra-gtk-play takes the volume as a gain in dB: 100 % is 0 dB, 50 % about -6 dB. It sets
+    // the user's locale and libcanberra reads the value with strtod, which in a locale with a
+    // decimal comma rejects "-6.0" and plays nothing: whole decibels read the same everywhere.
+    const double gainDb = 20.0 * std::log10(std::clamp(volume, 1, 100) / 100.0);
+    return {QStringLiteral("--id=") + soundName, QStringLiteral("--volume=") + QString::number(qRound(gainDb))};
 }
 
 void AppSettings::openShortcutsSettings()

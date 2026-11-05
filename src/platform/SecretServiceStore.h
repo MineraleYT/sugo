@@ -40,7 +40,9 @@ void registerSecretServiceTypes();
  * session bus. Items go into the default collection, tagged with the application id and `key`.
  *
  * The calls are synchronous. A locked collection is unlocked through the service's own prompt;
- * the call then waits (running the event loop) until the user answers it or it times out.
+ * the call then waits (running the event loop) until the user answers it or it times out. Once
+ * the unlock was refused (the prompt dismissed or not answered), reads that need it fail at once
+ * for a while instead of prompting again; a write always asks.
  */
 class SecretServiceStore final : public SecretStore
 {
@@ -51,11 +53,17 @@ public:
     bool write(const QString &key, const QString &secret) override;
 
     void setRetryIntervalForTesting(int ms) { m_retryIntervalMs = ms; }
+    void setPromptTimeoutForTesting(int ms) { m_promptTimeoutMs = ms; }
 
 private:
     bool ensureSession();
     bool renewSession();
-    std::optional<QList<QDBusObjectPath>> search(const QString &key);
+    /// The items of `key`, as the service reported them: readable now, or in a locked collection.
+    struct Matches {
+        QList<QDBusObjectPath> unlocked;
+        QList<QDBusObjectPath> locked;
+    };
+    std::optional<Matches> search(const QString &key);
     bool unlock(const QList<QDBusObjectPath> &objects);
     bool runPrompt(const QDBusObjectPath &prompt);
     bool deleteItems(const QList<QDBusObjectPath> &items);
@@ -64,6 +72,8 @@ private:
     QString m_applicationId;
     QDBusObjectPath m_session;
     QDeadlineTimer m_retryAfter; ///< Running while a failed OpenSession is not tried again.
+    QDeadlineTimer m_unlockRetryAfter; ///< Running while a refused unlock is not asked again by reads.
     int m_retryIntervalMs = 60 * 1000;
     int m_promptTimeoutMs = 120 * 1000;
+    bool m_prompting = false; ///< A prompt is open: its wait runs the event loop, which may call us again.
 };

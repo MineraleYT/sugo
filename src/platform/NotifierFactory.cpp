@@ -19,7 +19,11 @@ std::unique_ptr<Notifier> createNotifier(std::function<QSystemTrayIcon *()> tray
 #ifdef Q_OS_LINUX
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (bus.isConnected()) {
-        return std::make_unique<FreedesktopNotifier>(bus, QGuiApplication::applicationDisplayName(), QGuiApplication::desktopFileName(), parent);
+        auto notifier = std::make_unique<FreedesktopNotifier>(bus, QGuiApplication::applicationDisplayName(),
+                                                              QGuiApplication::desktopFileName(), parent);
+        // No notification server on the bus: a message from the tray icon, if there is one.
+        notifier->setFallback(std::make_unique<TrayNotifier>(std::move(trayIcon)));
+        return notifier;
     }
 #endif
 #ifdef Q_OS_MACOS

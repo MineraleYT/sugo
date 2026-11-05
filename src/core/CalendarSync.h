@@ -140,6 +140,8 @@ public:
     // --- Test hooks ---
     void setRetryDelaysForTesting(const QList<int> &delaysMs);
     void setLoginPollIntervalForTesting(int ms) { m_pollIntervalMs = ms; }
+    /// The delay before the next try of a failed send, in ms (0: none waiting).
+    int retryIntervalForTesting() const { return m_retryTimer.isActive() ? m_retryTimer.interval() : 0; }
     void setOpenUrlHandler(std::function<void(const QUrl &)> handler) { m_openUrl = std::move(handler); }
     bool isSendingPaused() const { return m_paused; }
     bool isPasswordInKeyring() const { return m_passwordInKeyring; }
@@ -162,12 +164,16 @@ Q_SIGNALS:
     void lastSuccessChanged();
     void pendingCountChanged();
     void calendarsChanged();
+    /// An address typed in (setServerUrl, setCalendarUrl) was refused and nothing was stored:
+    /// `message` says why, so the view can keep what was typed and explain it.
+    void inputRejected(const QString &message);
 
 private:
     struct Result {
         int http = 0;
         QByteArray body;
         QString networkError; ///< Empty when the server answered.
+        int retryAfter = 0;   ///< Retry-After of a failure, in seconds (RetryAfter::seconds).
     };
     struct Pending {
         SessionRecord record;
@@ -209,6 +215,7 @@ private:
     void refreshIdleStatus();
     void setStatus(Status status, const QString &text);
     void setLastError(const QString &error);
+    void rejectInput(const QString &error);
     QString scrub(const QString &text) const;
     QString describeFailure(const Result &result) const;
 
@@ -216,16 +223,29 @@ private:
     void request(const QByteArray &verb, const QUrl &url, const QByteArray &body, const QList<QPair<QByteArray, QByteArray>> &headers,
                  bool withAuth, std::function<void(const Result &)> done);
     QUrl eventUrl(const QString &uid) const;
+    /// Where discovery looks for calendars (for Nextcloud, if the server does not say).
     QUrl discoveryUrl() const;
 
     void trySend();
-    void scheduleRetry();
+    /// trySend() from the event loop, once however often it is asked for meanwhile.
+    void trySendLater();
+    /// Starts the backoff's next delay, or the server's Retry-After (in seconds) if longer.
+    void scheduleRetry(int retryAfterSeconds = 0);
     void onSendFinished(const Result &result, bool credentialsChangedMeanwhile);
     void rememberSent(const Pending &item);
     void clearQueue();
     void abortAll();
 
     void discover(std::function<void(bool)> done);
+    /// PROPFIND (depth 0) of one property whose value is an href, e.g. the user's principal.
+    /// `found` gets the address, or an empty one if the server does not give it (no such
+    /// property, 404, 405, 501); `failed` gets any other answer (a refused login, no connection).
+    void findHref(const QUrl &url, const QByteArray &property, const QString &name, std::function<void(const QUrl &)> found,
+                  std::function<void(const Result &)> failed);
+    /// The calendars in the collection `url`; `stale` says the account changed meanwhile.
+    void listCalendars(const QUrl &url, std::function<bool()> stale, std::function<void(bool)> done);
+    /// Reports a failed discovery request; a refused login pauses sending.
+    void discoveryFailed(const Result &r);
     void autoSelectCalendar();
 
     void pollLogin();
@@ -260,11 +280,14 @@ private:
     QList<Pending> m_queue;
     QList<Pending> m_sent; ///< The last events sent, oldest first, bounded.
     bool m_inFlight = false;
+    bool m_sendLater = false; ///< A trySendLater() call is waiting for the event loop.
     QString m_inFlightUid;
     /// Connection-test events the server did not let us remove yet.
     QList<LeftoverTest> m_leftoverTests;
     SessionRecord m_inFlightRecord; ///< What the request on its way carries.
     bool m_paused = false;
+    /// 403s in a row to the events sent and the test's, with nothing accepted between.
+    int m_forbiddenStreak = 0;
     bool m_sendFailing = false; ///< The last attempt failed for a reason that may pass.
     bool m_loginStarting = false;
     QTimer m_retryTimer;

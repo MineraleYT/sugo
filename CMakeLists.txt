@@ -7,7 +7,7 @@ if(APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version")
 endif()
 
-project(Sugo VERSION 1.0.1 LANGUAGES CXX)
+project(Sugo VERSION 1.0.2 LANGUAGES CXX)
 
 if(APPLE)
     # The few macOS-only sources are Objective-C++ (.mm, compiled with -fobjc-arc).
@@ -34,6 +34,10 @@ if(APPLE)
     # KDECompilerSettings sets the warnings for C++ only: the same ones for Objective-C++.
     add_compile_options("$<$<COMPILE_LANGUAGE:OBJCXX>:-Wall;-Wextra>")
 endif()
+
+# macOS: whether Sugo.app replaces itself with a new release (MacBundleInstaller). On only in the
+# disk image's build (packaging/macos/build.sh); a build from source only reports new versions.
+option(SUGO_INSTALLS_UPDATES "macOS: the app bundle installs updates itself (the disk image's build)" OFF)
 
 # The version the program shows and compares when it looks for updates. Nightly builds set it to
 # a pre-release of the coming version, "1.0.1-nightly.20261031.42": newer than 1.0.0, older than
@@ -63,6 +67,11 @@ if(NOT APPLE)
 else()
     set(SUGO_DBUS "")
 endif()
+
+# Sugo Sync's encryption, the same library on every system (docs/sync-plan.md). 1.0.18 is the
+# oldest the supported distributions ship.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(sodium REQUIRED IMPORTED_TARGET libsodium>=1.0.18)
 
 # QML modules live under qrc:/qt/qml/ (QTP0001). Qt >= 6.8: one qmldir per QML subdirectory (QTP0004).
 qt6_policy(SET QTP0001 NEW)

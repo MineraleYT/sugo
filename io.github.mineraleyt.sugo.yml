@@ -21,9 +21,22 @@ finish-args:
   - --talk-name=org.kde.StatusNotifierWatcher
   # The calendar password is kept in the desktop keyring (Secret Service).
   - --talk-name=org.freedesktop.secrets
-  # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal).
+  # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal) or the
+  # session is locked (its LockedHint, Lock and Unlock).
   - --system-talk-name=org.freedesktop.login1
 modules:
+  # Sugo Sync's encryption: neither the KDE runtime nor the freedesktop SDK under it has libsodium.
+  - name: libsodium
+    config-opts:
+      - --disable-static
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - '*.la'
+    sources:
+      - type: archive
+        url: https://download.libsodium.org/libsodium/releases/libsodium-1.0.22.tar.gz
+        sha256: adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349
   - name: sugo
     buildsystem: cmake-ninja
     config-opts:

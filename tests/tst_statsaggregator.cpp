@@ -14,6 +14,8 @@ private Q_SLOTS:
     void testRangeForMonth();
     void testRangeForYear();
     void testShifted();
+    void testSamePointInPreviousPeriod();
+    void testSamePointInPreviousPeriodAcrossClockChanges();
     void testSummarizeEmpty();
     void testSummarizeSessions();
     void testDayViewFollowsTheRealHoursOnClockChangeDays();
@@ -84,6 +86,68 @@ void TestStatsAggregator::testShifted()
     // 31 Jan + 1 month clamps to end of Feb
     QCOMPARE(Stats::shifted(StatsPeriod::Month, base, 1), QDate(2026, 2, 28));
     QCOMPARE(Stats::shifted(StatsPeriod::Year, base, 1), QDate(2027, 1, 31));
+}
+
+void TestStatsAggregator::testSamePointInPreviousPeriod()
+{
+    const QTimeZone tz = QTimeZone::utc();
+    const auto at = [tz](int y, int m, int d, int h) { return QDateTime(QDate(y, m, d), QTime(h, 0), tz); };
+    const auto samePoint = [tz](StatsPeriod kind, const QDateTime &now) {
+        return Stats::samePointInPreviousPeriod(kind, now.date(), Qt::Monday, tz, now);
+    };
+
+    QCOMPARE(samePoint(StatsPeriod::Day, at(2026, 10, 3, 9)), at(2026, 10, 2, 9).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Day, at(2026, 10, 3, 0)), at(2026, 10, 2, 0).toMSecsSinceEpoch());
+    // Saturday 12:00 matches last Saturday 12:00.
+    QCOMPARE(samePoint(StatsPeriod::Week, at(2026, 10, 3, 12)), at(2026, 9, 26, 12).toMSecsSinceEpoch());
+    // The month before is shorter: 29 to 31 March are clamped to 28 February, which is over by
+    // then, so the whole of February counts.
+    QCOMPARE(samePoint(StatsPeriod::Month, at(2026, 3, 28, 8)), at(2026, 2, 28, 8).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Month, at(2026, 3, 29, 8)), at(2026, 3, 1, 0).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Month, at(2026, 3, 31, 8)), at(2026, 3, 1, 0).toMSecsSinceEpoch());
+    // 2028 has a 29 February: 1 March 2028 matches 1 March 2027, not 2 March (as many days in).
+    QCOMPARE(samePoint(StatsPeriod::Year, at(2028, 3, 1, 12)), at(2027, 3, 1, 12).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Year, at(2028, 2, 28, 23)), at(2027, 2, 28, 23).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Year, at(2028, 2, 29, 10)), at(2027, 3, 1, 0).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Year, at(2029, 3, 1, 12)), at(2028, 3, 1, 12).toMSecsSinceEpoch());
+
+    // As time goes on the point never goes back, not even where a day is clamped.
+    QVERIFY(samePoint(StatsPeriod::Month, at(2026, 3, 31, 0)) >= samePoint(StatsPeriod::Month, at(2026, 3, 30, 23)));
+    QVERIFY(samePoint(StatsPeriod::Month, at(2026, 5, 31, 0)) >= samePoint(StatsPeriod::Month, at(2026, 5, 30, 23)));
+    QVERIFY(samePoint(StatsPeriod::Year, at(2028, 2, 29, 0)) >= samePoint(StatsPeriod::Year, at(2028, 2, 28, 23)));
+    for (const StatsPeriod kind : {StatsPeriod::Month, StatsPeriod::Year}) {
+        qint64 last = samePoint(kind, at(2028, 1, 1, 0));
+        for (QDateTime now = at(2028, 1, 1, 1); now < at(2029, 1, 1, 0); now = now.addSecs(3600)) {
+            if (kind == StatsPeriod::Month && now.date().day() == 1 && now.time().hour() == 0) {
+                last = samePoint(kind, now); // a new month: a new period before
+                continue;
+            }
+            const qint64 point = samePoint(kind, now);
+            QVERIFY2(point >= last, qPrintable(now.toString(Qt::ISODate)));
+            last = point;
+        }
+    }
+}
+
+void TestStatsAggregator::testSamePointInPreviousPeriodAcrossClockChanges()
+{
+    const QTimeZone berlin("Europe/Berlin");
+    if (!berlin.isValid()) {
+        QSKIP("No time zone data for Europe/Berlin");
+    }
+    const auto at = [berlin](int m, int d, int h) { return QDateTime(QDate(2026, m, d), QTime(h, 0), berlin); };
+    const auto samePoint = [berlin](StatsPeriod kind, const QDateTime &now) {
+        return Stats::samePointInPreviousPeriod(kind, now.date(), Qt::Monday, berlin, now);
+    };
+
+    // The clocks go forward on Sunday 29 March (a day of 23 hours) and back on Sunday 25 October
+    // (25 hours): the same clock time, not as many hours into the day or week.
+    QCOMPARE(samePoint(StatsPeriod::Day, at(3, 30, 10)), at(3, 29, 10).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Day, at(3, 29, 10)), at(3, 28, 10).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Day, at(10, 26, 10)), at(10, 25, 10).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Day, at(10, 25, 10)), at(10, 24, 10).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Week, at(3, 29, 10)), at(3, 22, 10).toMSecsSinceEpoch());
+    QCOMPARE(samePoint(StatsPeriod::Week, at(10, 25, 10)), at(10, 18, 10).toMSecsSinceEpoch());
 }
 
 void TestStatsAggregator::testSummarizeEmpty()

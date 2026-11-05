@@ -2,6 +2,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QSystemTrayIcon>
 #include <QTemporaryDir>
@@ -156,9 +157,21 @@ private Q_SLOTS:
         QVERIFY(engine->isPaused());
         QCOMPARE(start->text(), QStringLiteral("Resume"));
 
+        // Stop and Skip ask the window, which asks first when work would be cut short: the
+        // menu never ends the phase by itself.
+        QSignalSpy endPhase(tray.get(), SIGNAL(endPhaseRequested(bool)));
+        QVERIFY(endPhase.isValid());
         skip->trigger();
-        QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
         stop->trigger();
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QVERIFY(engine->isActive());
+        QCOMPARE(endPhase.count(), 2);
+        QCOMPARE(endPhase.at(0).at(0).toBool(), true);
+        QCOMPARE(endPhase.at(1).at(0).toBool(), false);
+
+        engine->skip();
+        QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
+        engine->stop();
         QVERIFY(!engine->isActive());
         QCOMPARE(start->text(), engine->phase() == TimerEngine::Phase::Work ? QStringLiteral("Start") : QStringLiteral("Start break"));
         QVERIFY(!stop->isVisible());
@@ -190,6 +203,29 @@ private Q_SLOTS:
         presets->update(other, {{QStringLiteral("name"), QStringLiteral("Deep reading")}});
         openMenu();
         QVERIFY(actionNamed(timers->menu(), QStringLiteral("Deep reading")));
+    }
+
+    void namesWithAnAmpersandKeepIt()
+    {
+        // "&" marks a mnemonic in menu texts: a timer named "R&D" must not show as "RD" or with an
+        // underlined D, nor "Tom & Jerry" lose its "&".
+        const QString rnd = presets->create({{QStringLiteral("name"), QStringLiteral("R&D")}});
+        presets->create({{QStringLiteral("name"), QStringLiteral("Tom & Jerry")}});
+        presets->setCurrentUuid(rnd);
+        openMenu();
+        QAction *timers = actionNamed(menu(), QStringLiteral("Timer"));
+        QVERIFY(timers && timers->menu());
+        QAction *entry = actionNamed(timers->menu(), QStringLiteral("R&&D"));
+        QVERIFY(entry);
+        QCOMPARE(entry->iconText(), QStringLiteral("R&D")); // what the menu shows
+        QVERIFY(entry->isChecked());
+        QAction *tom = actionNamed(timers->menu(), QStringLiteral("Tom && Jerry"));
+        QVERIFY(tom);
+        QCOMPARE(tom->iconText(), QStringLiteral("Tom & Jerry"));
+
+        QAction *status = menu()->actions().first();
+        QVERIFY2(status->text().endsWith(QStringLiteral(" R&&D")), qPrintable(status->text()));
+        QVERIFY2(status->iconText().endsWith(QStringLiteral(" R&D")), qPrintable(status->iconText()));
     }
 
     void menuOpensPagesAndTheWindow()
@@ -239,6 +275,42 @@ private Q_SLOTS:
         QCOMPARE(show.count(), 2);
 #endif
         tray->setWindow(nullptr);
+    }
+
+    void quitAsksTheWindow()
+    {
+        // Quit leaves the decision to the window (main.cpp), which asks first while a phase runs:
+        // the tray itself neither quits nor ends the phase.
+        QSignalSpy quit(tray.get(), &TrayController::quitRequested);
+        engine->start();
+        openMenu();
+        QAction *action = actionNamed(menu(), QStringLiteral("Quit"));
+        QVERIFY(action);
+        action->trigger();
+        QCOMPARE(quit.count(), 1);
+        QVERIFY(engine->isActive());
+        QVERIFY(tray->isVisible());
+    }
+
+    void iconGoesBeforeItsMenu()
+    {
+        // Removed by the setting, and with the controller: the icon never outlives its menu.
+        for (const bool byController : {false, true}) {
+            QPointer<QMenu> owned = menu();
+            QVERIFY(owned);
+            bool menuThereWhenIconWent = false;
+            connect(tray->icon(), &QObject::destroyed, this, [&menuThereWhenIconWent, &owned]() {
+                menuThereWhenIconWent = !owned.isNull();
+            });
+            if (byController) {
+                tray.reset();
+            } else {
+                settings->setShowTrayIcon(false);
+                settings->setShowTrayIcon(true);
+            }
+            QVERIFY(menuThereWhenIconWent);
+            QVERIFY(owned.isNull());
+        }
     }
 };
 

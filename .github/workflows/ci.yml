@@ -134,7 +134,9 @@ jobs:
             ccache-image-main-
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON \
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Validate the generated runner definition
         run: desktop-file-validate build/io.github.mineraleyt.sugo.runner.desktop
@@ -195,9 +197,9 @@ jobs:
           # Keep only what this build used: the cache stays the size of one build.
           ccache --evict-older-than 7200s
 
-  # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
-  # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
-  # (nor stop the nightly build) while the port settles.
+  # Native arm64 build and tests with Qt from qt.io, extra-cmake-modules and libsodium from source,
+  # at the versions packaging/macos/build.sh and build-libsodium.sh pin. Not blocking yet: a
+  # failure here does not fail CI (nor stop the nightly build) while the port settles.
   # On GitHub's xcode-27 image (macOS 27, in preview), the system the port is tried on.
   build-and-test-macos:
     name: Build and test on macOS
@@ -220,12 +222,15 @@ jobs:
             test -n "$value"
             echo "$pin=$value" >> "$GITHUB_OUTPUT"
           done
+          value=$(sed -n "s/^LIBSODIUM_VERSION=//p" packaging/macos/build-libsodium.sh)
+          test -n "$value"
+          echo "LIBSODIUM_VERSION=$value" >> "$GITHUB_OUTPUT"
 
-      - name: Restore Qt and extra-cmake-modules
+      - name: Restore Qt, extra-cmake-modules and libsodium
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/sugo-deps
-          key: macos-deps-${{ runner.arch }}-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}
+          key: macos-deps-${{ runner.arch }}-qt${{ steps.pins.outputs.QT_VERSION }}-aqt${{ steps.pins.outputs.AQT_VERSION }}-ecm${{ steps.pins.outputs.ECM_TAG }}-sodium${{ steps.pins.outputs.LIBSODIUM_VERSION }}
 
       # ccache from its own release, not Homebrew (which installs it and four libraries at every run).
       - name: Restore ccache
@@ -241,6 +246,7 @@ jobs:
           ECM_TAG: ${{ steps.pins.outputs.ECM_TAG }}
         run: |
           command -v ninja >/dev/null || brew install ninja
+          command -v pkg-config >/dev/null || brew install pkgconf
           ccache_dir=~/sugo-tools/ccache-$CCACHE_VERSION-darwin
           if [ ! -x "$ccache_dir/ccache" ]; then
             curl -fsSL -o "$RUNNER_TEMP/ccache.tar.gz" \
@@ -272,6 +278,10 @@ jobs:
             if [ -d "$qt" ]; then echo "SUGO_QT=$qt" >> "$GITHUB_ENV"; break; fi
           done
           echo "SUGO_ECM=$deps/ecm" >> "$GITHUB_ENV"
+          # libsodium as the release build has it (universal, static), found through pkg-config.
+          bash packaging/macos/build-libsodium.sh "$deps/sodium"
+          echo "PKG_CONFIG_PATH=$deps/sodium/lib/pkgconfig" >> "$GITHUB_ENV"
+          test "$(PKG_CONFIG_PATH="$deps/sodium/lib/pkgconfig" pkg-config --variable=libdir libsodium)" = "$deps/sodium/lib"
 
       - name: Restore the compiler cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

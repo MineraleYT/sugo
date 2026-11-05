@@ -14,23 +14,47 @@ on:
     branches: [testing]
   workflow_dispatch:
 
-# A newer change makes the build of an older one pointless.
-concurrency:
-  group: nightly
-  cancel-in-progress: true
-
+# A newer change makes the build of an older one pointless: the build jobs of an older run are
+# cancelled (their publish job is then skipped). The publish job itself is never cancelled once
+# it runs: "gh release upload --clobber" deletes the old nightly.json before uploading the new
+# one, and a cancel in between would leave the nightly channel without a feed.
 permissions:
   contents: read
 
 jobs:
   version:
     name: Version of this build
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Only the branch testing becomes a nightly, also when the run is started by hand.
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
+    # actions: read to look up this run (the date of the version) and, for a manual run, CI.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
+      # The trigger workflow_run only goes on when CI passed on a push to testing; a run started
+      # by hand must find the same: the newest CI run of this commit on testing ended in success.
+      - name: Check that CI passed on this commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=testing&per_page=1" \
+            --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion // "none") \(.html_url)"')
+          if [ -z "$run" ]; then
+            echo "::error::CI has not run on $GITHUB_SHA on the branch testing; a nightly is published only after CI passes."
+            exit 1
+          fi
+          read -r status conclusion url <<< "$run"
+          if [ "$status" != completed ] || [ "$conclusion" != success ]; then
+            echo "::error::CI on $GITHUB_SHA is $status ($conclusion), not passed: $url. A nightly is published only after CI passes."
+            exit 1
+          fi
+          echo "CI passed on $GITHUB_SHA: $url"
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,22 +63,34 @@ jobs:
       # A pre-release of the version in CMakeLists.txt, the one being prepared; once that version
       # is released (and not bumped yet), of the next patch. So a nightly is always newer than
       # the last release and older than the next one, and nightlies order by date and run number.
+      # The date is the day this run was created (UTC), not the commit's: a later run always has
+      # a later or equal date and a higher run number, so the versions grow in the order the runs
+      # are started, also when testing moves to an older commit; a re-run keeps its version.
       - name: Compute the version
         id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           base=$(sed -n 's/^project(Sugo VERSION \([0-9][0-9.]*\).*/\1/p' CMakeLists.txt)
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" >/dev/null 2>&1; then
+          # Only a 404 means "not released": any other failure (rate limit, server error) would
+          # give a version below the release, which no nightly user would update to.
+          if error=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$base" 2>&1 >/dev/null); then
             IFS=. read -r major minor patch <<< "$base"
             base="$major.$minor.$((patch + 1))"
+          elif ! grep -q '(HTTP 404)' <<< "$error"; then
+            echo "::error::Cannot tell whether v$base is released: $error"
+            exit 1
           fi
-          date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d)
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          date=$(date -u -d "$created" +%Y%m%d)
           echo "version=$base-nightly.$date.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   appimage:
     needs: version
+    concurrency:
+      group: nightly-appimage
+      cancel-in-progress: true
     uses: ./.github/workflows/appimage.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -63,6 +99,9 @@ jobs:
   # Not blocking yet: the nightly build is published without it when it fails.
   macos:
     needs: version
+    concurrency:
+      group: nightly-macos
+      cancel-in-progress: true
     uses: ./.github/workflows/macos.yml
     with:
       version: ${{ needs.version.outputs.version }}
@@ -71,8 +110,13 @@ jobs:
   publish:
     name: Publish the nightly build
     needs: [version, appimage, macos]
-    # Waits for the macOS build but does not need it.
-    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' }}
+    # Waits for the macOS build but does not need it; a build cancelled by a newer run skips it.
+    if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' && needs.macos.result != 'cancelled' }}
+    # One publish at a time, in the order the runs reach it, each running to its end. That order
+    # need not be the order of the versions: the feed and the tag nightly never move back.
+    concurrency:
+      group: nightly-publish
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -95,6 +139,17 @@ jobs:
         with:
           name: sugo-macos
 
+      # Every file carries the version, as in the releases (release.yml); the feed carries the
+      # full address, so the installed programs follow any name.
+      - name: Name the files after the version
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mv Sugo-x86_64.AppImage "Sugo-$VERSION-x86_64.AppImage"
+          if [ -f Sugo-macOS-universal.dmg ]; then
+            mv Sugo-macOS-universal.dmg "Sugo-$VERSION-macOS-universal.dmg"
+          fi
+
       # Commits whose subject reads as a fix go under Fixes, the others under Highlights.
       - name: Write the release notes
         env:
@@ -109,18 +164,20 @@ jobs:
           # grep -c fails when it counts nothing: a nightly built again from the same commit.
           people=$(git log --no-merges --format=%aN "$range" | sort -u | grep -c . || true)
           fix='^(fix|repair)|no longer|crash'
-          highlights=$(git log --no-merges --format=%s "$range" | grep -viE "$fix" | sed 's/^/- /')
-          fixes=$(git log --no-merges --format=%s "$range" | grep -iE "$fix" | sed 's/^/- /')
+          # grep fails when nothing matches too: a build with only fixes, or with none.
+          highlights=$(git log --no-merges --format=%s "$range" | grep -viE "$fix" | sed 's/^/- /' || true)
+          fixes=$(git log --no-merges --format=%s "$range" | grep -iE "$fix" | sed 's/^/- /' || true)
           {
             echo "**v$VERSION** · $(plural "$changes" change) from $(plural "$people" contributor)"
             echo
             echo "The branch testing at $SHA, built automatically. It may have bugs; the stable releases are tested."
             echo
-            echo "Download Sugo-x86_64.AppImage, make it executable and start it. In Settings → Updates, the Nightly channel keeps it up to date by itself."
-            if [ -f Sugo-macOS-universal.dmg ]; then
+            echo "Download Sugo-$VERSION-x86_64.AppImage, make it executable and start it. In Settings → Updates, the Nightly channel keeps it up to date by itself."
+            dmg=Sugo-$VERSION-macOS-universal.dmg
+            if [ -f "$dmg" ]; then
               echo
-              cat <<'EOF'
-          On macOS 13 or later (Apple Silicon or Intel), open Sugo-macOS-universal.dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run `xattr -dr com.apple.quarantine /Applications/Sugo.app` in Terminal. Sugo for macOS installs its updates by itself too (the Nightly channel in Settings → Updates) when it is in a folder it can write to (Applications for an administrator).
+              cat <<EOF
+          On macOS 13 or later (Apple Silicon or Intel), open $dmg and drag Sugo to Applications. Sugo is not notarized by Apple, so macOS blocks the first launch: on macOS 15, open System Settings → Privacy & Security and click "Open Anyway" next to the message about Sugo (on macOS 13 and 14, Control-click Sugo in Applications and choose Open), or run \`xattr -dr com.apple.quarantine /Applications/Sugo.app\` in Terminal. Sugo for macOS installs its updates by itself too (the Nightly channel in Settings → Updates) when it is in a folder it can write to (Applications for an administrator).
           EOF
             fi
             if [ -n "$highlights" ]; then printf '\n## Highlights\n%s\n' "$highlights"; fi
@@ -141,8 +198,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           SHA: ${{ needs.version.outputs.sha }}
         run: |
-          file=Sugo-x86_64.AppImage
-          dmg=Sugo-macOS-universal.dmg
+          file=Sugo-$VERSION-x86_64.AppImage
+          dmg=Sugo-$VERSION-macOS-universal.dmg
           tag="v$VERSION"
           files=("$file")
           jq -n --arg version "$VERSION" \
@@ -171,6 +228,56 @@ jobs:
             gh release create "$tag" --repo "$REPO" --prerelease --latest=false --verify-tag --title "$title" --notes-file notes.md
           fi
           gh release upload "$tag" "${files[@]}" nightly.json --repo "$REPO" --clobber
+
+          # The feed and the tag nightly only move forward. Publishes run one at a time, but not
+          # always in the order of their versions: a re-run keeps its version, and the group keeps
+          # one pending run, not a queue. A feed already announcing a newer nightly stays as it is;
+          # this build keeps its own pre-release above.
+          # compare A B prints 1, 0 or -1 as UpdateChecker::compareVersions orders them: the
+          # numbers, then a release above its pre-releases, then each pre-release identifier
+          # (numerically when both are numbers), then more identifiers above fewer.
+          compare() {
+            local a=${1%%+*} b=${2%%+*} ap= bp= i n p q
+            [[ $a == *-* ]] && ap=${a#*-}
+            [[ $b == *-* ]] && bp=${b#*-}
+            local -a x y
+            IFS=. read -ra x <<< "${a%%-*}"
+            IFS=. read -ra y <<< "${b%%-*}"
+            n=$(( ${#x[@]} > ${#y[@]} ? ${#x[@]} : ${#y[@]} ))
+            for ((i = 0; i < n; i++)); do
+              p=$((10#${x[i]:-0})) q=$((10#${y[i]:-0}))
+              if ((p != q)); then ((p > q)) && echo 1 || echo -1; return; fi
+            done
+            if [ -z "$ap" ] || [ -z "$bp" ]; then
+              if [ "$ap" = "$bp" ]; then echo 0; elif [ -z "$ap" ]; then echo 1; else echo -1; fi
+              return
+            fi
+            IFS=. read -ra x <<< "$ap"
+            IFS=. read -ra y <<< "$bp"
+            n=$(( ${#x[@]} < ${#y[@]} ? ${#x[@]} : ${#y[@]} ))
+            for ((i = 0; i < n; i++)); do
+              p=${x[i]} q=${y[i]}
+              if [[ $p =~ ^[0-9]+$ && $q =~ ^[0-9]+$ ]]; then
+                p=$((10#$p)) q=$((10#$q))
+                if ((p != q)); then ((p > q)) && echo 1 || echo -1; return; fi
+              elif [ "$p" != "$q" ]; then
+                [[ $p > $q ]] && echo 1 || echo -1; return
+              fi
+            done
+            if ((${#x[@]} != ${#y[@]})); then ((${#x[@]} > ${#y[@]})) && echo 1 || echo -1; else echo 0; fi
+          }
+          feed_dir=$RUNNER_TEMP/current-feed
+          current=
+          if gh release download nightly --repo "$REPO" --pattern nightly.json --dir "$feed_dir" 2> "$RUNNER_TEMP/feed-error"; then
+            current=$(jq -r '.version // empty' "$feed_dir/nightly.json" 2>/dev/null || true)
+          elif ! grep -qiE 'release not found|no assets match' "$RUNNER_TEMP/feed-error"; then
+            echo "::error::Cannot read the current nightly feed: $(cat "$RUNNER_TEMP/feed-error")"
+            exit 1
+          fi
+          if [[ $current =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.-]+)?$ ]] && [ "$(compare "$current" "$VERSION")" = 1 ]; then
+            echo "::notice::The feed already announces $current, newer than $VERSION: the feed and the tag nightly stay as they are."
+            exit 0
+          fi
 
           # The feed last: it must never announce a file that is not there yet. The tag nightly
           # follows the branch testing.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QApplication>
+#include <QClipboard>
 #include <QCommandLineParser>
+#include <QDesktopServices>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -37,8 +39,12 @@
 #include "SilenceController.h"
 #ifdef Q_OS_MACOS
 #include "DockController.h"
+#include "UpdateInstaller.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
+#include "MacKeychainStore.h"
+#include "SecretHandoff.h"
+#include "QuitPolicy.h"
 #include "ShortcutsFocusInhibitor.h"
 #include "ShortcutsFocusInstaller.h"
 #else
@@ -58,6 +64,8 @@
 #include "ScreenLockWatcher.h"
 #include "Diagnostics.h"
 #include "CalendarSync.h"
+#include "DesktopStyle.h"
+#include "SyncController.h"
 #include "ThemeIcons.h"
 #include "UpdateChecker.h"
 
@@ -76,13 +84,21 @@ namespace
  *   on a notification) also shows a hidden window. After a `--background` launch the
  *   activation macOS may give a newly launched application is ignored: the filter is armed a
  *   moment after the event loop starts.
- * - Cmd+Q, Quit in the Dock menu, logging out or shutting down: Cocoa asks
- *   applicationShouldTerminate:, Qt sends QEvent::Quit to the application, which closes every
- *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
- *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
- *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
- *   so this also covers the menu bar icon's Quit. The running phase is then saved as
- *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
+ * - Quitting: every way ends in Cocoa's applicationShouldTerminate:, which Qt turns into
+ *   QEvent::Quit to the application; Qt then closes every window and quits only if they all
+ *   accept, and an ignored event makes Cocoa cancel the termination (and a logout with it).
+ *   Cmd+Q, Sugo › Quit Sugo and the menu bar icon's Quit never come here first: they call the
+ *   window's requestQuit(), which asks while a phase runs or is paused and then quits with
+ *   QCoreApplication::quit(); on macOS that (like a SIGTERM) takes this same way, as Sugo's own
+ *   quit. What else arrives is a `quit` Apple event from another program: Quit in the Dock
+ *   menu, Activity Monitor, AppleScript. While a phase is active that one is refused and
+ *   turned into the window's requestQuit() (QuitPolicy), so the Dock's Quit asks like Cmd+Q;
+ *   the window comes to the front for it. Logging out, restarting or shutting down (a `quit`
+ *   event with a reason) go through: refusing them would cancel the logout, and the user chose
+ *   to end the session.
+ *   A quit that goes through sets the window's `platformQuitting` property before Qt closes it
+ *   (the window otherwise refuses closing: it hides, or asks), and the running phase is saved
+ *   as interrupted by the aboutToQuit -> TimerEngine::stop connection.
  * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
  *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
  *   also activates the application; that must not pop the hidden window up for a command like
@@ -92,10 +108,11 @@ namespace
 class MacApplicationEvents : public QObject
 {
 public:
-    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, std::function<void(const QUrl &)> openUrl,
-                         bool armed, QObject *parent)
+    MacApplicationEvents(QQuickWindow *window, TimerEngine *timer, std::function<void()> showWindow,
+                         std::function<void(const QUrl &)> openUrl, bool armed, QObject *parent)
         : QObject(parent)
         , m_window(window)
+        , m_timer(timer)
         , m_showWindow(std::move(showWindow))
         , m_openUrl(std::move(openUrl))
         , m_armed(armed)
@@ -120,6 +137,18 @@ public:
                     m_pendingShow.start();
                 }
             } else if (event->type() == QEvent::Quit) {
+                const bool phaseActive = m_timer && m_timer->isActive();
+                if (QuitPolicy::needsConfirmation(macCurrentQuitOrigin(), phaseActive)) {
+                    // Not inside applicationShouldTerminate:, which waits for the answer.
+                    QTimer::singleShot(0, this, [this]() {
+                        if (m_window) {
+                            m_showWindow();
+                            QMetaObject::invokeMethod(m_window, "requestQuit");
+                        }
+                    });
+                    event->ignore();
+                    return true;
+                }
                 m_window->setProperty("platformQuitting", true);
             } else if (event->type() == QEvent::FileOpen) {
                 const QUrl url = static_cast<QFileOpenEvent *>(event)->url();
@@ -139,6 +168,7 @@ private:
     static constexpr int kUrlActivationMs = 1000;  ///< How long an activation may follow its link.
 
     QPointer<QQuickWindow> m_window;
+    QPointer<TimerEngine> m_timer;
     std::function<void()> m_showWindow;
     std::function<void(const QUrl &)> m_openUrl;
     bool m_armed;
@@ -171,7 +201,7 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setApplicationDisplayName(i18n("Sugo"));
     QCoreApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
-    // What the About page and the sidebar show.
+    // What the About page shows.
     const QVariantMap about{
         {QStringLiteral("displayName"), i18n("Sugo")},
         {QStringLiteral("version"), QStringLiteral(PROJECT_VERSION)},
@@ -194,6 +224,11 @@ int main(int argc, char *argv[])
     parser.process(app);
     const bool background = parser.isSet(backgroundOption);
 
+#ifdef Q_OS_MACOS
+    // An update cut off halfway left this copy at "Sugo.app.old": it is put back once Sugo quits.
+    MacBundleInstaller::restoreInterruptedUpdate(QCoreApplication::applicationDirPath(), QCoreApplication::applicationPid());
+#endif
+
     // Closing the window must not end the program: the tray (or the close handler in QML) decides.
     app.setQuitOnLastWindowClosed(false);
 
@@ -207,10 +242,31 @@ int main(int argc, char *argv[])
 #else
     SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
     using AppSingleInstance = SingleInstance;
+
+    // The D-Bus objects of global shortcuts, scripts and KRunner are registered before the name is
+    // taken: a call that starts Sugo by D-Bus activation is delivered as soon as the name is ours,
+    // and must find its object (else: UnknownObject). It waits in the event queue until
+    // app.exec(); by then the objects are attached to the timer (below). Declared here, they
+    // outlive the engine: they are unregistered and detached right after app.exec(). (A second
+    // launch registers them too, on its own connection, which nobody calls, then exits.)
+    TimerDBusObject timerDBusObject;
+    auto *dbusTimer = new DBusTimerService(nullptr, nullptr, &timerDBusObject);
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), &timerDBusObject, QDBusConnection::ExportAdaptors);
+    KRunnerService krunnerService(nullptr, nullptr);
+    auto *krunner = &krunnerService;
+    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
 #endif
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
     }
+#ifdef Q_OS_MACOS
+    // The Keychain secrets the previous version left when it installed this one (it quit just
+    // before): this version's items from now on, before anything reads them.
+    {
+        MacKeychainStore keychain(secretStoreService());
+        SecretHandoff::takeBack(keychain, SecretHandoff::defaultPath());
+    }
+#endif
 
     // Lifetimes: objects are destroyed in reverse order of declaration. The database, the
     // repositories and the notification inhibitor are declared before the QML engine (whose
@@ -220,7 +276,16 @@ int main(int argc, char *argv[])
     // Storage. If the file cannot be used, run with a throw-away in-memory database so the
     // timer still works; nothing is saved in that case (the UI shows a warning).
     auto database = std::make_unique<Database>(Database::defaultPath());
-    if (!database->open()) {
+    // An empty database next to the one Sugo 1.0.1 to 1.0.x moved aside: take that one back.
+    const bool databaseOpened = database->open() && database->recoverSugo100Database();
+    if (!database->recoveredFromPath().isEmpty()) {
+        qInfo() << "Took back the timers and history of Sugo 1.0.0 from" << database->recoveredFromPath()
+                << "; the empty database that replaced it is kept as" << database->replacedPath();
+    }
+    // Kept apart: a file can be moved aside and the new one still fail to open.
+    const QString movedAsidePath = database->movedAsidePath();
+    const bool movedAsideWasCorrupt = database->movedAsideWasCorrupt();
+    if (!databaseOpened) {
         qWarning() << "Cannot open the database" << Database::defaultPath() << ":" << database->lastError();
         qWarning() << "Using a temporary in-memory database: timers and statistics will NOT be saved";
         database = std::make_unique<Database>(QStringLiteral(":memory:"));
@@ -229,19 +294,22 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
     }
-    if (!database->movedAsidePath().isEmpty()) {
-        if (database->movedAsideWasCorrupt()) {
-            qWarning() << "The existing database was damaged; it was kept as" << database->movedAsidePath()
+    if (!movedAsidePath.isEmpty()) {
+        if (movedAsideWasCorrupt) {
+            qWarning() << "The existing database was damaged; it was kept as" << movedAsidePath
                        << "and a new one was started";
         } else {
             qWarning() << "The existing database was not created by Sugo; it was kept as"
-                       << database->movedAsidePath() << "and a new one was started";
+                       << movedAsidePath << "and a new one was started";
         }
     }
     PresetRepository presetRepository(database->connectionName());
     SessionRepository sessionRepository(database->connectionName());
     const auto inhibitor = createNotificationInhibitor();
 
+    // QML warnings of a smoke run, counted by a handler of the engine: declared before it, so
+    // the handler's reference stays valid while the engine and its window are destroyed.
+    int smokeWarnings = 0;
     QQmlApplicationEngine engine;
     QObject services; // parent of the C++ helpers below; destroyed before the engine
     // i18n() and friends for the QML files.
@@ -259,10 +327,10 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("appStatsSmokeTest"), statsSmokeTest);
     engine.rootContext()->setContextProperty(QStringLiteral("appSmokePage"), smokePage);
     // For development and screenshots: open on another page ("presets" for the timer in use, "stats",
-    // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
+    // "settings", "about" (the settings' About), "welcome"), or on a part of one ("settings/focus",
+    // "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
-    int smokeWarnings = 0;
     if (smokeTest) {
         // Any QML warning (a failed binding, an undefined property...) fails the smoke test.
         QObject::connect(&engine, &QQmlApplicationEngine::warnings, &app, [&smokeWarnings](const QList<QQmlError> &warnings) {
@@ -315,13 +383,10 @@ int main(int argc, char *argv[])
     // Global shortcuts, scripts and KRunner: only while the settings allow other programs to control the timer.
     const auto externalControlAllowed = [settings]() { return settings->allowExternalControl(); };
 #ifndef Q_OS_MACOS
-    auto *timerDBusObject = new TimerDBusObject(timer);
-    auto *dbusTimer = new DBusTimerService(timer, presets, timerDBusObject);
     dbusTimer->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/Timer"), timerDBusObject, QDBusConnection::ExportAdaptors);
-    auto *krunner = new KRunnerService(timer, presets, &services);
+    dbusTimer->attach(timer, presets);
     krunner->setControlAllowed(externalControlAllowed);
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/krunner"), krunner, QDBusConnection::ExportAllSlots);
+    krunner->attach(timer, presets);
 #endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
@@ -332,8 +397,10 @@ int main(int argc, char *argv[])
     }
     stats->attach(&sessionRepository, recorder);
     auto *dataManager = new DataManager(database.get(), &sessionRepository, &presetRepository, presets, stats, &services);
+    dataManager->setMovedAsideDatabase(movedAsidePath, movedAsideWasCorrupt);
     dataManager->setSessionRecorder(recorder);
     dataManager->setPresetPersistence(presetPersistence);
+    dataManager->setTimerActiveProvider([timer]() { return timer->isActive(); });
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
     // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
@@ -370,6 +437,31 @@ int main(int argc, char *argv[])
             QObject::connect(calendarSync, signal, calendarSync, updateRedactions);
         }
     }
+    // Sugo Sync of the timers. Not in a smoke run: there it stays Off and never reads the keyring.
+    auto *presetSync = engine.singletonInstance<SyncController *>("io.github.mineraleyt.sugo", "SyncController");
+    if (presetSync && !smokeTest) {
+        presetSync->setDesktopActions([](const QUrl &url) { return QDesktopServices::openUrl(url); },
+                                      [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
+        presetSync->attach(presets, presetPersistence, &presetRepository);
+        // A timer deleted elsewhere is not taken away from a running phase.
+        presetSync->setTimerBusy([timer]() { return !timer->isIdle(); });
+        QObject::connect(timer, &TimerEngine::stateChanged, presetSync, [timer, presetSync]() {
+            if (timer->isIdle()) {
+                presetSync->timerIdle();
+            }
+        });
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, presetSync, [presetSync](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) {
+                presetSync->windowActivated();
+            } else {
+                presetSync->windowDeactivated();
+            }
+        });
+    }
+    // The diagnostics report says how Sugo Sync is doing (never who, or with what keys).
+    if (diagnostics && presetSync) {
+        diagnostics->attachSync(presetSync);
+    }
     auto *focusSound = new FocusSoundController(&services);
     focusSound->attach(timer, settings);
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), focusSound);
@@ -399,7 +491,8 @@ int main(int argc, char *argv[])
     });
 
     // Quitting mid-phase ends it as an interrupted session instead of losing it.
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, timer, &TimerEngine::stop);
+    // Then the sessions the database refused get one last try (with the timer idle, nothing else would retry them).
+    SessionRecorder::connectQuit(&app, timer, recorder);
     // ... and always hands the notifications back before the process ends.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, silence, &SilenceController::shutdown);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, powerInhibitor, &PowerInhibitor::shutdown);
@@ -423,7 +516,7 @@ int main(int argc, char *argv[])
     if (window) {
         tray->setWindow(window);
 #ifdef Q_OS_MACOS
-        macHideWindowTitle(window);
+        macSetUpTitleBar(window);
         dock->setWindow(window);
         auto activateWindow = [window, dock](const QString &activationToken = QString()) {
 #else
@@ -444,10 +537,8 @@ int main(int argc, char *argv[])
             // requestActivate() alone would leave the window behind the active application.
             macActivateApp();
 #endif
-            window->show();
-            if (window->windowStates() & Qt::WindowMinimized) {
-                window->showNormal();
-            }
+            // Back from the taskbar or the Dock as it was: a maximised window stays maximised.
+            DesktopStyle::showRestored(window);
             window->raise();
             window->requestActivate();
         };
@@ -478,7 +569,8 @@ int main(int argc, char *argv[])
             }
         };
         // The Dock icon, links, and quitting from the system (see MacApplicationEvents).
-        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, openUrl, !background, &services);
+        auto *macEvents = new MacApplicationEvents(window, timer, [activateWindow]() { activateWindow(); }, openUrl, !background,
+                                                   &services);
         app.installEventFilter(macEvents);
         if (background) {
             QTimer::singleShot(1000, macEvents, [macEvents]() { macEvents->arm(); });
@@ -496,8 +588,49 @@ int main(int argc, char *argv[])
             QMetaObject::invokeMethod(window, "openPage", Q_ARG(QString, page));
         });
 
+        // The tray menu's Quit: the window's own, which asks first while a phase runs; the window
+        // comes to the front then, so the question is seen.
+        QObject::connect(tray, &TrayController::quitRequested, window, [window, timer, activateWindow]() {
+            if (timer->isActive()) {
+                activateWindow();
+            }
+            QMetaObject::invokeMethod(window, "requestQuit");
+        });
+
+        // Stop and Skip in the tray and Dock menus: the window's own, which ends the phase at once
+        // unless work under way would be cut short; then it asks, and comes to the front (also
+        // from the tray, the window closed) so the question is seen.
+        const auto requestEndPhase = [window, activateWindow](bool skipping) {
+            bool asking = false;
+            if (!QMetaObject::invokeMethod(window, "requestEndPhase", Q_RETURN_ARG(bool, asking), Q_ARG(bool, skipping))) {
+                qWarning() << "Cannot ask the window to end the phase";
+                return;
+            }
+            if (asking) {
+                activateWindow();
+            }
+        };
+        QObject::connect(tray, &TrayController::endPhaseRequested, window, requestEndPhase);
+#ifdef Q_OS_MACOS
+        QObject::connect(dock, &DockController::endPhaseRequested, window, requestEndPhase);
+#endif
+
         // A click on a notification with nothing more specific to do.
         QObject::connect(notifier, &PhaseNotifier::showWindowRequested, window, activateWindow);
+
+        // Sugo Sync: a device asking for approval while the window is hidden is notified; a click
+        // shows the window on the Sync settings, where the approval dialog waits.
+        if (presetSync && !smokeTest) {
+            const QPointer<QQuickWindow> shown(window);
+            presetSync->attachNotifier(notifications, [shown]() {
+                return shown && shown->isVisible() && !(shown->windowStates() & Qt::WindowMinimized);
+            });
+            QObject::connect(presetSync, &SyncController::showSyncPageRequested, window,
+                             [window, activateWindow](const QString &activationToken) {
+                                 activateWindow(activationToken);
+                                 QMetaObject::invokeMethod(window, "openSettings", Q_ARG(QString, QStringLiteral("sync")));
+                             });
+        }
 
         // When a task note prompt is requested (e.g. from end-of-work notification action)
         QObject::connect(notifier, &PhaseNotifier::taskNotePromptRequested, window,
@@ -506,23 +639,50 @@ int main(int argc, char *argv[])
                              QMetaObject::invokeMethod(window, "openTaskNotePrompt", Q_ARG(QVariant, presetName),
                                                        Q_ARG(QVariant, sessionId));
                          });
+    } else {
+        // No window to ask from.
+        QObject::connect(tray, &TrayController::quitRequested, &app, &QCoreApplication::quit);
+        QObject::connect(tray, &TrayController::endPhaseRequested, timer, [timer](bool skipping) {
+            skipping ? timer->skip() : timer->stop();
+        });
+#ifdef Q_OS_MACOS
+        QObject::connect(dock, &DockController::endPhaseRequested, timer, [timer](bool skipping) {
+            skipping ? timer->skip() : timer->stop();
+        });
+#endif
     }
 
     const int status = app.exec();
 
-    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects (the timer
-    // is an engine singleton, the runner a child of `services`), then the context properties
+    // Teardown. Nothing outside may reach what is about to go: first the D-Bus objects, which
+    // outlive the timer (an engine singleton) and so let go of it too, in case a call already
+    // queued for them is still delivered; then the context properties
     // that point into `services`, which is destroyed before the engine and its window.
 #ifndef Q_OS_MACOS
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/krunner"));
     QDBusConnection::sessionBus().unregisterObject(QStringLiteral("/Timer"));
+    krunner->attach(nullptr, nullptr);
+    dbusTimer->attach(nullptr, nullptr);
 #endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
+    if (presetSync) {
+        presetSync->attach(nullptr, nullptr, nullptr); // its persistence goes with `services`
+        presetSync->attachNotifier(nullptr, {});        // and so do the notifications
+    }
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
     if (smokeTest && status == EXIT_SUCCESS && smokeWarnings > 0) {
         qCritical() << "The smoke test produced" << smokeWarnings << "QML warning(s)";
         return 30;
     }
+#ifdef Q_OS_MACOS
+    // The next start is another build, which could not read this one's Keychain items without
+    // macOS asking the user: it takes the secrets back from a file (SecretHandoff). If the new
+    // Sugo.app does not get in place after all, this build takes them back itself.
+    if (updates && updates->status() == UpdateChecker::Status::ReadyToRestart) {
+        MacKeychainStore keychain(secretStoreService());
+        SecretHandoff::handOver(keychain, SecretHandoff::defaultPath());
+    }
+#endif
     // "Restart to update": the updated AppImage, or the new Sugo.app put in place now, starts once
     // this process has ended (on macOS a plain quit also puts it in place).
     if (updates) {

@@ -3,6 +3,7 @@
 
 #include "AppSettings.h"
 #include "DataManager.h"
+#include "SyncController.h"
 
 #include "Localization.h"
 
@@ -22,7 +23,9 @@
 #include <QTime>
 
 #include <QLoggingCategory>
+#include <QMetaEnum>
 
+#include <algorithm>
 #include <atomic>
 #include <deque>
 
@@ -77,6 +80,11 @@ Diagnostics::Diagnostics(QObject *parent)
 }
 
 Diagnostics::~Diagnostics() = default;
+
+void Diagnostics::attachSync(SyncController *sync)
+{
+    m_sync = sync;
+}
 
 void Diagnostics::attach(AppSettings *settings, DataManager *dataManager)
 {
@@ -170,23 +178,62 @@ QString Diagnostics::recentLogs() const
 
 namespace
 {
-QStringList &accountRedactions()
+// One pattern per account word, compiled when the words are set. Leaked like the buffer:
+// redact() runs from the message handler, also during static destruction.
+QList<QRegularExpression> &accountRedactions()
 {
-    static QStringList words;
-    return words;
+    static auto *patterns = new QList<QRegularExpression>;
+    return *patterns;
+}
+
+// Puts `placeholder` in place of each match of `word`, but leaves the placeholders already put in
+// alone: a user named "user" (or an account word "account") must not turn "<user>" into
+// "<<user>>".
+void replaceWord(QString &text, const QRegularExpression &word, const QString &placeholder)
+{
+    static const QRegularExpression &placeholders = *new QRegularExpression(QStringLiteral("<(?:user|account|redacted)>"));
+    QList<std::pair<qsizetype, qsizetype>> kept;
+    for (auto it = placeholders.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        kept.append({match.capturedStart(), match.capturedEnd()});
+    }
+    QString result;
+    qsizetype done = 0;
+    for (auto it = word.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const bool inPlaceholder = std::any_of(kept.cbegin(), kept.cend(), [&match](const std::pair<qsizetype, qsizetype> &span) {
+            return match.capturedStart() < span.second && match.capturedEnd() > span.first;
+        });
+        if (!inPlaceholder) {
+            result.append(QStringView(text).mid(done, match.capturedStart() - done));
+            result.append(placeholder);
+            done = match.capturedEnd();
+        }
+    }
+    if (done > 0) {
+        result.append(QStringView(text).mid(done));
+        text = result;
+    }
 }
 } // namespace
 
 void Diagnostics::setAccountRedactions(const QStringList &words)
 {
-    QMutexLocker locker(&logMutex());
-    accountRedactions().clear();
+    QList<QRegularExpression> patterns;
     for (const QString &word : words) {
         // Very short words would blank out ordinary text.
-        if (word.trimmed().size() > 2) {
-            accountRedactions().append(word.trimmed());
+        const QString trimmed = word.trimmed();
+        if (trimmed.size() > 2) {
+            // Only where the word stands on its own: a login "tim" leaves "Timer" alone.
+            QRegularExpression pattern(QStringLiteral(R"((?<![\p{L}\p{N}_])%1(?![\p{L}\p{N}_]))")
+                                           .arg(QRegularExpression::escape(trimmed)),
+                                       QRegularExpression::CaseInsensitiveOption);
+            pattern.optimize();
+            patterns.append(pattern);
         }
     }
+    QMutexLocker locker(&logMutex());
+    accountRedactions() = patterns;
 }
 
 QString Diagnostics::redact(const QString &text)
@@ -195,42 +242,55 @@ QString Diagnostics::redact(const QString &text)
 
     // 0. Secrets first: Authorization headers, user:password@host in URLs, password/token
     // assignments (the calendar sync keeps an app password; none of it may leave in a report).
-    static const QRegularExpression authHeaderRegex(QStringLiteral(R"((authorization\s*[:=]\s*)[^\r\n]*)"),
-                                                    QRegularExpression::CaseInsensitiveOption);
+    // The expressions are never destroyed: the message handler calls this function, and Qt can
+    // still print a message after function-local statics are destroyed at exit.
+    static const QRegularExpression &authHeaderRegex = *new QRegularExpression(
+        QStringLiteral(R"((authorization\s*[:=]\s*)[^\r\n]*)"), QRegularExpression::CaseInsensitiveOption);
     result.replace(authHeaderRegex, QStringLiteral("\\1<redacted>"));
-    static const QRegularExpression urlCredentialsRegex(QStringLiteral(R"(\b([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@)"));
+    static const QRegularExpression &urlCredentialsRegex =
+        *new QRegularExpression(QStringLiteral(R"(\b([A-Za-z][A-Za-z0-9+.-]*://)[^/\s@]+@)"));
     result.replace(urlCredentialsRegex, QStringLiteral("\\1<redacted>@"));
-    static const QRegularExpression secretAssignmentRegex(
+    static const QRegularExpression &secretAssignmentRegex = *new QRegularExpression(
         // A quoted value up to its closing quote; an unquoted one up to the end of the line or a
-        // query-string '&' (a password may contain spaces, so a space does not end it).
-        QStringLiteral(R"re(("?\b(?:app[_-]?password|password|passwd|secret|token)"?\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\r\n&]+))re"),
+        // query-string '&' (a password may contain spaces, so a space does not end it). The key
+        // may carry a prefix (access_token, client_secret, X-Auth-Token) but must end in the
+        // secret word, so "tokens: 5" or "passwordless login: yes" stay.
+        QStringLiteral(R"re(("?[\p{L}\p{N}_-]*(?:password|passwd|secret|token)"?\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\r\n&]+))re"),
         QRegularExpression::CaseInsensitiveOption);
     result.replace(secretAssignmentRegex, QStringLiteral("\\1<redacted>"));
+    // A bearer token outside an Authorization header.
+    static const QRegularExpression &bearerRegex = *new QRegularExpression(
+        QStringLiteral(R"(\b(bearer\s+)[A-Za-z0-9._~+/=-]+)"), QRegularExpression::CaseInsensitiveOption);
+    result.replace(bearerRegex, QStringLiteral("\\1<redacted>"));
 
     // The accounts the user set up (the calendar login can differ from the system user name).
-    QStringList accounts;
+    QList<QRegularExpression> accounts;
     {
         QMutexLocker locker(&logMutex());
         accounts = accountRedactions();
     }
-    for (const QString &word : std::as_const(accounts)) {
-        result.replace(word, QStringLiteral("<account>"), Qt::CaseInsensitive);
+    for (const QRegularExpression &pattern : std::as_const(accounts)) {
+        replaceWord(result, pattern, QStringLiteral("<account>"));
     }
 
-    // 1. Redact the home directory path (and its resolved form, if it is a symlink)
+    // 1. Redact the home directory path (and its resolved form, if it is a symlink), only where
+    // the path ends: /home/alice next to the home /home/al does not become "~ice".
     const QString home = QDir::homePath();
     for (const QString &path : {home, QDir(home).canonicalPath()}) {
         if (!path.isEmpty() && path != QLatin1String("/")) {
-            result.replace(path, QStringLiteral("~"));
+            const QRegularExpression pathRegex(
+                QStringLiteral(R"(%1(?![\p{L}\p{N}_.-]))").arg(QRegularExpression::escape(path)));
+            result.replace(pathRegex, QStringLiteral("~"));
         }
     }
 
     // 2. Redact /home/<username> and /var/home/<username> (Fedora Silverblue/Kinoite) of anyone
-    static const QRegularExpression homeUserRegex(QStringLiteral(R"((/(?:var/)?home/)[^/\s'"]+)"));
+    static const QRegularExpression &homeUserRegex = *new QRegularExpression(QStringLiteral(R"((/(?:var/)?home/)[^/\s'"]+)"));
     result.replace(homeUserRegex, QStringLiteral("\\1<user>"));
 
     // 3. Redact the user part of user@host (shell prompts, ssh, e-mail addresses)
-    static const QRegularExpression userAtHostRegex(QStringLiteral(R"([A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*))"));
+    static const QRegularExpression &userAtHostRegex =
+        *new QRegularExpression(QStringLiteral(R"([A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*))"));
     result.replace(userAtHostRegex, QStringLiteral("<user>@\\1"));
 
     // 4. Redact the current user name wherever it stands as a word of its own
@@ -241,7 +301,7 @@ QString Diagnostics::redact(const QString &text)
     if (user.length() > 2) {
         const QRegularExpression userRegex(QStringLiteral(R"((?<![A-Za-z0-9_.-])%1(?![A-Za-z0-9_-]))")
                                                .arg(QRegularExpression::escape(user)));
-        result.replace(userRegex, QStringLiteral("<user>"));
+        replaceWord(result, userRegex, QStringLiteral("<user>"));
     }
 
     return result;
@@ -295,9 +355,10 @@ QString Diagnostics::generateReport() const
 
     lines << QStringLiteral("## Configuration");
     if (m_settings) {
-        lines << QStringLiteral("- Sound Theme: ") + m_settings->soundTheme();
+        // A sound may be an absolute path to a file of the user's: redacted like every other path.
+        lines << QStringLiteral("- Sound Theme: ") + redact(m_settings->soundTheme());
         lines << QStringLiteral("- Sound Volume: ") + QString::number(m_settings->soundVolume()) + QStringLiteral("%");
-        lines << QStringLiteral("- Pre-Alarm: ") + (m_settings->preAlarmEnabled() ? QStringLiteral("Enabled") : QStringLiteral("Disabled")) + QStringLiteral(" (") + m_settings->preAlarmSound() + QStringLiteral(")");
+        lines << QStringLiteral("- Pre-Alarm: ") + (m_settings->preAlarmEnabled() ? QStringLiteral("Enabled") : QStringLiteral("Disabled")) + QStringLiteral(" (") + redact(m_settings->preAlarmSound()) + QStringLiteral(")");
         lines << QStringLiteral("- Focus Sound Mode: ") + QString::number(m_settings->focusSoundMode()) + QStringLiteral(" (Volume: ") + QString::number(m_settings->focusSoundVolume()) + QStringLiteral("%)");
         lines << QStringLiteral("- Screen Lock Auto-Pause: ") + (m_settings->autoPauseOnScreenLock() ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
         lines << QStringLiteral("- Keep Screen Awake: ") + (m_settings->keepScreenAwake() ? QStringLiteral("Enabled") : QStringLiteral("Disabled"));
@@ -317,6 +378,27 @@ QString Diagnostics::generateReport() const
         lines << QStringLiteral("- Timers / Presets Count: ") + QString::number(m_dataManager->presetCount());
     } else {
         lines << QStringLiteral("- Storage: (Not attached)");
+    }
+    lines << QString();
+
+    lines << QStringLiteral("## Sync");
+    if (m_sync) {
+        const auto key = [](const char *enumName, int value) {
+            const QMetaObject &meta = SyncController::staticMetaObject;
+            return QString::fromLatin1(meta.enumerator(meta.indexOfEnumerator(enumName)).valueToKey(value));
+        };
+        const auto yesNo = [](bool value) { return value ? QStringLiteral("Yes") : QStringLiteral("No"); };
+        const QDateTime lastSync = m_sync->lastSync();
+        lines << QStringLiteral("- State: ") + key("State", m_sync->state());
+        lines << QStringLiteral("- Error: ") + key("ErrorKind", m_sync->errorKind());
+        lines << QStringLiteral("- Keyring Available: ") + yesNo(m_sync->keyringAvailable());
+        lines << QStringLiteral("- Linked: ") + yesNo(m_sync->linked());
+        lines << QStringLiteral("- Last Sync: ")
+                + (lastSync.isValid() ? lastSync.toUTC().toString(Qt::ISODate) + QStringLiteral(" (UTC)") : QStringLiteral("Never"));
+        lines << QStringLiteral("- Devices: ") + QString::number(m_sync->devices().size());
+        lines << QStringLiteral("- Server: ") + (m_sync->usesDefaultServer() ? QStringLiteral("default") : QStringLiteral("custom"));
+    } else {
+        lines << QStringLiteral("- Sync: (Not attached)");
     }
     lines << QString();
 
