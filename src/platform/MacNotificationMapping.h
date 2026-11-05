@@ -49,7 +49,8 @@ QString categoryIdentifier(const QList<ActionSpec> &actions);
  * The handlers of the notifications on display, by request identifier.
  *
  * A notification's handlers run only while its `context` exists, and are forgotten once the
- * user has answered it. Notifications nobody answers are dropped oldest first beyond `capacity`.
+ * user has answered or dismissed it, or a newer notification of the same context replaces it
+ * (takeEarlier()). Notifications nobody answers are dropped oldest first beyond `capacity`.
  */
 class MacNotificationRegistry
 {
@@ -60,6 +61,10 @@ public:
     QString add(QObject *context, const Notifier::Notification &notification);
     /// Forgets a request.
     void remove(const QString &requestId);
+    /// A new notification of `context` replaces its earlier ones: forgets them (and the requests
+    /// whose context no longer exists) and returns their identifiers, oldest first, so their
+    /// banners can be taken out of the Notification Center.
+    QStringList takeEarlier(QObject *context);
 
     /// A request that could not be shown, handed back so another notifier can show it.
     struct Unshown {

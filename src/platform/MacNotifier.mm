@@ -70,7 +70,9 @@ UNNotificationCategory *makeCategory(const QString &identifier, const QList<MacN
     return [UNNotificationCategory categoryWithIdentifier:identifier.toNSString()
                                                   actions:actions
                                         intentIdentifiers:@[]
-                                                  options:UNNotificationCategoryOptionNone];
+                                                  // A dismissed banner reaches the delegate too,
+                                                  // which then forgets its handlers.
+                                                  options:UNNotificationCategoryOptionCustomDismissAction];
 }
 } // namespace
 
@@ -218,6 +220,20 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
 {
     const QList<MacNotificationMapping::ActionSpec> specs = MacNotificationMapping::actionsFor(notification);
     const QString category = MacNotificationMapping::categoryIdentifier(specs);
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    // The earlier banners of the same sender (an older phase, an older session) are replaced, as
+    // they would have expired on Linux: their handlers are forgotten, so an answer still given
+    // in one (a task note for a session long past) reaches nothing, and they leave the
+    // Notification Center.
+    const QStringList replaced = registry.takeEarlier(context);
+    if (!replaced.isEmpty()) {
+        NSMutableArray<NSString *> *identifiers = [NSMutableArray arrayWithCapacity:NSUInteger(replaced.size())];
+        for (const QString &id : replaced) {
+            [identifiers addObject:id.toNSString()];
+        }
+        [center removeDeliveredNotificationsWithIdentifiers:identifiers];
+        [center removePendingNotificationRequestsWithIdentifiers:identifiers];
+    }
     const QString requestId = registry.add(context, notification);
 
     UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
@@ -230,7 +246,6 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
     UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:requestId.toNSString()
                                                                           content:content
                                                                           trigger:nil];
-    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     const std::shared_ptr<Shared> sharedState = shared;
     void (^add)(void) = ^{
         [center addNotificationRequest:request
