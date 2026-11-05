@@ -1021,7 +1021,9 @@ void CalendarSync::refreshIdleStatus()
 QString CalendarSync::describeFailure(const Result &result) const
 {
     QString text;
-    if (result.http == 401 || result.http == 403) {
+    if (result.http == 401) {
+        // Not 403: that one is the server refusing the request to someone it knows (a calendar
+        // shared read-only, an event that may not be removed), handled where it can happen.
         text = i18n("Login rejected: check username and app password");
     } else if (result.http == 404) {
         text = i18n("Calendar not found");

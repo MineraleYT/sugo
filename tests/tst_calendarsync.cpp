@@ -1948,6 +1948,20 @@ private Q_SLOTS:
         QCOMPARE(m_server->count("DELETE"), 2);
     }
 
+    void aTestEventThatMayNotBeRemovedIsNotARejectedLogin()
+    {
+        // The PUT went through with these credentials: a 403 to its DELETE is the calendar
+        // keeping it (no right to remove), not the login.
+        configureCustom();
+        m_server->deleteStatus = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("could not be removed yet")));
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().contains(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->isSendingPaused());
+    }
+
     void passwordIsKeptInTheKeyring()
     {
         FakeSecretStore keyring;
