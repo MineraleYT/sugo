@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SessionRecorder.h"
 
+#include <QCoreApplication>
+#include <QLoggingCategory>
+
 #include "PresetModel.h"
 #include "SessionRepository.h"
+
+Q_LOGGING_CATEGORY(lcSessionRecorder, "sugo.db.sessions")
 
 namespace
 {
@@ -122,5 +127,32 @@ void SessionRecorder::onSessionEnded(TimerEngine::Phase phase,
     m_retryTimer.start();
     if (!wasFailing) {
         Q_EMIT saveFailingChanged();
+    }
+}
+
+void SessionRecorder::connectQuit(QCoreApplication *app, TimerEngine *engine, SessionRecorder *recorder)
+{
+    QObject::connect(app, &QCoreApplication::aboutToQuit, engine, &TimerEngine::stop);
+    QObject::connect(app, &QCoreApplication::aboutToQuit, recorder, &SessionRecorder::storeBeforeQuit);
+}
+
+void SessionRecorder::storeBeforeQuit()
+{
+    m_retryTimer.stop();
+    if (!isSaveFailing()) {
+        return;
+    }
+    storeUnsaved();
+    m_retryTimer.stop(); // storeUnsaved() starts it again on a failure; there is no later now
+    if (!isSaveFailing()) {
+        return;
+    }
+    qCWarning(lcSessionRecorder).nospace() << "Quitting with " << m_unsaved.size()
+                                           << " sessions that could not be stored; they are lost:";
+    for (const SessionRecord &record : std::as_const(m_unsaved)) {
+        qCWarning(lcSessionRecorder).nospace().noquote()
+            << "  " << SessionRepository::kindToString(record.kind) << " from "
+            << QDateTime::fromMSecsSinceEpoch(record.startedAtMs).toString(Qt::ISODate) << ", " << record.durationSec << " s"
+            << (record.completed ? "" : ", interrupted");
     }
 }

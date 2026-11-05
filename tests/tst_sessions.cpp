@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QCoreApplication>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include "Localization.h"
 
@@ -66,6 +68,13 @@ private:
     QList<SessionRecord> all() const
     {
         return sessions->between(0, kForever);
+    }
+
+    /// Runs the application's event loop and quits it, so aboutToQuit is emitted as when the program quits.
+    static void quitApplication()
+    {
+        QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+        QCOMPARE(QCoreApplication::exec(), 0);
     }
 
 private Q_SLOTS:
@@ -264,6 +273,44 @@ private Q_SLOTS:
         QCOMPARE(r.size(), 2);
         QVERIFY(r.at(0).id < r.at(1).id);
         QCOMPARE(r.at(0).kind, SessionKind::Work);
+    }
+
+    void quittingWhileIdleStoresTheSessionsStillWaiting()
+    {
+        SessionRecorder::connectQuit(qApp, engine.get(), recorder.get()); // as main() does
+        QSignalSpy workRecorded(recorder.get(), &SessionRecorder::workSessionRecorded);
+        recorder->setRetryIntervalForTesting(60 * 60 * 1000); // no retry before the quit
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60);
+        QVERIFY(engine->isIdle()); // the break is not started: quitting ends no phase
+        QVERIFY(recorder->isSaveFailing());
+
+        failSessionInserts(false); // the database works again, but no phase will end before the quit
+        quitApplication();
+        QVERIFY(!recorder->isSaveFailing());
+        const QList<SessionRecord> r = all();
+        QCOMPARE(r.size(), 1);
+        QCOMPARE(r.at(0).kind, SessionKind::Work);
+        QVERIFY(r.at(0).completed);
+        QCOMPARE(workRecorded.count(), 1);
+    }
+
+    void quittingLogsTheSessionsThatAreStillRefused()
+    {
+        SessionRecorder::connectQuit(qApp, engine.get(), recorder.get());
+        recorder->setRetryIntervalForTesting(60 * 60 * 1000);
+        failSessionInserts(true);
+        engine->start();
+        elapse(25 * 60); // a Work phase the database refuses
+        engine->start();
+        elapse(60); // a break still running at the quit
+
+        // Both are counted: the running break was ended (and refused) before the last try.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Quitting with 2 sessions that could not be stored")));
+        quitApplication();
+        QVERIFY(engine->isIdle());
+        QVERIFY(all().isEmpty());
     }
 
     void completedWorkPhaseIsRecorded()
