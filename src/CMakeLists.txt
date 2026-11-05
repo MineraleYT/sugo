@@ -31,6 +31,7 @@ qt6_add_qml_module(sugo_core
         qml/components/TrayBadge.qml
         qml/components/Sidebar.qml
         qml/components/TopBar.qml
+        qml/components/TitleBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
         qml/components/MessageSlot.qml
