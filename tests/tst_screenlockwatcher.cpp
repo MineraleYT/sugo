@@ -401,6 +401,17 @@ private Q_SLOTS:
         flush(restarted, session);
         QCOMPARE(unlockSpy.count(), 1);
 
+        // It locks and unlocks before the user answered: the lock pauses nothing more, and the
+        // unlock, the user's real return, is reported again (Main.qml shows one prompt for both).
+        QVERIFY(restarted.send(activeChanged(true)));
+        flush(restarted, session);
+        QCOMPARE(pauseSpy.count(), 1);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(restarted.send(activeChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 2);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QCOMPARE(pauseSpy.count(), 1);
+
         QDBusConnection::disconnectFromBus(QStringLiteral("gone-restarted"));
         QDBusConnection::disconnectFromBus(QStringLiteral("gone-session"));
 #endif

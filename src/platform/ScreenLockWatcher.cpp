@@ -118,7 +118,8 @@ void ScreenLockWatcher::onLockerGone(const QString &name)
     }
     // Taken as an unlock: the lock screen is most likely gone with its owner. If the timer was
     // paused by the lock, the user is told as on an unlock and decides whether to resume; nothing
-    // is paused here. A locker that comes back still locked sends a new lock, which then counts.
+    // is paused here. A locker that comes back still locked sends a new lock, which then counts,
+    // and its unlock is reported too: the screen may have been locked again in between.
     qCDebug(lcScreenLock) << "The screen locker left the bus while locked:" << name;
     setScreenLocked(false, QString());
 }

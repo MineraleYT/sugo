@@ -25,6 +25,8 @@ class TimerEngine;
  * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
  * as a repeat. The locker going away most likely means the session is usable again, and a locker
  * that comes back locked reports a new lock, which pauses nothing (the phase is already paused).
+ * Its unlock is then reported once more while the phase is still paused by the first lock: that
+ * one is the real return of the user, and the window shows a single resume prompt for both.
  *
  * Also pauses whatever phase is running when the computer goes to sleep (logind's
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
