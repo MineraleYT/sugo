@@ -27,7 +27,7 @@ jobs:
     # Only the branch testing becomes a nightly, also when the run is started by hand.
     if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
-    # actions: read to look up this run (the date of the version).
+    # actions: read to look up this run (the date of the version) and, for a manual run, CI.
     permissions:
       contents: read
       actions: read
@@ -35,6 +35,26 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
+      # The trigger workflow_run only goes on when CI passed on a push to testing; a run started
+      # by hand must find the same: the newest CI run of this commit on testing ended in success.
+      - name: Check that CI passed on this commit
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=testing&per_page=1" \
+            --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion // "none") \(.html_url)"')
+          if [ -z "$run" ]; then
+            echo "::error::CI has not run on $GITHUB_SHA on the branch testing; a nightly is published only after CI passes."
+            exit 1
+          fi
+          read -r status conclusion url <<< "$run"
+          if [ "$status" != completed ] || [ "$conclusion" != success ]; then
+            echo "::error::CI on $GITHUB_SHA is $status ($conclusion), not passed: $url. A nightly is published only after CI passes."
+            exit 1
+          fi
+          echo "CI passed on $GITHUB_SHA: $url"
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
