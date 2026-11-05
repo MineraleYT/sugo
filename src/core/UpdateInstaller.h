@@ -93,7 +93,7 @@ public:
     using Tools = MacUpdateTools;
 
     /// The bundle identifier a downloaded Sugo.app must have.
-    static constexpr const char *kBundleIdentifier = "io.github.mineraleyt.sugo";
+    static constexpr const char *kBundleIdentifier = "stream.sugo.app";
 
     explicit MacBundleInstaller(const QString &bundle, const Tools &tools = Tools());
     ~MacBundleInstaller() override;

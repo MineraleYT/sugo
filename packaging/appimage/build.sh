@@ -102,13 +102,13 @@ rm -f "$OUTPUT"
     --deploy-deps-only AppDir/usr/plugins/wayland-shell-integration \
     --deploy-deps-only AppDir/usr/plugins/wayland-graphics-integration-client \
     --deploy-deps-only AppDir/usr/plugins/wayland-decoration-client \
-    -d AppDir/usr/share/applications/io.github.mineraleyt.sugo.desktop \
-    -i AppDir/usr/share/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg \
+    -d AppDir/usr/share/applications/stream.sugo.app.desktop \
+    -i AppDir/usr/share/icons/hicolor/scalable/apps/stream.sugo.app.svg \
     > linuxdeploy.log 2>&1 || { tail -40 linuxdeploy.log; exit 1; }
 # Not worth reporting: missing licence files of system libraries, unstripped Qt plugins, the
 # styles of other systems, and our own QML module (compiled into the program).
 grep -E 'ERROR|WARNING' linuxdeploy.log \
-    | grep -vE 'Could not find copyright files|Not calling strip|Missing qml module: +(QtQuick\.Controls\.(Windows|macOS|iOS)|io\.github\.mineraleyt\.sugo) *$' || true
+    | grep -vE 'Could not find copyright files|Not calling strip|Missing qml module: +(QtQuick\.Controls\.(Windows|macOS|iOS)|stream\.sugo\.app) *$' || true
 # Sugo Sync's encryption: not part of the systems the AppImage runs on, so it must travel with it.
 compgen -G "AppDir/usr/lib/libsodium.so.*" >/dev/null || { echo "libsodium is missing from the AppImage" >&2; exit 1; }
 echo "Built $OUTPUT ($VERSION)"

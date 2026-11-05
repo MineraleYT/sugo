@@ -6,14 +6,14 @@ Name=Sugo
 Comment=Control Sugo Pomodoro timer
 X-KDE-ServiceTypes=Plasma/Runner
 Type=Service
-Icon=io.github.mineraleyt.sugo
+Icon=stream.sugo.app
 X-KDE-PluginInfo-Author=MinerAle
 X-KDE-PluginInfo-Name=sugo
 X-KDE-PluginInfo-Version=@PROJECT_VERSION@
 X-KDE-PluginInfo-License=GPL-3.0-or-later
 X-KDE-PluginInfo-EnabledByDefault=true
 X-Plasma-API=DBus
-X-Plasma-DBusRunner-Service=io.github.mineraleyt.sugo
+X-Plasma-DBusRunner-Service=stream.sugo.app
 X-Plasma-DBusRunner-Path=/krunner
 X-Plasma-Request-Actions-Once=false
 # Only queries starting with one of our keywords (as a whole word) reach the app.

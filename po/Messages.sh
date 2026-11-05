@@ -15,13 +15,13 @@ MSGCAT=${MSGCAT:-msgcat}
 # Null-separated, so file names with spaces stay whole.
 find src \( -name "*.cpp" -o -name "*.h" \) -print0 | LC_ALL=C sort -z |
     xargs -0 "$XGETTEXT" --from-code=UTF-8 -C \
-    --package-name=sugo --msgid-bugs-address=https://github.com/MineraleYT/sugo/issues \
+    --package-name=sugo --msgid-bugs-address=https://github.com/sugoHQ/sugo/issues \
     --keyword=i18n:1 --keyword=i18nc:1c,2 --keyword=i18np:1,2 --keyword=i18ncp:1c,2,3 \
     -o "$podir/sugo_cpp.pot"
 
 find src -name "*.qml" -print0 | LC_ALL=C sort -z |
     xargs -0 "$XGETTEXT" --from-code=UTF-8 --language=JavaScript \
-    --package-name=sugo --msgid-bugs-address=https://github.com/MineraleYT/sugo/issues \
+    --package-name=sugo --msgid-bugs-address=https://github.com/sugoHQ/sugo/issues \
     --keyword=i18n:1 --keyword=i18nc:1c,2 --keyword=i18np:1,2 --keyword=i18ncp:1c,2,3 \
     -o "$podir/sugo_qml.pot"
 

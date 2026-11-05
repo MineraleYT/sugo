@@ -118,7 +118,7 @@ trap 'mv -f "$WORK"/sqldrivers-unused/*.dylib "$QT/plugins/sqldrivers/" 2>/dev/n
     || { tail -40 macdeployqt.log; exit 1; }
 # Not worth reporting: our own QML module (compiled into the program) and the styles of other systems.
 grep -iE 'error|warning' macdeployqt.log \
-    | grep -viE 'io\.github\.mineraleyt\.sugo|QtQuick/Controls/(Windows|Fusion|Imagine|Material|Universal|FluentWinUI3|iOS)' || true
+    | grep -viE 'stream\.sugo\.app|QtQuick/Controls/(Windows|Fusion|Imagine|Material|Universal|FluentWinUI3|iOS)' || true
 find "$CONTENTS/PlugIns/sqldrivers" -name '*.dylib' ! -name libqsqlite.dylib -delete 2>/dev/null || true
 
 # offscreen: the smoke tests start the app without a display before it is published.

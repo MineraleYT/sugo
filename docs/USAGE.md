@@ -27,7 +27,7 @@ This guide describes how to install Sugo and use it day to day, on Linux and on 
 
 ## Installing
 
-Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three packages:
+Every [release](https://github.com/sugoHQ/sugo/releases/latest) offers three packages:
 
 | Package | For | Updates |
 |:---|:---|:---|
@@ -39,7 +39,7 @@ Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three
 
 One file that runs on any recent x86_64 Linux and keeps itself up to date (the recommended package on Linux):
 
-1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest).
 2. Make it executable and start it:
    ```sh
    chmod +x Sugo-*-x86_64.AppImage
@@ -52,25 +52,26 @@ Keep the file in a folder you can write to (for example `~/Applications`): Sugo 
 
 The Flatpak bundle is attached to each release as `Sugo-<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
 
-1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest).
 2. Install it for your user, then start Sugo from the application menu, or with:
    ```sh
    flatpak install --user ./Sugo-*-x86_64.flatpak
-   flatpak run io.github.mineraleyt.sugo
+   flatpak run stream.sugo.app
    ```
 
 The first install also downloads the KDE runtime from Flathub, if it is not installed yet.
 
 - **Updating:** the Flatpak does not update itself. **Settings → About → Check for Updates** tells you when a new release is out: download its bundle and install it the same way, over the old one. Your timers, statistics and settings are kept.
-- **Removing:** `flatpak uninstall --user io.github.mineraleyt.sugo` removes the app; add `--delete-data` to remove your data too.
+- **Removing:** `flatpak uninstall --user stream.sugo.app` removes the app; add `--delete-data` to remove your data too.
 - **Permissions:** the sandbox has network access (for the update check and calendar sync), the notification and screen-saver services (to silence notifications and keep the screen awake), the system tray, and audio. *Start at login* goes through the desktop's background portal, which may ask for your permission the first time.
-- **Your data** lives under `~/.var/app/io.github.mineraleyt.sugo/` instead of the usual folders (see [Data, backup and privacy](#data-backup-and-privacy)).
+- **Your data** lives under `~/.var/app/stream.sugo.app/` instead of the usual folders (see [Data, backup and privacy](#data-backup-and-privacy)).
+- **From Sugo 1.0.2 or older:** the app ID changed from `io.github.mineraleyt.sugo` to `stream.sugo.app`, so 1.0.3 installs as a new app next to the old one. At its first start it copies your timers, statistics and settings from the old app (it may read `~/.var/app/io.github.mineraleyt.sugo/` for that); then remove the old one with `flatpak uninstall --user io.github.mineraleyt.sugo`. If Sugo started at login, turn **Start at login** on again.
 
 ### macOS
 
 One app for both Apple Silicon and Intel Macs, for **macOS 13 Ventura or later**:
 
-1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
+1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
 2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
    - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
    - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
@@ -239,23 +240,25 @@ Other programs can control the timer: on Linux through D-Bus (and [KRunner](#kru
 
 Sugo exposes a D-Bus interface:
 
-- **Service**: `io.github.mineraleyt.sugo`
+- **Service**: `stream.sugo.app`
 - **Path**: `/Timer`
-- **Interface**: `io.github.mineraleyt.sugo.Timer`
+- **Interface**: `stream.sugo.app.Timer`
+
+Up to Sugo 1.0.2 the service and the interface were `io.github.mineraleyt.sugo`: scripts and shortcuts that call it need the new name.
 
 | Command | Action |
 |:---|:---|
-| `qdbus io.github.mineraleyt.sugo /Timer toggle` | Start or pause |
-| `qdbus io.github.mineraleyt.sugo /Timer start` | Start or resume the active timer |
-| `qdbus io.github.mineraleyt.sugo /Timer pause` | Pause |
-| `qdbus io.github.mineraleyt.sugo /Timer stop` | Stop and reset |
-| `qdbus io.github.mineraleyt.sugo /Timer skip` | Skip to the next phase |
-| `qdbus io.github.mineraleyt.sugo /Timer status` | Print `state:phase:seconds` |
-| `qdbus io.github.mineraleyt.sugo /Timer presets` | List the names of the timers, one per line |
-| `qdbus io.github.mineraleyt.sugo /Timer selectPreset "Deep work"` | Choose a timer by name (not case-sensitive) or uuid |
-| `qdbus io.github.mineraleyt.sugo /Timer nextPreset` | Choose the next timer in the list (wraps around) |
-| `qdbus io.github.mineraleyt.sugo /Timer previousPreset` | Choose the previous timer (wraps around) |
-| `qdbus io.github.mineraleyt.sugo /Timer startPreset "Deep work"` | Choose a timer and start it |
+| `qdbus stream.sugo.app /Timer toggle` | Start or pause |
+| `qdbus stream.sugo.app /Timer start` | Start or resume the active timer |
+| `qdbus stream.sugo.app /Timer pause` | Pause |
+| `qdbus stream.sugo.app /Timer stop` | Stop and reset |
+| `qdbus stream.sugo.app /Timer skip` | Skip to the next phase |
+| `qdbus stream.sugo.app /Timer status` | Print `state:phase:seconds` |
+| `qdbus stream.sugo.app /Timer presets` | List the names of the timers, one per line |
+| `qdbus stream.sugo.app /Timer selectPreset "Deep work"` | Choose a timer by name (not case-sensitive) or uuid |
+| `qdbus stream.sugo.app /Timer nextPreset` | Choose the next timer in the list (wraps around) |
+| `qdbus stream.sugo.app /Timer previousPreset` | Choose the previous timer (wraps around) |
+| `qdbus stream.sugo.app /Timer startPreset "Deep work"` | Choose a timer and start it |
 
 `status` returns three colon-separated fields, for example `running:work:1342`:
 
@@ -263,9 +266,9 @@ Sugo exposes a D-Bus interface:
 - **phase**: `work`, `short_break` or `long_break` (when idle, the phase that starts next);
 - **seconds**: time left in the phase, in whole seconds.
 
-These commands, and the KRunner ones, can be turned off in **Settings → Global Shortcuts and Automation → Allow other programs to control the timer**. They then answer with the error `io.github.mineraleyt.sugo.Error.ControlDisabled` and change nothing; `status` and `presets` keep working.
+These commands, and the KRunner ones, can be turned off in **Settings → Global Shortcuts and Automation → Allow other programs to control the timer**. They then answer with the error `stream.sugo.app.Error.ControlDisabled` and change nothing; `status` and `presets` keep working.
 
-Changing the timer resets it, so while a phase is running or paused `selectPreset`, `nextPreset`, `previousPreset` and `startPreset` refuse with the error `io.github.mineraleyt.sugo.Error.TimerActive` and change nothing (stop the timer first). Choosing the timer that is already selected is always allowed, and `startPreset` then starts or resumes it. An unknown name or uuid gives `io.github.mineraleyt.sugo.Error.UnknownPreset`.
+Changing the timer resets it, so while a phase is running or paused `selectPreset`, `nextPreset`, `previousPreset` and `startPreset` refuse with the error `stream.sugo.app.Error.TimerActive` and change nothing (stop the timer first). Choosing the timer that is already selected is always allowed, and `startPreset` then starts or resumes it. An unknown name or uuid gives `stream.sugo.app.Error.UnknownPreset`.
 
 Depending on your distribution, `qdbus` may be called `qdbus6` or `qdbus-qt6`. If Sugo is not running, calling the service starts it hidden in the system tray (D-Bus activation). You can also start it that way yourself with `sugo --background`.
 
@@ -295,7 +298,7 @@ As over D-Bus, choosing another timer is refused while a phase is running or pau
 | Timers, sessions, notes | `~/.local/share/sugo/sugo.db` (SQLite) | `~/Library/Application Support/sugo/sugo.db` |
 | Settings | `~/.config/sugo/sugo.conf` | `~/Library/Application Support/sugo/sugo.conf` |
 
-Inside the Flatpak the Linux files live under `~/.var/app/io.github.mineraleyt.sugo/`.
+Inside the Flatpak the Linux files live under `~/.var/app/stream.sugo.app/`.
 
 **Settings → Advanced → Data management** can **back up** the database to a file, **restore** a backup (including backups made by older versions), and **clear the session history**. Restoring replaces your current timers and sessions, and is not possible while a timer is running. If the database file is damaged, Sugo moves it aside (`sugo.db.corrupt-…`) and starts a new one.
 
@@ -312,6 +315,6 @@ There is no telemetry.
 
 - **The AppImage and the macOS app update themselves, when you say so.** A minute after Sugo starts, and every six hours, it looks for a newer version on its channel; when there is one, the title bar shows **Install update** (only its icon in a narrow window). Nothing is downloaded before you click it. Sugo then downloads the new version (the AppImage next to itself, the macOS app its disk image), checks that the file is complete and intact (its size and SHA-256 checksum), and only then prepares it. The same button then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo (on macOS, quitting also puts it in place). A failed or damaged download changes nothing. This needs the AppImage or the app to be in a folder you can write to; otherwise Sugo only tells you that a new release is out.
 - **Settings → General → Updates** (AppImage and macOS app) has **Check for updates automatically**: turn it off and Sugo only looks when you ask, with **Settings → About → Check for Updates**.
-- **Settings → General → Updates → Update channel** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/MineraleYT/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
+- **Settings → General → Updates → Update channel** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/sugoHQ/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
 - **Settings → About → Check for Updates** tells you whether a newer version exists; the AppImage and the macOS app can install it from there, the other packages link to the release (a Flatpak or a distribution's package is updated the way it was installed). A successful check with nothing new shows a green check on the button for a few seconds.
 - **Settings → Advanced → Troubleshooting & Diagnostics** copies a report with the version, your environment and the latest log lines. Your home directory, user name, passwords and addresses with credentials are replaced with placeholders. Attach it to a bug report.

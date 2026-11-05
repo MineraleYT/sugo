@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Shapes
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A thin line icon of the interface, drawn on a 16 × 16 grid and scaled to `size`.
 Item {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A drop-down list in the style of the other controls: its list is an SMenu under the field, with
 /// a check on the current entry. As wide as its longest entry, so it does not move when the choice

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A group of settings: a small heading, an optional line under it, and its rows in one card.
 ColumnLayout {

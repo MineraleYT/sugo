@@ -39,7 +39,7 @@ void writeFile(const QString &path, const QString &text)
 
 XdgAutostart make(const QString &dir, const QStringList &command = {QStringLiteral("/opt/sugo/bin/sugo"), QStringLiteral("--background")})
 {
-    return XdgAutostart(dir, QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("Sugo"), QStringLiteral("Pomodoro timer"), command);
+    return XdgAutostart(dir, QStringLiteral("stream.sugo.app"), QStringLiteral("Sugo"), QStringLiteral("Pomodoro timer"), command);
 }
 #ifdef Q_OS_LINUX
 const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
@@ -169,10 +169,10 @@ private Q_SLOTS:
         QVERIFY(text.startsWith(QStringLiteral("[Desktop Entry]\n")));
         QVERIFY(text.contains(QStringLiteral("\nType=Application\n")));
         QVERIFY(text.contains(QStringLiteral("\nName=Sugo\n")));
-        QVERIFY(text.contains(QStringLiteral("\nIcon=io.github.mineraleyt.sugo\n")));
+        QVERIFY(text.contains(QStringLiteral("\nIcon=stream.sugo.app\n")));
         QVERIFY(text.contains(QStringLiteral("\nExec=/opt/sugo/bin/sugo --background\n")));
         QVERIFY(text.contains(QStringLiteral("\nX-GNOME-Autostart-enabled=true\n")));
-        QVERIFY(autostart.filePath().endsWith(QStringLiteral("/io.github.mineraleyt.sugo.desktop")));
+        QVERIFY(autostart.filePath().endsWith(QStringLiteral("/stream.sugo.app.desktop")));
     }
 
     void disablingRemovesTheEntry()
@@ -264,7 +264,7 @@ private Q_SLOTS:
     void namesCannotInjectOtherKeys()
     {
         QTemporaryDir tmp;
-        XdgAutostart autostart(tmp.path(), QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("x\nExec=evil"),
+        XdgAutostart autostart(tmp.path(), QStringLiteral("stream.sugo.app"), QStringLiteral("x\nExec=evil"),
                                QStringLiteral("y\r\nHidden=true"), {QStringLiteral("/opt/sugo")});
         QVERIFY(autostart.setEnabled(true));
         const QString text = readAll(autostart.filePath());

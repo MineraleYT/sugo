@@ -223,6 +223,8 @@ QString forbiddenTooOften()
 
 QString CalendarSync::uidFor(const SessionRecord &record)
 {
+    // The app ID before 1.0.3 (now stream.sugo.app), kept: an event's UID never changes, so a
+    // session sent again replaces its event instead of adding another.
     return QStringLiteral("sugo-%1-%2@io.github.mineraleyt.sugo").arg(record.id).arg(record.startedAtMs);
 }
 

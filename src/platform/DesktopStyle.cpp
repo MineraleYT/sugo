@@ -103,7 +103,7 @@ bool DesktopStyle::kwinForcesTitleBar(const QString &rulesPath)
     QSettings rules(rulesPath, QSettings::IniFormat);
     // QSettings reads the [General] group as the top level.
     const QStringList order = rules.value(QStringLiteral("Order")).toStringList();
-    const QStringList ourClasses = {QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("sugo")};
+    const QStringList ourClasses = {QStringLiteral("stream.sugo.app"), QStringLiteral("sugo")};
     for (const QString &id : order) {
         rules.beginGroup(id);
         // KWin's rule kinds: 2 force, 3 apply, 4 remember (the others are temporary or unused).

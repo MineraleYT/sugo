@@ -5,7 +5,7 @@
 
 <div align="center">
 
-  <img src="data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg" alt="Sugo logo" width="128" height="128" />
+  <img src="data/icons/hicolor/scalable/apps/stream.sugo.app.svg" alt="Sugo logo" width="128" height="128" />
 
   # Sugo
 
@@ -13,13 +13,13 @@
 
   Work in short sessions, take real breaks, and see where your time goes.
 
-  [![Latest Release](https://img.shields.io/github/v/release/MineraleYT/sugo?color=e05d44&logo=github)](https://github.com/MineraleYT/sugo/releases/latest)
+  [![Latest Release](https://img.shields.io/github/v/release/sugoHQ/sugo?color=e05d44&logo=github)](https://github.com/sugoHQ/sugo/releases/latest)
   [![Linux](https://img.shields.io/badge/Linux-AppImage%20%C2%B7%20Flatpak-1d99f3?logo=linux&logoColor=white)](docs/USAGE.md#installing)
   [![macOS](https://img.shields.io/badge/macOS-13%2B-555555?logo=apple)](docs/USAGE.md#macos)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-  **[Download for Linux](https://github.com/MineraleYT/sugo/releases/latest)** ·
-  **[Download for macOS](https://github.com/MineraleYT/sugo/releases/latest)** ·
+  **[Download for Linux](https://github.com/sugoHQ/sugo/releases/latest)** ·
+  **[Download for macOS](https://github.com/sugoHQ/sugo/releases/latest)** ·
   **[User guide](docs/USAGE.md)**
 
 </div>
@@ -41,9 +41,9 @@
 
 | | Get it | |
 |:---|:---|:---|
-| **Linux** | [AppImage](https://github.com/MineraleYT/sugo/releases/latest) (recommended) | One file for any recent x86_64 Linux, updates itself |
-| | [Flatpak](https://github.com/MineraleYT/sugo/releases/latest) | Bundle attached to each release |
-| **macOS** | [Disk image](https://github.com/MineraleYT/sugo/releases/latest) | macOS 13 or later, Apple Silicon and Intel, updates itself |
+| **Linux** | [AppImage](https://github.com/sugoHQ/sugo/releases/latest) (recommended) | One file for any recent x86_64 Linux, updates itself |
+| | [Flatpak](https://github.com/sugoHQ/sugo/releases/latest) | Bundle attached to each release |
+| **macOS** | [Disk image](https://github.com/sugoHQ/sugo/releases/latest) | macOS 13 or later, Apple Silicon and Intel, updates itself |
 
 Step-by-step instructions for each package, including the first launch on macOS, are in the [user guide](docs/USAGE.md#installing).
 
@@ -58,7 +58,7 @@ Step-by-step instructions for each package, including the first launch on macOS,
 
 ## Contributing
 
-Bug reports and ideas are very welcome: open an [issue](https://github.com/MineraleYT/sugo/issues). Settings → Advanced → Troubleshooting & Diagnostics can copy a report to attach to it (personal details are left out). To build Sugo and run its tests, see the [development guide](docs/DEVELOPMENT.md).
+Bug reports and ideas are very welcome: open an [issue](https://github.com/sugoHQ/sugo/issues). Settings → Advanced → Troubleshooting & Diagnostics can copy a report to attach to it (personal details are left out). To build Sugo and run its tests, see the [development guide](docs/DEVELOPMENT.md).
 
 ---
 

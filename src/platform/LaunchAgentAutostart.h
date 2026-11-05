@@ -10,7 +10,7 @@
 
 /**
  * macOS login item as a per-user launchd agent: `<directory>/<label>.plist`, normally
- * ~/Library/LaunchAgents/io.github.mineraleyt.sugo.plist, which launchd loads at the next login
+ * ~/Library/LaunchAgents/stream.sugo.app.plist, which launchd loads at the next login
  * and runs once (RunAtLoad).
  *
  * "Enabled" is the file existing. Plain Qt and file I/O only, so it is compiled and tested on every

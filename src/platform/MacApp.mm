@@ -62,7 +62,7 @@ void macSetUpTitleBar(QWindow *window)
     // The toolbar has no items and draws nothing (the title bar is transparent): clicks and
     // drags on it still reach the content, i.e. the title bar.
     if (!nsWindow.toolbar) {
-        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"io.github.mineraleyt.sugo.titlebar"];
+        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"stream.sugo.app.titlebar"];
         toolbar.allowsUserCustomization = NO;
         nsWindow.toolbar = toolbar;
         // In full screen the system would keep the toolbar shown, in a window of its own over the

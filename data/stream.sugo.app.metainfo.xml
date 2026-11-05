@@ -4,7 +4,7 @@
   SPDX-License-Identifier: CC0-1.0
 -->
 <component type="desktop-application">
-  <id>io.github.mineraleyt.sugo</id>
+  <id>stream.sugo.app</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Sugo</name>
@@ -24,16 +24,35 @@
       <li>KRunner integration, optional automatic pause when the screen is locked, and task notes for completed sessions</li>
     </ul>
   </description>
-  <launchable type="desktop-id">io.github.mineraleyt.sugo.desktop</launchable>
-  <developer id="io.github.mineraleyt">
+  <launchable type="desktop-id">stream.sugo.app.desktop</launchable>
+  <developer id="stream.sugo">
     <name>MinerAle</name>
   </developer>
-  <url type="homepage">https://github.com/MineraleYT/sugo</url>
-  <url type="bugtracker">https://github.com/MineraleYT/sugo/issues</url>
+  <url type="homepage">https://github.com/sugoHQ/sugo</url>
+  <url type="bugtracker">https://github.com/sugoHQ/sugo/issues</url>
   <provides>
     <binary>sugo</binary>
+    <id>io.github.mineraleyt.sugo</id>
   </provides>
+  <replaces>
+    <id>io.github.mineraleyt.sugo</id>
+  </replaces>
   <releases>
+    <release version="1.0.2" date="2026-11-05">
+      <description>
+        <p>A new look: a title bar with the timer, statistics and settings, and a composer to choose the timer and start it.</p>
+        <ul>
+          <li>Choose an accent colour, used by the main buttons, switches, sliders and the cycle track</li>
+          <li>Settings in categories beside the page, with a Timers category listing every timer and an About page</li>
+          <li>Statistics with today's work time and sessions, the figures in one strip, quieter charts and the task notes of the shown period</li>
+          <li>The update shows as a small icon in the title bar, and the search has the look of the menus</li>
+          <li>Calendar sync finds Nextcloud calendars by itself, shows their colours, accepts an address without https:// and handles refused requests better</li>
+          <li>The screen lock is noticed on GNOME, Xfce, Cinnamon and MATE too, and work that starts by itself waits while the screen is locked</li>
+          <li>Backups made by Sugo 1.0.0 can be restored, and the 1.0.0 data that 1.0.1 moved aside is taken back</li>
+          <li>Many fixes to notifications, sounds, the keyring, the tray menu and the macOS app</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.1" date="2026-11-04">
       <description>
         <p>Welcome macOS: Sugo now runs on macOS 13 or later, on Apple Silicon and Intel Macs.</p>

@@ -100,7 +100,7 @@ void PhaseNotifier::onPhaseFinished(TimerEngine::Phase finished, TimerEngine::Ph
         Notifier::Notification notification;
         notification.title = title;
         notification.text = text;
-        notification.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+        notification.iconName = QStringLiteral("stream.sugo.app");
 
         const bool offerNote = finished == TimerEngine::Phase::Work && sessionId > 0 && m_settings && m_settings->promptTaskNote();
         if (offerNote) {

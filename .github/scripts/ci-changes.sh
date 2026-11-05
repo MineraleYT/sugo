@@ -29,11 +29,11 @@ classify() {
         .github/ISSUE_TEMPLATE/* | .github/dependabot.yml | \
         .github/workflows/release.yml | .github/workflows/nightly.yml | \
         .github/workflows/appimage.yml | .github/workflows/macos.yml | \
-        io.github.mineraleyt.sugo.yml | packaging/appimage/*)
+        stream.sugo.app.yml | packaging/appimage/*)
             ;;
 
         # Linux metadata: validated (and installed) by the Linux build only.
-        data/io.github.mineraleyt.sugo.desktop | data/io.github.mineraleyt.sugo.metainfo.xml)
+        data/stream.sugo.app.desktop | data/stream.sugo.app.metainfo.xml)
             linux=true ;;
 
         # macOS only: packaging, the app icon, and the sources and tests built under if(APPLE).
