@@ -95,6 +95,11 @@ qint64 PresetModel::nowMs() const
     return (m_now ? m_now() : QDateTime::currentDateTimeUtc()).toMSecsSinceEpoch();
 }
 
+qint64 PresetModel::changeTime(qint64 previous) const
+{
+    return std::max(nowMs(), previous + 1);
+}
+
 TimerPreset PresetModel::makeDefaultPreset()
 {
     // The one timer a new user starts with: the classic 25/5, with a long break of 15 after four,
@@ -424,7 +429,7 @@ bool PresetModel::update(const QString &uuid, const QVariantMap &fields)
     const TimerPreset before = m_presets.at(row);
     const QStringList adjusted = applyFields(m_presets[row], fields);
     if (!m_presets.at(row).sameContent(before)) {
-        m_presets[row].updatedAt = nowMs();
+        m_presets[row].updatedAt = changeTime(before.updatedAt);
         m_presets[row].updatedBy.clear();
     }
     Q_EMIT dataChanged(index(row), index(row));
@@ -502,8 +507,9 @@ bool PresetModel::reset(const QString &uuid)
     if (row < 0 || !m_presets.at(row).builtin) {
         return false;
     }
+    const qint64 previous = m_presets.at(row).updatedAt;
     m_presets[row] = makeDefaultPreset();
-    m_presets[row].updatedAt = nowMs(); // the reset itself is a change other computers must see
+    m_presets[row].updatedAt = changeTime(previous); // the reset itself is a change other computers must see
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {
@@ -532,7 +538,7 @@ bool PresetModel::setOption(const QString &uuid, const QString &key, const QVari
     QVariantMap &options = m_presets[row].options;
     if (!options.contains(key) || options.value(key) != coerced) {
         options.insert(key, coerced);
-        m_presets[row].updatedAt = nowMs();
+        m_presets[row].updatedAt = changeTime(m_presets.at(row).updatedAt);
         m_presets[row].updatedBy.clear();
     }
     Q_EMIT dataChanged(index(row), index(row));
