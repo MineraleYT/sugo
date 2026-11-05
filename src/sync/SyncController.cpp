@@ -493,7 +493,7 @@ void SyncController::takeRemote(const SyncReply &reply)
     local.presets = m_presets->presets();
     local.tombstones = m_repository->tombstones();
     const PresetSyncFormat::MergeResult merged =
-        PresetSyncFormat::merge(local, parsed.data, m_account->deviceId(), QDateTime::currentMSecsSinceEpoch(), parsed.format);
+        PresetSyncFormat::merge(local, parsed.data, m_account->deviceId(), QDateTime::currentMSecsSinceEpoch());
     if (merged.changedLocal && wouldStopTimer(merged.result.presets)) {
         // The selected timer was deleted elsewhere while a phase runs here: switching timers
         // would stop it. Keep the old ETag and Dirty, and download again when the timer is idle.
@@ -517,10 +517,22 @@ void SyncController::takeRemote(const SyncReply &reply)
         ++m_failures;
         return;
     }
+    if (merged.changedRemote && m_formatTooNew) {
+        // The server lacks what this computer has, and only a newer Sugo may write it there.
+        // Keep the old ETag and Dirty: after the update the first download is not a 304, and
+        // its merge uploads this computer's changes.
+        qCInfo(lcSyncController) << "Local timer changes wait for an update of Sugo to be uploaded";
+        m_pushWanted = false;
+        m_pushTimer.stop();
+        setDirty(true);
+        setLastSyncNow();
+        succeeded();
+        return;
+    }
     setEtag(reply.etag);
     setLastSyncNow();
 
-    if (merged.changedRemote && !m_formatTooNew) {
+    if (merged.changedRemote) {
         m_pushWanted = true;
     } else {
         // The server holds what this computer has: nothing waits to go out.

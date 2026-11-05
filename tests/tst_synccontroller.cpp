@@ -354,6 +354,40 @@ private Q_SLOTS:
         QCOMPARE(a.sync->errorKind(), SyncController::FormatTooNew);
     }
 
+    void futureFormatKeepsLocalChangesForTheUpdate()
+    {
+        Device a(*server);
+        signInFirst(a);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+
+        // A change made here meets a blob that a newer Sugo wrote meanwhile.
+        a.model->create({{QStringLiteral("name"), QStringLiteral("Local")}});
+        PresetSyncFormat::Data data = remoteData(a);
+        data.presets.append(remotePreset(QStringLiteral("remote-1"), QStringLiteral("From the future")));
+        remoteWrite(a, data, PresetSyncFormat::Format + 1);
+        const QByteArray newerEtag = blob().etag;
+        const QByteArray written = blob().blob;
+        QTRY_COMPARE(a.sync->errorKind(), SyncController::FormatTooNew);
+        QTRY_VERIFY(a.names().contains(QStringLiteral("From the future")));
+        QTest::qWait(20 * kUnitMs);
+        QCOMPARE(blob().blob, written); // its upload, if one was on the way, met a 412
+
+        // The server does not have "Local": it still waits to go out, and the next download
+        // must not be a 304.
+        QVERIFY(a.settings->value(QStringLiteral("Sync/Dirty")).toBool());
+        QVERIFY(a.settings->value(QStringLiteral("Sync/Etag")).toByteArray() != newerEtag);
+
+        // Sugo is updated: it reads the same blob (same ETag) in its own format, and uploads.
+        remoteWrite(a, data);
+        blob().etag = newerEtag;
+        a.build(*server);
+        a.sync->syncNow();
+        QTRY_VERIFY(remoteNames(a).contains(QStringLiteral("Local")));
+        QVERIFY(remoteNames(a).contains(QStringLiteral("From the future")));
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+        QVERIFY(!a.settings->contains(QStringLiteral("Sync/Dirty")));
+    }
+
     void blobOfAnotherAccountIsUnreadable()
     {
         Device a(*server);

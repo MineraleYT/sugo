@@ -71,10 +71,9 @@ ParseResult fromJson(const QByteArray &json);
  * TombstoneLifetimeMs before `nowMs` are dropped. Order: the local one; presets new to this
  * computer follow at the end by createdAt.
  *
- * `deviceId` is this computer's Sugo Sync device id (the author of local changes).
- * `remoteFormat` is the format the remote side was read in: above Format, changedRemote stays
- * false (a newer Sugo wrote it; this one only reads).
+ * `deviceId` is this computer's Sugo Sync device id (the author of local changes). A remote
+ * side in a newer format still reports changedRemote: the caller must not upload it, but knows
+ * the server lacks what this computer has.
  */
-MergeResult merge(const Data &local, const Data &remote, const QString &deviceId, qint64 nowMs,
-                  int remoteFormat = Format);
+MergeResult merge(const Data &local, const Data &remote, const QString &deviceId, qint64 nowMs);
 } // namespace PresetSyncFormat
