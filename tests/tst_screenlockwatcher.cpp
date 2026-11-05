@@ -3,7 +3,9 @@
 #ifndef Q_OS_MACOS
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
+#include <QDBusContext>
 #include <QDBusMessage>
+#include <QDBusObjectPath>
 #endif
 #include <QCoreApplication>
 #include <QFile>
@@ -13,6 +15,7 @@
 #include <QTest>
 
 #include <memory>
+#include <utility>
 
 #include "AppSettings.h"
 #include "Autostart.h"
@@ -45,7 +48,115 @@ void flush(const QDBusConnection &sender, const QDBusConnection &receiver)
     receiver.interface()->isServiceRegistered(bus);
     QCoreApplication::processEvents();
 }
+
+const QString kLogind = QStringLiteral("org.freedesktop.login1");
+const QString kSessionInterface = QStringLiteral("org.freedesktop.login1.Session");
+const QString kSessionPath = QStringLiteral("/org/freedesktop/login1/session/_37"); // session "7"
+
+// logind's PropertiesChanged for LockedHint on `path`, as kscreenlocker, gnome-shell or
+// `loginctl lock-session` with a locker that sets the hint make it send.
+QDBusMessage lockedHintChanged(bool locked, const QString &path = kSessionPath)
+{
+    QDBusMessage signal = QDBusMessage::createSignal(path, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("PropertiesChanged"));
+    signal << kSessionInterface << QVariantMap{{QStringLiteral("LockedHint"), locked}} << QStringList();
+    return signal;
+}
+
+// Disconnects the named connections when a test ends, failed or not: a data row that failed must
+// not hand its connections, to a bus already gone, to the next row.
+class Connections
+{
+public:
+    explicit Connections(QStringList names)
+        : m_names(std::move(names))
+    {
+    }
+    ~Connections()
+    {
+        for (const QString &name : std::as_const(m_names)) {
+            QDBusConnection::disconnectFromBus(name);
+        }
+    }
+
+private:
+    QStringList m_names;
+};
+
+// Sets XDG_SESSION_ID for one test (unset if `value` is null) and puts the old value back.
+class SessionIdEnv
+{
+public:
+    explicit SessionIdEnv(const QByteArray &value)
+        : m_had(qEnvironmentVariableIsSet("XDG_SESSION_ID"))
+        , m_saved(qgetenv("XDG_SESSION_ID"))
+    {
+        if (value.isNull()) {
+            qunsetenv("XDG_SESSION_ID");
+        } else {
+            qputenv("XDG_SESSION_ID", value);
+        }
+    }
+    ~SessionIdEnv()
+    {
+        if (m_had) {
+            qputenv("XDG_SESSION_ID", m_saved);
+        } else {
+            qunsetenv("XDG_SESSION_ID");
+        }
+    }
+
+private:
+    bool m_had;
+    QByteArray m_saved;
+};
 } // namespace
+
+/// logind's Manager: GetSession knows session "7" only.
+class FakeLogindManager : public QObject, protected QDBusContext
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Manager")
+
+public Q_SLOTS:
+    QDBusObjectPath GetSession(const QString &id)
+    {
+        if (id != QStringLiteral("7")) {
+            sendErrorReply(QStringLiteral("org.freedesktop.login1.NoSuchSession"), QStringLiteral("No session '%1' known").arg(id));
+            return {};
+        }
+        return QDBusObjectPath(kSessionPath);
+    }
+};
+
+/// A logind session object: its Id and LockedHint, read with Properties.Get.
+class FakeLogindSession : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.login1.Session")
+    Q_PROPERTY(QString Id READ id)
+    Q_PROPERTY(bool LockedHint READ lockedHint)
+
+public:
+    QString id() const { return QStringLiteral("7"); }
+    bool lockedHint() const { return locked; }
+    bool locked = false;
+};
+
+/// logind on a private bus that stands in for the system bus: the manager, session "7", and
+/// session/auto, which logind resolves to the caller's session.
+struct FakeLogind {
+    FakeLogindManager manager;
+    FakeLogindSession session;
+    FakeLogindSession autoSession;
+
+    bool registerOn(QDBusConnection &bus)
+    {
+        return bus.registerObject(QStringLiteral("/org/freedesktop/login1"), &manager, QDBusConnection::ExportAllSlots)
+            && bus.registerObject(kSessionPath, &session, QDBusConnection::ExportAllProperties)
+            && bus.registerObject(QStringLiteral("/org/freedesktop/login1/session/auto"), &autoSession, QDBusConnection::ExportAllProperties)
+            && bus.registerService(kLogind);
+    }
+};
 #endif
 
 /// A screen locker's GetActive, for a locker that came back without announcing its state.
@@ -615,6 +726,236 @@ private Q_SLOTS:
 
         QDBusConnection::disconnectFromBus(QStringLiteral("fake-logind"));
         QDBusConnection::disconnectFromBus(QStringLiteral("fake-system"));
+#endif
+    }
+
+    void logindLockedHintPausesTheTimer()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // Xfce, MATE, or sway with a locker that sets the hint: no screen saver name says anything.
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const SessionIdEnv sessionId("7");
+        const Connections connections({QStringLiteral("hint-system"), QStringLiteral("hint-logind"), QStringLiteral("hint-impostor")});
+        QDBusConnection systemBus = QDBusConnection::connectToBus(bus.address(), QStringLiteral("hint-system"));
+        QDBusConnection logind = QDBusConnection::connectToBus(bus.address(), QStringLiteral("hint-logind"));
+        QDBusConnection impostor = QDBusConnection::connectToBus(bus.address(), QStringLiteral("hint-impostor"));
+        FakeLogind fake;
+        QVERIFY(fake.registerOn(logind));
+
+        ScreenLockWatcher lockWatcher(QDBusConnection(QStringLiteral("tst_disconnected_bus")), systemBus);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy pauseSpy(&lockWatcher, &ScreenLockWatcher::pausedByScreenLockChanged);
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+        QTRY_COMPARE(lockWatcher.logindSession(), kSessionPath);
+        flush(logind, systemBus);
+
+        // Only logind itself can say the session is locked.
+        QVERIFY(impostor.send(lockedHintChanged(true)));
+        flush(impostor, systemBus);
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+
+        QVERIFY(logind.send(lockedHintChanged(true)));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+        QCOMPARE(pauseSpy.count(), 1);
+
+        QVERIFY(logind.send(lockedHintChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+
+#endif
+    }
+
+    void logindSessionIsFoundWithoutXdgSessionId_data()
+    {
+        QTest::addColumn<QByteArray>("sessionId");
+        QTest::newRow("unset") << QByteArray();
+        QTest::newRow("unknown to logind") << QByteArray("c42");
+    }
+
+    void logindSessionIsFoundWithoutXdgSessionId()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        QFETCH(QByteArray, sessionId);
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const SessionIdEnv env(sessionId);
+        const Connections connections({QStringLiteral("auto-system"), QStringLiteral("auto-logind")});
+        QDBusConnection systemBus = QDBusConnection::connectToBus(bus.address(), QStringLiteral("auto-system"));
+        QDBusConnection logind = QDBusConnection::connectToBus(bus.address(), QStringLiteral("auto-logind"));
+        FakeLogind fake;
+        QVERIFY(fake.registerOn(logind));
+
+        // session/auto: the caller's session, or the user's graphical one (a Flatpak app's scope
+        // belongs to no session).
+        ScreenLockWatcher lockWatcher(QDBusConnection(QStringLiteral("tst_disconnected_bus")), systemBus);
+        lockWatcher.attach(engine.get(), settings.get());
+        engine->start();
+        QTRY_COMPARE(lockWatcher.logindSession(), kSessionPath);
+        flush(logind, systemBus);
+
+        QVERIFY(logind.send(lockedHintChanged(true)));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+
+#endif
+    }
+
+    void aLockSeenByTheLockerAndLogindCountsOnce()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // Plasma and GNOME report a lock on their screen saver name and in LockedHint.
+        PrivateDBus bus;
+        PrivateDBus system;
+        if (!bus.start() || !system.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const SessionIdEnv sessionId("7");
+        const Connections connections({QStringLiteral("both-session"), QStringLiteral("both-locker"), QStringLiteral("both-system"), QStringLiteral("both-logind")});
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("both-session"));
+        QDBusConnection locker = QDBusConnection::connectToBus(bus.address(), QStringLiteral("both-locker"));
+        QVERIFY(locker.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
+        QDBusConnection systemBus = QDBusConnection::connectToBus(system.address(), QStringLiteral("both-system"));
+        QDBusConnection logind = QDBusConnection::connectToBus(system.address(), QStringLiteral("both-logind"));
+        FakeLogind fake;
+        QVERIFY(fake.registerOn(logind));
+        const auto activeChanged = [](bool active) {
+            QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/ScreenSaver"),
+                                                             QStringLiteral("org.freedesktop.ScreenSaver"),
+                                                             QStringLiteral("ActiveChanged"));
+            signal << active;
+            return signal;
+        };
+
+        ScreenLockWatcher lockWatcher(session, systemBus);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy pauseSpy(&lockWatcher, &ScreenLockWatcher::pausedByScreenLockChanged);
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+        QTRY_COMPARE(lockWatcher.logindSession(), kSessionPath);
+        flush(logind, systemBus);
+
+        QVERIFY(locker.send(activeChanged(true)));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(logind.send(lockedHintChanged(true)));
+        flush(logind, systemBus);
+        QCOMPARE(pauseSpy.count(), 1);
+
+        // Unlocked: logind first this time, then the locker.
+        QVERIFY(logind.send(lockedHintChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+        QVERIFY(locker.send(activeChanged(false)));
+        flush(locker, session);
+        QCOMPARE(unlockSpy.count(), 1);
+        QCOMPARE(pauseSpy.count(), 1);
+
+#endif
+    }
+
+    void logindLockRequestPausesTheTimer()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // `loginctl lock-session` (or logind's IdleAction=lock) asks the locker to lock: xss-lock and
+        // swayidle start i3lock or swaylock, which set no LockedHint and announce nothing.
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const SessionIdEnv sessionId("7");
+        const Connections connections({QStringLiteral("request-system"), QStringLiteral("request-logind")});
+        QDBusConnection systemBus = QDBusConnection::connectToBus(bus.address(), QStringLiteral("request-system"));
+        QDBusConnection logind = QDBusConnection::connectToBus(bus.address(), QStringLiteral("request-logind"));
+        FakeLogind fake;
+        QVERIFY(fake.registerOn(logind));
+        const auto request = [](const QString &member) {
+            return QDBusMessage::createSignal(kSessionPath, kSessionInterface, member);
+        };
+
+        ScreenLockWatcher lockWatcher(QDBusConnection(QStringLiteral("tst_disconnected_bus")), systemBus);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+        QTRY_COMPARE(lockWatcher.logindSession(), kSessionPath);
+        flush(logind, systemBus);
+
+        QVERIFY(logind.send(request(QStringLiteral("Lock"))));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+
+        // swaylock unlocks without a word: the user resuming the timer is the proof they are back,
+        // and the next lock request pauses again.
+        engine->resume();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(logind.send(request(QStringLiteral("Lock"))));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+
+        // `loginctl unlock-session` is an unlock as any other.
+        QVERIFY(logind.send(request(QStringLiteral("Unlock"))));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+
+#endif
+    }
+
+    void otherDesktopScreenSaversPauseTheTimer_data()
+    {
+        QTest::addColumn<QString>("name");
+        QTest::addColumn<QString>("path");
+        QTest::newRow("Xfce") << QStringLiteral("org.xfce.ScreenSaver") << QStringLiteral("/org/xfce/ScreenSaver");
+        QTest::newRow("Cinnamon") << QStringLiteral("org.cinnamon.ScreenSaver") << QStringLiteral("/org/cinnamon/ScreenSaver");
+        QTest::newRow("MATE") << QStringLiteral("org.mate.ScreenSaver") << QStringLiteral("/org/mate/ScreenSaver");
+    }
+
+    void otherDesktopScreenSaversPauseTheTimer()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#else
+        QFETCH(QString, name);
+        QFETCH(QString, path);
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const Connections connections({QStringLiteral("desktop-session"), QStringLiteral("desktop-impostor"), QStringLiteral("desktop-screen-saver")});
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("desktop-session"));
+        QDBusConnection impostor = QDBusConnection::connectToBus(bus.address(), QStringLiteral("desktop-impostor"));
+        QDBusConnection screenSaver = QDBusConnection::connectToBus(bus.address(), QStringLiteral("desktop-screen-saver"));
+        QVERIFY(screenSaver.registerService(name));
+        const auto activeChanged = [&](bool active) {
+            QDBusMessage signal = QDBusMessage::createSignal(path, name, QStringLiteral("ActiveChanged"));
+            signal << active;
+            return signal;
+        };
+
+        ScreenLockWatcher lockWatcher(session);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+
+        QVERIFY(impostor.send(activeChanged(true)));
+        flush(impostor, session);
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+
+        QVERIFY(screenSaver.send(activeChanged(true)));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+
+        QVERIFY(screenSaver.send(activeChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+
 #endif
     }
 };

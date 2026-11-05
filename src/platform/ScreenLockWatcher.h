@@ -73,6 +73,11 @@ public:
 
     Q_INVOKABLE void clearLockPauseNotice();
 
+#ifndef Q_OS_MACOS
+    /// The object path of the logind session whose lock state is followed, once it is known.
+    QString logindSession() const { return m_logindSession; }
+#endif
+
 public Q_SLOTS:
     void onActiveChanged(bool active);
     void onPrepareForSleep(bool start);
@@ -104,6 +109,7 @@ private:
     QDBusConnection m_systemBus;
     QString m_lockSource; // the name whose owner reported the current lock
     QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
+    QString m_logindSession;
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
