@@ -386,6 +386,30 @@ private Q_SLOTS:
         QVERIFY(!server->active.contains(2));
     }
 
+    void aCookieFromTheNewServerInAStaleReplyIsReleased()
+    {
+        // Let the watcher's match rule settle first.
+        inhibitor->inhibit(QStringLiteral("focus"));
+        QTRY_COMPARE(server->active.size(), 1);
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        server->calls.clear();
+
+        // plasmashell restarts and the bus already routes the name to the new server, but Sugo
+        // has not yet seen NameOwnerChanged when a work phase starts: its Inhibit reaches the new
+        // server (cookie 2) yet is answered after the owner change, and a second Inhibit follows.
+        unpublishServer();
+        publishServer();
+        inhibitor->inhibit(QStringLiteral("focus")); // before the event loop delivers the change
+        QTRY_COMPARE_WITH_TIMEOUT(server->calls.size(), 2, 3000);
+        QTRY_VERIFY(inhibitor->isInhibited());
+
+        // The cookie of the stale reply is handed back, so ending the phase leaves nothing held.
+        inhibitor->release();
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        QTRY_VERIFY_WITH_TIMEOUT(server->active.isEmpty(), 3000);
+    }
+
     void theCookieOfAServerStartedByTheInhibitCallIsKept()
     {
         // Sugo started before the notification server; the first Inhibit starts it (D-Bus
