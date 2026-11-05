@@ -276,6 +276,47 @@ private Q_SLOTS:
                  QStringLiteral("Connected to https://cloud.example.org/x"));
     }
 
+    void testRedactsPrefixedSecretKeysAndBearerTokens()
+    {
+        // A key that only ends in a secret word is a secret too (the '_' or '-' before the word
+        // is no word boundary).
+        for (const QString &input : {QStringLiteral("access_token=hunter2pass"),
+                                     QStringLiteral("refresh_token: hunter2pass"),
+                                     QStringLiteral("client_secret=hunter2pass&x=1"),
+                                     QStringLiteral("{\"sync_token\": \"hunter2pass\"}"),
+                                     QStringLiteral("sync_password=hunter2pass"),
+                                     QStringLiteral("X-Auth-Token: hunter2pass"),
+                                     QStringLiteral("csrftoken=hunter2pass"),
+                                     QStringLiteral("GET /x with Bearer hunter2pass failed")}) {
+            const QString redacted = Diagnostics::redact(input);
+            QVERIFY2(!redacted.contains(QStringLiteral("hunter2pass")), qPrintable(redacted));
+            QVERIFY2(redacted.contains(QStringLiteral("<redacted>")), qPrintable(redacted));
+        }
+        QCOMPARE(Diagnostics::redact(QStringLiteral("access_token=abc")), QStringLiteral("access_token=<redacted>"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("sent Bearer abc.def-1 now")), QStringLiteral("sent Bearer <redacted> now"));
+
+        // Words that merely contain a secret word, and secret words not assigned anything, stay.
+        for (const QString &input : {QStringLiteral("tokens: 5"),
+                                     QStringLiteral("Tokenizer=fast"),
+                                     QStringLiteral("passwordless login: yes"),
+                                     QStringLiteral("token refresh scheduled")}) {
+            QCOMPARE(Diagnostics::redact(input), input);
+        }
+    }
+
+    void testHomePathIsRedactedOnlyAtAPathBoundary()
+    {
+        const QString home = QDir::homePath();
+        QVERIFY(!home.isEmpty() && home != QLatin1String("/"));
+        QCOMPARE(Diagnostics::redact(home + QStringLiteral("/notes.txt")), QStringLiteral("~/notes.txt"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("in ") + home), QStringLiteral("in ~"));
+        QCOMPARE(Diagnostics::redact(home + QStringLiteral(": ok")), QStringLiteral("~: ok"));
+        // A sibling folder whose name starts with the home folder's ("/home/alice" next to
+        // "/home/al") is not turned into "~ice".
+        const QString sibling = Diagnostics::redact(home + QStringLiteral("ice/notes.txt"));
+        QVERIFY2(!sibling.startsWith(QLatin1Char('~')), qPrintable(sibling));
+    }
+
     void testRedactsPasswordsWithSpacesAndTheCalendarAccount()
     {
         // A password with spaces is redacted whole, quoted or not.
