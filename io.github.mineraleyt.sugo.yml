@@ -21,7 +21,8 @@ finish-args:
   - --talk-name=org.kde.StatusNotifierWatcher
   # The calendar password is kept in the desktop keyring (Secret Service).
   - --talk-name=org.freedesktop.secrets
-  # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal).
+  # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal) or the
+  # session is locked (its LockedHint, Lock and Unlock).
   - --system-talk-name=org.freedesktop.login1
 modules:
   # Sugo Sync's encryption: neither the KDE runtime nor the freedesktop SDK under it has libsodium.

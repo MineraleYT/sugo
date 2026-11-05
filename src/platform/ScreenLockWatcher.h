@@ -11,14 +11,27 @@ class AppSettings;
 class MacSessionEvents;
 #else
 #include <QDBusConnection>
+#include <QDBusMessage>
 #include <QHash>
 #include <QString>
+#include <QStringList>
+#include <QVariantMap>
 #endif
 class TimerEngine;
 
 /**
- * Listens for system screen lock/unlock signals on D-Bus: org.freedesktop.ScreenSaver (Plasma)
- * and org.gnome.ScreenSaver (GNOME).
+ * Listens for system screen lock/unlock signals on D-Bus: ActiveChanged of the screen saver names
+ * (org.freedesktop.ScreenSaver for Plasma, org.gnome.ScreenSaver, org.xfce.ScreenSaver,
+ * org.cinnamon.ScreenSaver, org.mate.ScreenSaver), and logind's view of the current session on the
+ * system bus: its LockedHint, set by Plasma, GNOME and lockers that know logind, and its Lock and
+ * Unlock signals, which `loginctl lock-session` or logind's IdleAction send to lockers such as
+ * xss-lock or swayidle that announce nothing themselves. The session is found asynchronously:
+ * GetSession of $XDG_SESSION_ID, else session/auto (the caller's session, or the user's graphical
+ * one when the caller belongs to none, as a Flatpak app's scope).
+ * All sources feed one locked state: a lock seen by several pauses once, and the first unlock
+ * reported by any of them is the one reported. A lock seen only by logind (the hint, or a Lock
+ * request, whose locker may never say it unlocked) is forgotten when the timer runs again: the user
+ * resumed it, so they are back, and the next lock must count.
  * Automatically pauses the active work phase when the screen is locked, and
  * signals when the user returns so they can resume or review their session.
  *
@@ -73,6 +86,11 @@ public:
 
     Q_INVOKABLE void clearLockPauseNotice();
 
+#ifndef Q_OS_MACOS
+    /// The object path of the logind session whose lock state is followed, once it is known.
+    QString logindSession() const { return m_logindSession; }
+#endif
+
 public Q_SLOTS:
     void onActiveChanged(bool active);
     void onPrepareForSleep(bool start);
@@ -86,9 +104,13 @@ Q_SIGNALS:
 
 #ifndef Q_OS_MACOS
 private Q_SLOTS:
-    // ActiveChanged from the owner of each name, which is remembered with the lock.
-    void onFreedesktopActiveChanged(bool active);
-    void onGnomeActiveChanged(bool active);
+    // ActiveChanged from the owner of a screen saver name (the message's interface is the name),
+    // which is remembered with the lock.
+    void onLockerActiveChanged(bool active, const QDBusMessage &message);
+    // logind's session: PropertiesChanged (LockedHint), and the Lock and Unlock requests.
+    void onLogindPropertiesChanged(const QString &interface, const QVariantMap &changed, const QStringList &invalidated);
+    void onLogindLockRequested();
+    void onLogindUnlockRequested();
 #endif
 
 private:
@@ -99,11 +121,18 @@ private:
 #ifndef Q_OS_MACOS
     void onLockerGone(const QString &name);
     void askLockerState(const QString &name, const QString &owner);
+    void findLogindSession();
+    /// `fromEnvironment`: the id is $XDG_SESSION_ID, and session/auto is asked if logind knows it not.
+    void askLogindSessionPath(const QString &id, bool fromEnvironment);
+    void askLogindAutoSessionId();
+    void followLogindSession(const QString &path);
+    void askLockedHint();
 
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
     QString m_lockSource; // the name whose owner reported the current lock
     QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
+    QString m_logindSession; // object path of the logind session followed, once found
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
