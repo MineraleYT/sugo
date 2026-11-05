@@ -158,6 +158,7 @@ public:
     int defaultPut = 201;
     int deleteStatus = 204;
     int propfindStatus = 0;            ///< Answers every PROPFIND with this status when not 0.
+    QByteArray forbiddenPropfindPath;  ///< A PROPFIND of this path is answered with 403.
     QString prefix;                    ///< XML namespace prefix of the multistatus.
     int pollsBefore200 = 2;
     int polls = 0;
@@ -255,6 +256,10 @@ private:
         }
         if (req.method == "PROPFIND" && propfindStatus != 0) {
             reply(s, propfindStatus);
+            return;
+        }
+        if (req.method == "PROPFIND" && !forbiddenPropfindPath.isEmpty() && path == forbiddenPropfindPath) {
+            reply(s, 403);
             return;
         }
         if (req.method == "PROPFIND") {
@@ -733,6 +738,25 @@ private Q_SLOTS:
         QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
     }
 
+    void discoveryNextcloudForbiddenAtTheRootLooksUnderTheLoginName()
+    {
+        // The root is kept from this account (an ACL, a proxy rule): not a refused login, and
+        // the calendars are where Nextcloud usually puts the login name's.
+        m_server->forbiddenPropfindPath = "/remote.php/dav/";
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 2);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+        QVERIFY(m_sync->lastError().isEmpty());
+        QVERIFY(!m_sync->isSendingPaused());
+    }
+
     void discoveryNextcloudRefusedAtThePrincipalStopsThere()
     {
         // A wrong password: one refused request, not a second one at the fallback address (the
@@ -960,6 +984,56 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
     }
 
+    void a403TestAfterARejectedLoginLiftsThePause()
+    {
+        // Paused on a 401; then the password works on the server, but the calendar refuses the
+        // test event. The login was taken: no "Login rejected" coming back, the event is tried.
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->defaultPut = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 3); // refused (401), the test's, the event again
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("does not accept new events")));
+        QTest::qWait(100);
+        QVERIFY2(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")), qPrintable(m_sync->statusText()));
+        QCOMPARE(m_sync->pendingCount(), 1);
+    }
+
+    void a403LookupAfterARejectedLoginLiftsThePause()
+    {
+        configureCustom();
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void a403LookupKeepsThePauseOf403sInARow()
+    {
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_server->count("PROPFIND"), 1);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTest::qWait(100);
+        QVERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3); // nothing sent again with the credentials in doubt
+    }
+
     void put403IsTheCalendarRefusingNotTheLogin()
     {
         // A calendar shared read-only: the login is fine, the calendar does not take events.
@@ -979,6 +1053,62 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
         QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void put403InARowPausesSending()
+    {
+        // Some servers answer a wrong password with 403: not retried for ever (an account lock),
+        // but paused after three in a row, with a message that names both possible causes.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3);
+        QCOMPARE(m_sync->status(), CalendarSync::Failed);
+        for (const QString &text : {m_sync->statusText(), m_sync->lastError()}) {
+            QVERIFY2(text.contains(QStringLiteral("403")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("does not accept new events")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("app password")), qPrintable(text));
+            QVERIFY2(!text.startsWith(QStringLiteral("Login rejected")), qPrintable(text));
+        }
+        QTest::qWait(250);
+        QCOMPARE(m_server->count("PUT"), 3); // not retried while paused
+        QCOMPARE(m_sync->pendingCount(), 1);
+        checkNoSecrets();
+
+        // A test that is refused too keeps it paused, with the same message.
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 4);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->isSendingPaused());
+        QVERIFY(m_sync->statusText().contains(QStringLiteral("app password")));
+
+        // A new password is tried at once.
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_server->defaultPut = 201;
+        m_sync->setPassword(QStringLiteral("rotated"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void anAcceptedEventStartsThe403CountAgain()
+    {
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({150, 300});
+        m_server->putStatuses = {403, 403, 201};
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->count("PUT"), 3);
+        QVERIFY(!m_sync->isSendingPaused());
+
+        // Two refusals after the one accepted: still waiting with the backoff, not paused.
+        m_sync->enqueueWorkSession(record(2));
+        QTRY_COMPARE(m_server->count("PUT"), 5);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 6);
     }
 
     void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne_data()
@@ -1946,6 +2076,20 @@ private Q_SLOTS:
         m_sync->enqueueWorkSession(record(5));
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QCOMPARE(m_server->count("DELETE"), 2);
+    }
+
+    void aTestEventThatMayNotBeRemovedIsNotARejectedLogin()
+    {
+        // The PUT went through with these credentials: a 403 to its DELETE is the calendar
+        // keeping it (no right to remove), not the login.
+        configureCustom();
+        m_server->deleteStatus = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("could not be removed yet")));
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().contains(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->isSendingPaused());
     }
 
     void passwordIsKeptInTheKeyring()
