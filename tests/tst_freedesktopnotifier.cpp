@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "FakeNotifier.h"
 #include "FreedesktopNotifier.h"
 #include "PrivateDBus.h"
 
@@ -310,6 +311,29 @@ private Q_SLOTS:
         QTest::qWait(200);
         QVERIFY(m_server->calls.isEmpty());
         publishServer(); // for cleanup()
+    }
+
+    void withoutAServerTheFallbackShowsIt()
+    {
+        // A window manager with a tray but no notification daemon: the phase-end message
+        // goes to the tray (the fallback) instead of being lost.
+        auto fallback = std::make_unique<FakeNotifier>();
+        FakeNotifier *tray = fallback.get();
+        m_notifier->setFallback(std::move(fallback));
+        unpublishServer();
+        QStringList log;
+        m_notifier->notify(m_context.get(), sample(&log));
+        QTRY_COMPARE(tray->shown.size(), 1);
+        QCOMPARE(tray->last().title, QStringLiteral("Work session finished"));
+        QCOMPARE(tray->lastContext.data(), m_context.get());
+        // Its handlers are the notification's own: a click on the message runs the default action.
+        tray->last().defaultAction(QString());
+        QCOMPARE(log, QStringList{QStringLiteral("default:")});
+
+        // With a server again, the server shows it and the fallback is left alone.
+        publishServer();
+        QVERIFY(show(sample(&log)) > 0);
+        QCOMPARE(tray->shown.size(), 1);
     }
 };
 
