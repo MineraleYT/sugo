@@ -407,6 +407,29 @@ private Q_SLOTS:
         manager->setSessionRecorder(nullptr);
     }
 
+    void restoreDeletesTheTimersTheBackupDoesNotHave()
+    {
+        // The backup has the persisted timer; the one made after it is deleted by the restore.
+        const QUrl backup = QUrl::fromLocalFile(dir.filePath(QStringLiteral("backup.db")));
+        QVERIFY(manager->backupDatabase(backup));
+        TimerPreset persisted = presetModel->currentPreset();
+        TimerPreset later;
+        later.uuid = QStringLiteral("made-after-the-backup");
+        later.name = QStringLiteral("Later");
+        QVERIFY(presetRepository->saveAll({persisted, later}));
+        // An old deletion of the timer the backup brings back.
+        QVERIFY(presetRepository->saveAll({later}));
+        QVERIFY(presetRepository->saveAll({persisted, later}));
+
+        const qint64 before = QDateTime::currentMSecsSinceEpoch();
+        QVERIFY(manager->restoreDatabase(backup));
+        const QList<PresetTombstone> tombstones = presetRepository->tombstones();
+        QCOMPARE(tombstones.size(), 1);
+        QCOMPARE(tombstones.first().uuid, later.uuid);
+        QVERIFY(tombstones.first().deletedAt >= before);
+        QVERIFY(tombstones.first().deletedBy.isEmpty());
+    }
+
     void restoreWhoseTimersCannotBeReadChangesNothing()
     {
         QVERIFY(sessions->insert(sampleRecord(QStringLiteral("In the backup"))));

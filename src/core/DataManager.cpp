@@ -11,6 +11,7 @@
 
 #include "Localization.h"
 
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
@@ -471,7 +472,17 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         return false;
     }
 
-    QStringList statements;
+    // The timers the backup does not have are deleted by the restore, as by the user: Sugo Sync
+    // must hear of it, or it brings them back from the other computers. A timer the backup brings
+    // back is no longer deleted.
+    QStringList statements = {
+        QStringLiteral("INSERT INTO main.preset_tombstone (uuid, deleted_at, deleted_by) "
+                       "SELECT uuid, %1, '' FROM main.preset WHERE is_builtin = 0 "
+                       "AND uuid NOT IN (SELECT uuid FROM restore_db.preset) "
+                       "ON CONFLICT(uuid) DO UPDATE SET deleted_at = excluded.deleted_at, deleted_by = excluded.deleted_by")
+            .arg(QDateTime::currentMSecsSinceEpoch()),
+        QStringLiteral("DELETE FROM main.preset_tombstone WHERE uuid IN (SELECT uuid FROM restore_db.preset)"),
+    };
     for (auto it = restoredTables().crbegin(); it != restoredTables().crend(); ++it) {
         statements.append(QStringLiteral("DELETE FROM main.%1").arg(it->name));
     }
