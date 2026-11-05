@@ -31,9 +31,15 @@ QString firstLine(const QString &output)
 
 // --- AppImage ---------------------------------------------------------------------------------
 
-AppImageInstaller::AppImageInstaller(const QString &appImage)
+AppImageInstaller::AppImageInstaller(const QString &appImage, SetPermissions setPermissions)
     : m_path(appImage)
+    , m_setPermissions(std::move(setPermissions))
 {
+}
+
+bool AppImageInstaller::setPermissions(QFileDevice &file, QFileDevice::Permissions permissions) const
+{
+    return m_setPermissions ? m_setPermissions(file, permissions) : file.setPermissions(permissions);
 }
 
 bool AppImageInstaller::canInstall() const
@@ -50,12 +56,19 @@ bool AppImageInstaller::canInstall() const
 void AppImageInstaller::install(QSaveFile &download, Done done)
 {
     // The download was written next to the AppImage; committing it moves it over the AppImage.
+    // Its mode is set first, so the rename brings it along: the AppImage on disk always starts,
+    // and one that could not be made executable is never swapped in.
     const QFileDevice::Permissions permissions = QFile::permissions(m_path);
+    if (!setPermissions(download, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner)) {
+        const QString reason = download.errorString();
+        download.cancelWriting(); // the temporary file goes with the QSaveFile
+        done(i18n("Cannot install the update: %1", reason));
+        return;
+    }
     if (!download.commit()) {
         done(i18n("Cannot install the update: %1", download.errorString()));
         return;
     }
-    QFile::setPermissions(m_path, permissions | QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     done(QString());
 }
 

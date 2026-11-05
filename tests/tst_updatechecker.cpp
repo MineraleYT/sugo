@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -498,6 +499,61 @@ private Q_SLOTS:
         checker.reset();
         QCOMPARE(checker.status(), UpdateChecker::Status::ReadyToRestart);
         checker.setRestartOnQuit(false); // the quit was cancelled
+        QVERIFY(!checker.launchUpdated());
+        qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
+    void installKeepsTheModeAndMakesTheAppImageExecutable()
+    {
+        // An AppImage the user made 0640 by mistake: the new one keeps that mode, and can start.
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        const QFileDevice::Permissions old = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ReadGroup;
+        QVERIFY(QFile::setPermissions(release.appImage, old));
+        // The mode is set on the download before it takes the AppImage's place, so the AppImage
+        // on disk is always one that starts.
+        QList<QFileDevice::Permissions> set;
+        bool oldStillInPlace = false;
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.setInstallerForTesting(std::make_unique<AppImageInstaller>(release.appImage, [&](QFileDevice &file, QFileDevice::Permissions permissions) {
+            set.append(permissions);
+            oldStillInPlace = readFile(release.appImage) == release.oldContent && qobject_cast<QSaveFile *>(&file);
+            return file.setPermissions(permissions);
+        }));
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        checker.installUpdate();
+        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::ReadyToRestart, 10000);
+        QCOMPARE(readFile(release.appImage), release.newContent);
+        const QFileDevice::Permissions mode = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner | QFileDevice::ReadGroup
+            | QFileDevice::WriteGroup | QFileDevice::ExeGroup | QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther;
+        QCOMPARE(QFile::permissions(release.appImage) & mode, old | QFileDevice::ExeOwner);
+        QCOMPARE(set.size(), 1);
+        QVERIFY(oldStillInPlace);
+        qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
+    void appImageThatCannotBeMadeExecutableIsNotInstalled()
+    {
+        // Swapped in without its exec bit, the new AppImage would not start after "Restart to
+        // update": an error, and the installed AppImage stays.
+        qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
+        LocalRelease release;
+        const QFileDevice::Permissions old = QFile::permissions(release.appImage);
+        UpdateChecker checker;
+        release.setUp(checker);
+        checker.setInstallerForTesting(std::make_unique<AppImageInstaller>(release.appImage, [](QFileDevice &, QFileDevice::Permissions) {
+            return false;
+        }));
+        checker.checkForUpdates();
+        QTRY_COMPARE(checker.status(), UpdateChecker::Status::UpdateAvailable);
+        checker.installUpdate();
+        QTRY_COMPARE_WITH_TIMEOUT(checker.status(), UpdateChecker::Status::Error, 10000);
+        QVERIFY(checker.errorMessage().startsWith(QStringLiteral("Cannot install the update: ")));
+        QCOMPARE(readFile(release.appImage), release.oldContent);
+        QCOMPARE(QFile::permissions(release.appImage), old);
+        QVERIFY2(release.leftovers().isEmpty(), qPrintable(release.leftovers().join(QLatin1Char(' '))));
         QVERIFY(!checker.launchUpdated());
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
