@@ -198,6 +198,35 @@ QQC2.Page {
                      "%1 · %2 min · %3", work, shortBreak, i18n("no long break"));
     }
 
+    // About: who we are, and the updates.
+    readonly property var aboutData: typeof appAboutData !== "undefined" ? appAboutData : ({
+        displayName: i18n("Sugo"),
+        shortDescription: i18n("A Pomodoro timer with time statistics"),
+        version: "",
+        copyrightStatement: ""
+    })
+    // Set when the user closes the update error message; cleared by every new check.
+    property bool updateStatusDismissed: false
+    // A check that found nothing new is acknowledged on the button itself for a few seconds.
+    property bool upToDateShown: false
+    Connections {
+        target: UpdateChecker
+        function onStatusChanged() {
+            if (UpdateChecker.checking) {
+                page.updateStatusDismissed = false;
+                page.upToDateShown = false;
+            } else if (UpdateChecker.status === UpdateChecker.UpToDate) {
+                page.upToDateShown = true;
+                upToDateTimer.restart();
+            }
+        }
+    }
+    Timer {
+        id: upToDateTimer
+        interval: 3000
+        onTriggered: page.upToDateShown = false
+    }
+
     // Sugo Sync state, guarded because the singleton can be gone at shutdown.
     readonly property int syncState: SyncController ? SyncController.state : 0
     readonly property bool syncOff: !SyncController || syncState === SyncController.Off
@@ -878,6 +907,57 @@ QQC2.Page {
         }
     }
 
+    /// A link of About: its name, and the sign of a page that opens in the browser.
+    component LinkRow: QQC2.AbstractButton {
+        id: linkRow
+        property string url
+        property bool first: false
+
+        Layout.fillWidth: true
+        implicitHeight: Theme.settingsRowMinHeight
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        Accessible.role: Accessible.Link
+        Accessible.name: text
+        onClicked: Qt.openUrlExternally(url)
+
+        background: Item {
+            // The line above the row, across the whole card.
+            Rectangle {
+                visible: !linkRow.first
+                x: -Theme.settingsRowPaddingX
+                width: parent.width + Theme.settingsRowPaddingX * 2
+                height: Theme.hairline
+                color: Theme.border
+            }
+            Rectangle {
+                visible: linkRow.visualFocus
+                anchors.fill: parent
+                anchors.topMargin: Theme.hairline * 2
+                anchors.bottomMargin: Theme.hairline
+                radius: Theme.radiusSm
+                color: "transparent"
+                border.width: Theme.hairline
+                border.color: Theme.focusRing
+            }
+        }
+        contentItem: RowLayout {
+            spacing: Theme.spaceLg
+            Text {
+                Layout.fillWidth: true
+                text: linkRow.text
+                color: Theme.foreground
+                font.pixelSize: Theme.fontBody
+                elide: Text.ElideRight
+            }
+            LineIcon {
+                name: "external"
+                size: Theme.iconSm
+                color: linkRow.hovered ? Theme.foreground : Theme.subtle
+            }
+        }
+    }
+
     // The page's padding: less in a narrow window.
     readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
     readonly property real paddingY: narrow ? Theme.settingsBodyPaddingCompactY : Theme.settingsBodyPaddingY
@@ -902,6 +982,7 @@ QQC2.Page {
             // for the list of the categories beside the page: they are chosen here instead.
             RowLayout {
                 id: categoryHeader
+                visible: page.narrow || page.category !== "about"
                 Layout.fillWidth: true
                 Layout.bottomMargin: Theme.spaceXs
                 spacing: Theme.spaceMd
@@ -2279,6 +2360,200 @@ QQC2.Page {
                         text: i18n("Reset Settings…")
                         iconName: "undo"
                         onClicked: resetSettingsDialog.open()
+                    }
+                }
+            }
+
+            // --- About --------------------------------------------------------------------
+            // Who we are: the logo, the name, the version and what Sugo is.
+            RowLayout {
+                visible: page.category === "about"
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.spaceSm
+                spacing: Theme.spaceLg
+
+                Image {
+                    source: "qrc:/icons/io.github.mineraleyt.sugo.svg"
+                    sourceSize.width: Theme.aboutLogo * 2
+                    sourceSize.height: Theme.aboutLogo * 2
+                    Layout.preferredWidth: Theme.aboutLogo
+                    Layout.preferredHeight: Theme.aboutLogo
+                    smooth: true
+                    mipmap: true
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.hairline
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.displayName
+                        color: Theme.foreground
+                        font.pixelSize: Theme.fontSection
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Accessible.role: Accessible.Heading
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.version.length > 0
+                              ? i18nc("the version · what the application is", "%1 · %2",
+                                      i18n("Version %1", page.aboutData.version), page.aboutData.shortDescription)
+                              : page.aboutData.shortDescription
+                        color: Theme.muted
+                        font.pixelSize: Theme.fontCaption
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("Updates")
+                iconName: "system-software-update"
+
+                // One row: what the updates are doing on the left, in a place of two lines whatever
+                // it says, and what can be done about it on the right, so the card keeps its height.
+                // The furthest step wins: ready, downloading, an error, a newer version found.
+                RowLayout {
+                    id: updateRow
+                    objectName: "updateMessage"
+                    readonly property string step: UpdateChecker.status === UpdateChecker.ReadyToRestart ? "ready"
+                        : UpdateChecker.status === UpdateChecker.Downloading ? "downloading"
+                        : !page.updateStatusDismissed && UpdateChecker.status === UpdateChecker.Error ? "error"
+                        : UpdateChecker.hasUpdate ? "available" : ""
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.settingsRowPaddingY
+                    Layout.bottomMargin: Theme.settingsRowPaddingY
+                    spacing: Theme.spaceSm
+
+                    Text {
+                        id: updateText
+                        text: {
+                            switch (updateRow.step) {
+                            case "ready":
+                                // On macOS the new Sugo.app waits next to this one and takes its place when Sugo quits.
+                                return DesktopStyle.macos ? i18n("Sugo %1 is ready. It replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                                          : i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion);
+                            case "downloading":
+                                return i18n("Downloading Sugo %1… %2%", UpdateChecker.latestVersion, Math.round(UpdateChecker.progress * 100));
+                            case "error":
+                                return i18n("Could not update Sugo: %1", UpdateChecker.errorMessage);
+                            case "available":
+                                return i18n("A newer version (%1) of Sugo is available.", UpdateChecker.latestVersion);
+                            }
+                            return page.upToDateShown ? i18n("Sugo is up to date.")
+                                 : !UpdateChecker.canInstall ? i18n("Look for a newer version on GitHub.")
+                                 : AppSettings.updateChannel === "nightly"
+                                   ? (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new nightly builds by itself.")
+                                                                     : i18n("Updates come from the nightly builds."))
+                                   : (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new releases by itself.")
+                                                                     : i18n("Updates come from the stable releases."));
+                        }
+                        color: updateRow.step === "error" ? Theme.danger
+                             : updateRow.step === "available" || updateRow.step === "ready" ? Theme.foreground
+                             : page.upToDateShown && updateRow.step === "" ? Theme.positive : Theme.muted
+                        font.pixelSize: Theme.fontBody
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: statusMetrics.lineSpacing * 2
+                        Accessible.role: updateRow.step.length > 0 ? Accessible.AlertMessage : Accessible.StaticText
+                        Accessible.name: text
+                        // A longer error is cut after two lines: all of it on hover.
+                        QQC2.ToolTip.text: text
+                        QQC2.ToolTip.visible: updateTextHover.hovered && truncated
+                        QQC2.ToolTip.delay: Theme.toolTipDelay
+                        HoverHandler { id: updateTextHover }
+                        FontMetrics {
+                            id: statusMetrics
+                            font.pixelSize: Theme.fontBody
+                        }
+                    }
+
+                    SButton {
+                        visible: updateRow.step === "" || updateRow.step === "downloading"
+                        iconName: page.upToDateShown ? "check" : "download"
+                        text: UpdateChecker.checking ? i18n("Checking for updates…") : i18n("Check for Updates")
+                        labels: [i18n("Checking for updates…"), i18n("Check for Updates")]
+                        enabled: !UpdateChecker.checking && updateRow.step === ""
+                        onClicked: {
+                            page.updateStatusDismissed = false;
+                            UpdateChecker.checkForUpdates();
+                        }
+                    }
+                    SButton {
+                        visible: updateRow.step === "available"
+                        kind: UpdateChecker.installable ? "ghost" : "primary"
+                        iconName: "external"
+                        text: i18n("View Release")
+                        onClicked: Qt.openUrlExternally(UpdateChecker.releaseUrl)
+                    }
+                    SButton {
+                        visible: updateRow.step === "available" && UpdateChecker.installable
+                        kind: "primary"
+                        text: i18n("Install")
+                        onClicked: UpdateChecker.installUpdate()
+                    }
+                    SButton {
+                        visible: updateRow.step === "ready"
+                        kind: "primary"
+                        text: i18n("Restart Now")
+                        onClicked: applicationWindow().requestRestart()
+                    }
+                    SButton {
+                        visible: updateRow.step === "error"
+                        kind: "ghost"
+                        text: i18n("Open Releases Page")
+                        onClicked: Qt.openUrlExternally("https://github.com/MineraleYT/sugo/releases")
+                    }
+                    SButton {
+                        visible: updateRow.step === "error"
+                        kind: "ghost"
+                        iconOnly: true
+                        iconName: "close"
+                        text: i18n("Dismiss")
+                        onClicked: page.updateStatusDismissed = true
+                    }
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("Links")
+                iconName: "external"
+                LinkRow {
+                    first: true
+                    text: i18n("Report a bug")
+                    url: "https://github.com/MineraleYT/sugo/issues"
+                }
+                LinkRow {
+                    text: i18n("Project website")
+                    url: "https://sugo.stream"
+                }
+            }
+
+            SettingsCard {
+                category: "about"
+                title: i18n("License & credits")
+                iconName: "license"
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Theme.settingsRowPaddingY
+                    Layout.bottomMargin: Theme.settingsRowPaddingY
+                    spacing: Theme.hairline
+                    Text {
+                        Layout.fillWidth: true
+                        text: page.aboutData.copyrightStatement
+                        visible: text.length > 0
+                        color: Theme.foreground
+                        font.pixelSize: Theme.fontBody
+                        wrapMode: Text.WordWrap
+                    }
+                    SmallText {
+                        text: i18n("Licensed under GNU General Public License, version 3 or later.") + " "
+                              + i18n("Sugo is an independent, open source project.")
                     }
                 }
             }

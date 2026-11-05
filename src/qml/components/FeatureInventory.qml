@@ -28,8 +28,7 @@ QtObject {
             { name: "timer", open: () => app.navigate("timer") },
             { name: "timer-page", open: () => app.navigate("preset", PresetModel.currentUuid) },
             { name: "new-timer", open: () => app.navigate("preset", "") },
-            { name: "stats", open: () => app.navigate("stats") },
-            { name: "about", open: () => app.navigate("about") }
+            { name: "stats", open: () => app.navigate("stats") }
         ];
         for (const category of app.settingsCategories.map(entry => entry.id)) {
             list.push({ name: "settings/" + category, open: () => app.openSettings(category) });

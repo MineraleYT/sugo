@@ -909,13 +909,17 @@ QQC2.ApplicationWindow {
                     done = checkTimer(root.pageStack.get(0));
                 } else if (appSmokePage === "inventory") {
                     done = featureInventory.step();
+                } else if (appSmokePage === "about" && (root.currentDestination !== "settings" || currentPage.category !== "about")) {
+                    fail(20, "\"about\" did not open the About category of the settings: " + root.currentDestination
+                         + " " + currentPage.category);
+                    return;
                 }
                 if (done && running) {
                     stop();
                     Qt.exit(0);
                 }
             } else if (attempts >= 50) {
-                const targetFile = root.destinations[appSmokePage === "presets" ? "preset" : appSmokePage];
+                const targetFile = root.destinations[({ presets: "preset", about: "settings" })[appSmokePage] ?? appSmokePage];
                 const component = targetFile ? root.pageComponents[targetFile] : null;
                 console.error("Page", appSmokePage, "did not load within five seconds:",
                               "component=", component ? component.status : "missing",
@@ -983,18 +987,22 @@ QQC2.ApplicationWindow {
         preset: "PresetEditPage.qml",
         stats: "StatsPage.qml",
         settings: "AppSettingsPage.qml",
-        about: "AboutPage.qml",
         welcome: "WelcomePage.qml"
     })
 
-    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings", "about" or "welcome".
+    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings" or "welcome".
     property string currentDestination: "timer"
     /// The timer whose page is open ("" for a new one).
     property string openTimerUuid: ""
     readonly property bool isWelcomeActive: currentDestination === "welcome"
 
     /// Shows a destination; "preset" with the timer's `uuid`. `reload` builds the page afresh.
+    /// "about" (the tray, the menu bar, Ctrl+4) is the About category of the settings.
     function navigate(name: string, uuid: var, reload: var): void {
+        if (name === "about") {
+            openSettings("about");
+            return;
+        }
         const target = uuid ?? "";
         // A page with unsaved changes (a timer's page) asks before it is left. A number still
         // being typed counts, even one that did not change the value yet ("0", out of range).
@@ -1030,7 +1038,8 @@ QQC2.ApplicationWindow {
         { id: "focus", text: i18n("Focus") },
         { id: "calendar", text: i18n("Calendar") },
         { id: "sync", text: i18n("Sync") },
-        { id: "advanced", text: i18n("Advanced") }
+        { id: "advanced", text: i18n("Advanced") },
+        { id: "about", text: i18n("About") }
     ]
     /// The list of the categories is shown at the left of the settings and of a timer's page,
     /// when the window is wide enough for it.
@@ -1452,8 +1461,14 @@ QQC2.ApplicationWindow {
                 currentDestination = appSmokePage === "inventory" ? "timer" : appSmokePage;
             } else if (appStatsSmokeTest) {
                 currentDestination = "stats";
-            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets")) {
+            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets"
+                                                     || startPageName === "about")) {
                 currentDestination = startPageName;
+            }
+            // "about": the About category of the settings.
+            if (currentDestination === "about") {
+                currentDestination = "settings";
+                pendingSettingsCategory = "about";
             }
             // "presets" (smoke test, development): the page of the timer in use.
             if (currentDestination === "presets") {

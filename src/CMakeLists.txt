@@ -17,7 +17,6 @@ qt6_add_qml_module(sugo_core
         qml/pages/StatsPage.qml
         qml/pages/PresetEditPage.qml
         qml/pages/AppSettingsPage.qml
-        qml/pages/AboutPage.qml
         qml/pages/WelcomePage.qml
         qml/components/ProgressRing.qml
         qml/theme/Theme.qml

@@ -54,6 +54,7 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Discard",
@@ -97,6 +98,7 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Cancel",
@@ -143,15 +145,9 @@
         "button: Year"
       ]
     },
-    "about": {
-      "common": [
-        "button: Check for Updates",
-        "button: Project website",
-        "button: Report a bug"
-      ]
-    },
     "settings/general": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -187,6 +183,7 @@
     },
     "settings/timers": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -200,6 +197,7 @@
     },
     "settings/sounds": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -225,6 +223,7 @@
     },
     "settings/focus": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -248,6 +247,7 @@
     },
     "settings/calendar": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -268,6 +268,7 @@
     },
     "settings/sync": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -286,6 +287,7 @@
     },
     "settings/advanced": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Back up…",
         "button: Calendar",
@@ -322,6 +324,21 @@
         "button: Nightly",
         "button: Stable",
         "row: Update channel"
+      ]
+    },
+    "settings/about": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Check for Updates",
+        "button: Focus",
+        "button: General",
+        "button: Project website",
+        "button: Report a bug",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
       ]
     },
     "welcome/0": {
