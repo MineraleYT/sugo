@@ -53,6 +53,7 @@ const char kProtectWeekendStreak[] = "ProtectWeekendStreak";
 const char kFirstRunCompleted[] = "FirstRunCompleted";
 const char kPromptTaskNote[] = "PromptTaskNote";
 const char kColorScheme[] = "ColorScheme";
+const char kAccentColor[] = "AccentColor";
 const char kUpdateChannel[] = "UpdateChannel";
 const char kAutoCheckUpdates[] = "AutoCheckUpdates";
 const char kVerboseLogging[] = "VerboseLogging";
@@ -67,6 +68,15 @@ QString validColorScheme(const QString &scheme)
     }
     // Follow the desktop's light or dark mode unless told otherwise.
     return QStringLiteral("system");
+}
+
+QString validAccentColor(const QString &id)
+{
+    const QString s = id.trimmed().toLower();
+    if (AppSettings::accentColors().contains(s)) {
+        return s;
+    }
+    return QStringLiteral("red");
 }
 
 /// An integer setting, or `fallback` when it is missing, empty or not a number: a hand-edited or
@@ -178,6 +188,7 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     m_promptTaskNote = settings.value(QLatin1String(kPromptTaskNote), Defaults::promptTaskNote).toBool();
     m_colorScheme = validColorScheme(settings.value(QLatin1String(kColorScheme), QString(Defaults::colorScheme)).toString());
     applyColorScheme();
+    m_accentColor = validAccentColor(settings.value(QLatin1String(kAccentColor), QString(Defaults::accentColor)).toString());
     m_updateChannel = settings.value(QLatin1String(kUpdateChannel)).toString() == QLatin1String("nightly") ? QStringLiteral("nightly") : QString(Defaults::updateChannel);
     m_autoCheckUpdates = settings.value(QLatin1String(kAutoCheckUpdates), Defaults::autoCheckUpdates).toBool();
     m_verboseLogging = settings.value(QLatin1String(kVerboseLogging), Defaults::verboseLogging).toBool();
@@ -494,6 +505,27 @@ void AppSettings::setColorScheme(const QString &scheme)
     Q_EMIT colorSchemeChanged();
 }
 
+void AppSettings::setAccentColor(const QString &id)
+{
+    const QString valid = validAccentColor(id);
+    if (m_accentColor == valid) {
+        return;
+    }
+    m_accentColor = valid;
+    storeString(kAccentColor, valid);
+    Q_EMIT accentColorChanged();
+}
+
+QStringList AppSettings::accentColors()
+{
+    // Around the colour wheel, so the menu reads as a spectrum.
+    static const QStringList ids{
+        QStringLiteral("red"), QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("lime"), QStringLiteral("green"),
+        QStringLiteral("teal"), QStringLiteral("cyan"), QStringLiteral("blue"), QStringLiteral("violet"), QStringLiteral("pink"),
+    };
+    return ids;
+}
+
 void AppSettings::setUpdateChannel(const QString &channel)
 {
     const QString valid = channel == QLatin1String("nightly") ? channel : QStringLiteral("stable");
@@ -651,6 +683,7 @@ void AppSettings::resetToDefaults()
     setProtectWeekendStreak(Defaults::protectWeekendStreak);
     setPromptTaskNote(Defaults::promptTaskNote);
     setColorScheme(QString(Defaults::colorScheme));
+    setAccentColor(QString(Defaults::accentColor));
     setUpdateChannel(QString(Defaults::updateChannel));
     setAutoCheckUpdates(Defaults::autoCheckUpdates);
     setVerboseLogging(Defaults::verboseLogging);
