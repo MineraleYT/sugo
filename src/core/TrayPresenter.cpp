@@ -56,6 +56,12 @@ TrayStatus describeTray(TimerEngine::State state, TimerEngine::Phase phase, int 
     return status;
 }
 
+QString menuText(const QString &text)
+{
+    QString escaped = text;
+    return escaped.replace(QLatin1Char('&'), QLatin1String("&&"));
+}
+
 QString menuStatusLine(TimerEngine::State state, TimerEngine::Phase phase, int remainingSeconds, const QString &presetName)
 {
     QString phaseLabel = phaseName(phase);

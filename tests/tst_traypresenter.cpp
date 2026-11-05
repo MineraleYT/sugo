@@ -103,6 +103,14 @@ private Q_SLOTS:
                  QStringLiteral("Long break \u00b7 15:00 \u00b7 Pomodoro"));
     }
 
+    void menuTextDoublesEveryAmpersand()
+    {
+        QCOMPARE(menuText(QStringLiteral("R&D")), QStringLiteral("R&&D"));
+        QCOMPARE(menuText(QStringLiteral("Tom & Jerry && co")), QStringLiteral("Tom && Jerry &&&& co"));
+        QCOMPARE(menuText(QStringLiteral("Pomodoro")), QStringLiteral("Pomodoro"));
+        QCOMPARE(menuText(QString()), QString());
+    }
+
     void menuStatusLineFallsBackWhenTheNameIsEmpty()
     {
         QCOMPARE(menuStatusLine(State::Idle, Phase::Work, 25 * 60, QString()), QStringLiteral("Work \u00b7 25:00 \u00b7 Sugo"));
