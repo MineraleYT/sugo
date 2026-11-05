@@ -823,6 +823,21 @@ private Q_SLOTS:
         QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(bundle)));
     }
 
+    void macSwapKeepsABackupWhenTheBundleIsGone()
+    {
+        // Sugo.app moved away while running, and a Sugo.app.old that may be the only copy left.
+        LocalMacRelease release;
+        QVERIFY(release.stageUpdate());
+        const QString backup = release.bundle + QStringLiteral(".old");
+        QVERIFY(QDir().rename(release.bundle, backup));
+        MacBundleInstaller installer(release.bundle, release.standIns(endedProcessId()));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot install the update: .* is not there any more")));
+        QVERIFY(!installer.finish(true, 0));
+        QCOMPARE(release.executable(backup), QStringLiteral("old Sugo"));
+        QCOMPARE(release.executable(release.bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
+        QVERIFY(!QFileInfo::exists(release.bundle));
+    }
+
     void macFeedWithoutDiskImageIsOnlyReported()
     {
         qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");

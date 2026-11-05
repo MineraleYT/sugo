@@ -352,7 +352,13 @@ bool MacBundleInstaller::finish(bool launch, qint64 pid)
     // The running bundle steps aside, the new one takes its place; if that fails, the old one
     // comes back. A running program keeps its files open whatever their bundle is called.
     const QString backup = m_bundle + QStringLiteral(".old");
+    if (!QFileInfo(m_bundle).isDir()) {
+        // Moved or removed while running: a "<bundle>.old" may then be the only copy of Sugo.
+        qWarning().noquote() << "Cannot install the update:" << m_bundle << "is not there any more; the update stays at" << fresh;
+        return false;
+    }
     if (QFileInfo::exists(backup) && !QDir(backup).removeRecursively()) {
+        qWarning().noquote() << "Cannot install the update: cannot remove" << backup;
         return false;
     }
     if (!rename(m_bundle, backup)) {
