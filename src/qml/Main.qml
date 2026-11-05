@@ -620,9 +620,34 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 TimerEngine.stop();
+                composer.autoStartButton.clicked();
+                if (!composer.autoStartMenu.visible) {
+                    fail(63, "The start mode button did not open its menu");
+                    return true;
+                }
                 return false;
             }
             case 3: {
+                // The start mode menu: above its button, left-aligned; a choice is the timer's option.
+                const composer = findItem(page, item => item.objectName === "composer");
+                const menu = composer.autoStartMenu;
+                if (Math.abs(menu.y + menu.height + Theme.menuOffset) > 1 || Math.abs(menu.x) > 1) {
+                    fail(63, "The start mode menu is not above its button, 4 px away and left-aligned: x " + menu.x
+                         + ", bottom " + (menu.y + menu.height));
+                    return true;
+                }
+                const entry = findItem(menu.contentItem, item => item.objectName === "autoStartEntry-2");
+                const before = PresetModel.option(PresetModel.currentUuid, "autoStartMode");
+                entry.clicked();
+                if (PresetModel.option(PresetModel.currentUuid, "autoStartMode") !== 2 || !entry.checked
+                        || composer.autoStartButton.text !== i18n("All phases")) {
+                    fail(63, "Choosing All phases in the start mode menu did not set the timer's option");
+                    return true;
+                }
+                PresetModel.setOption(PresetModel.currentUuid, "autoStartMode", before);
+                return false;
+            }
+            case 4: {
                 // A phase that has only just started stops at once.
                 TimerEngine.start();
                 page.requestStop();

@@ -23,10 +23,9 @@ Rectangle {
     /// The timer button and its menu.
     readonly property alias timerButton: timerButton
     readonly property alias timerMenu: timerMenu
-    /// The start mode button.
+    /// The start mode button and its menu.
     readonly property alias autoStartButton: autoStartButton
-
-    signal autoStartMenuRequested()
+    readonly property alias autoStartMenu: autoStartMenu
 
     readonly property bool isIdle: TimerEngine.state === TimerEngine.State.Idle
     readonly property bool isWorkPhase: TimerEngine.phase === TimerEngine.Phase.Work
@@ -74,6 +73,12 @@ Rectangle {
         }
     }
 
+    AutoStartMenu {
+        id: autoStartMenu
+        anchorItem: autoStartButton
+        mode: composer.autoStartMode
+    }
+
     RowLayout {
         id: controls
         anchors.fill: parent
@@ -110,7 +115,8 @@ Rectangle {
             toolTipText: iconOnly ? i18n("Start automatically") : ""
             Accessible.name: i18n("Start automatically")
             Accessible.description: text
-            onClicked: composer.autoStartMenuRequested()
+            open: autoStartMenu.visible
+            onClicked: autoStartMenu.toggle()
         }
 
         // Quiet: notifications silenced while working (the timer's option). Where the desktop

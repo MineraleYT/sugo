@@ -40,6 +40,7 @@ qt6_add_qml_module(sugo_core
         qml/components/SSwitch.qml
         qml/components/STextField.qml
         qml/components/SComboBox.qml
+        qml/components/AutoStartMenu.qml
         qml/components/CommandPalette.qml
         qml/components/Composer.qml
         qml/components/SSlider.qml
