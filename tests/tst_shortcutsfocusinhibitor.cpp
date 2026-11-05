@@ -221,6 +221,32 @@ private Q_SLOTS:
         QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff}));
     }
 
+    void quittingWaitsForTheWholeReleaseAfterAHungOn_data()
+    {
+        QTest::addColumn<bool>("retryHangs");
+        QTest::newRow("the retried off answers") << false;
+        QTest::newRow("the retried off hangs too") << true;
+    }
+
+    // The longest release: an "on" in flight that times out, the pause, an "off" that times
+    // out, the pause, the retried "off". Quitting (SilenceController::shutdown) waits
+    // releaseTimeoutMs(), which must cover all of it.
+    void quittingWaitsForTheWholeReleaseAfterAHungOn()
+    {
+        QFETCH(bool, retryHangs);
+        QVERIFY(makeReady());
+        inhibitor->setTimeoutsForTesting(300, 2000, 1000);
+        if (retryHangs) {
+            fake->setHang(true);
+        } else {
+            fake->setHangingRuns(2); // the "on" and the first "off"
+        }
+        inhibitor->inhibit(QStringLiteral("work"));
+        inhibitor->release();
+        QVERIFY(inhibitor->waitUntilReleased(inhibitor->releaseTimeoutMs()));
+        QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff, kRunOff}));
+    }
+
     void wantedBeforeTheShortcutsExistTurnsOnOnceTheyDo()
     {
         fake->setList({});
