@@ -208,6 +208,8 @@ QtObject {
     readonly property int chartHeightCompact: 90
     readonly property int chartBarMaxWidth: 34
     readonly property int breakdownBarHeight: 4
+    /// The statistics fill the window up to this width, then stay centred.
+    readonly property int statsMaxWidth: 1040
 
     // --- Settings
     readonly property int settingsNavWidth: 178

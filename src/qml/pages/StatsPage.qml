@@ -135,11 +135,16 @@ QQC2.Page {
         }
     }
 
+    /// A narrow window: smaller margins, the figures two by two, the panels one under the other.
+    readonly property bool compact: width < Theme.compactBreakpoint
+    readonly property real paddingX: compact ? Theme.pagePaddingCompact : Theme.pagePaddingX
+    readonly property real paddingY: compact ? Theme.pagePaddingCompact : Theme.pagePaddingY
+
     Flickable {
         id: flickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + Theme.space2xl * 2
+        contentHeight: column.implicitHeight + page.paddingY * 2
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
@@ -147,20 +152,21 @@ QQC2.Page {
         ColumnLayout {
             id: column
             x: (flickable.width - width) / 2
-            y: Theme.space2xl
-            width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.space2xl
+            y: page.paddingY
+            width: Math.min(flickable.width - page.paddingX * 2, Theme.statsMaxWidth)
+            spacing: page.compact ? Theme.spaceLg : Theme.spaceXl
 
             // Which stretch of time: back, the period, forward; and how long a stretch.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spaceXs
+                spacing: Theme.spaceSm
 
                 SButton {
                     kind: "ghost"
                     iconOnly: true
                     iconName: "chevron-left"
                     text: i18n("Previous")
+                    implicitHeight: Theme.iconButton
                     onClicked: StatsModel.previousPeriod()
                 }
                 // Its own width at most (the spacer takes the rest), cut short when the row is
@@ -168,20 +174,19 @@ QQC2.Page {
                 Text {
                     text: StatsModel.title
                     color: Theme.foreground
-                    font.pixelSize: Theme.fontTitle + 1
+                    font.pixelSize: Theme.fontTitle
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.maximumWidth: implicitWidth
-                    Layout.leftMargin: Theme.spaceXs
-                    Layout.rightMargin: Theme.spaceXs
                 }
                 SButton {
                     kind: "ghost"
                     iconOnly: true
                     iconName: "chevron-right"
                     text: i18n("Next")
+                    implicitHeight: Theme.iconButton
                     enabled: StatsModel.canGoNext
                     onClicked: StatsModel.nextPeriod()
                 }
@@ -189,6 +194,7 @@ QQC2.Page {
                     visible: !StatsModel.isCurrent
                     kind: "ghost"
                     text: i18n("Today")
+                    implicitHeight: Theme.iconButton
                     onClicked: StatsModel.today()
                 }
                 Item {
