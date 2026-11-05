@@ -120,12 +120,16 @@ void FreedesktopNotifier::send(QObject *context, const Notification &notificatio
         }
     }
 
+    // A server with body-markup reads the body as markup (the summary never): the text is plain,
+    // and a "<" or "&" in it (a timer name, a task note) must stay as it is.
+    const QString body = capabilities.contains(QStringLiteral("body-markup")) ? notification.text.toHtmlEscaped() : notification.text;
+
     QDBusMessage message = QDBusMessage::createMethodCall(kService, kPath, kInterface, QStringLiteral("Notify"));
     message.setArguments({m_appName,
                           QVariant::fromValue(0U), // replaces_id: a new notification
                           notification.iconName,
                           notification.title,
-                          notification.text,
+                          body,
                           actions,
                           hints,
                           -1}); // the server's own timeout
