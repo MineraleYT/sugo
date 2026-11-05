@@ -167,6 +167,60 @@ private Q_SLOTS:
         QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff}));
     }
 
+    void aHungOffShortcutIsRunOnceMore()
+    {
+        QVERIFY(makeReady());
+        inhibitor->setTimeoutsForTesting(300, 2000);
+        inhibitor->inhibit(QStringLiteral("work"));
+        QTest::qWait(200);
+        QCOMPARE(fake->runs(), QStringList{kRunOn});
+
+        fake->setHang(true);
+        inhibitor->release();
+        QTest::qWait(500);
+        // "Off" timed out: the Focus may still be on, so it is not reported as released.
+        QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff}));
+        QVERIFY(inhibitor->isInhibited());
+        QVERIFY(inhibitor->isReleasing());
+
+        fake->setHang(false);
+        QVERIFY(inhibitor->waitUntilReleased(10000));
+        QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff, kRunOff}));
+    }
+
+    void aHungOffShortcutIsRetriedOnlyOnce()
+    {
+        QVERIFY(makeReady());
+        inhibitor->setTimeoutsForTesting(300, 2000);
+        inhibitor->inhibit(QStringLiteral("work"));
+        QTest::qWait(200);
+
+        fake->setHang(true);
+        inhibitor->release();
+        QVERIFY(inhibitor->waitUntilReleased(10000)); // gives up after the second try
+        QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff, kRunOff}));
+        QTest::qWait(1500);
+        QCOMPARE(fake->runs().size(), 3); // no retry loop
+    }
+
+    void offWaitsAMomentAfterAHungOn()
+    {
+        QVERIFY(makeReady());
+        inhibitor->setTimeoutsForTesting(300, 2000);
+        fake->setHang(true);
+        inhibitor->inhibit(QStringLiteral("work"));
+        inhibitor->release();
+        QTest::qWait(500);
+        fake->setHang(false);
+        // The killed client may not have stopped the shortcut inside Shortcuts: an "off" run at
+        // once could land before a late "on".
+        QCOMPARE(fake->runs(), QStringList{kRunOn});
+        QVERIFY(inhibitor->isInhibited());
+
+        QVERIFY(inhibitor->waitUntilReleased(10000));
+        QCOMPARE(fake->runs(), (QStringList{kRunOn, kRunOff}));
+    }
+
     void wantedBeforeTheShortcutsExistTurnsOnOnceTheyDo()
     {
         fake->setList({});
