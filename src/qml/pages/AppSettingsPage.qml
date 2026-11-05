@@ -1006,13 +1006,22 @@ QQC2.Page {
                     visible: page.narrow
                     Layout.fillWidth: true
                 }
-                SButton {
-                    objectName: "newTimerButton"
+                // The button is taller than the title: it is centred on the row without making it
+                // taller, so the Timers page starts at the same height as the others.
+                Item {
                     visible: page.category === "timers"
-                    kind: "primary"
-                    iconName: "plus"
-                    text: i18n("New timer")
-                    onClicked: applicationWindow().newTimer()
+                    Layout.fillHeight: true
+                    implicitWidth: newTimerButton.implicitWidth
+                    SButton {
+                        id: newTimerButton
+                        objectName: "newTimerButton"
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        kind: "primary"
+                        iconName: "plus"
+                        text: i18n("New timer")
+                        onClicked: applicationWindow().newTimer()
+                    }
                 }
             }
 
