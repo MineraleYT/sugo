@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * A row of an SMenu: an optional leading icon (`iconName`, a LineIcon), colour dot (`swatch`) or

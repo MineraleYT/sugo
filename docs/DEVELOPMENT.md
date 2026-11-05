@@ -91,10 +91,10 @@ The install step also puts the KRunner plugin, and the D-Bus activation file in 
 
 ```sh
 flatpak-builder --user --install --install-deps-from=flathub --force-clean \
-    "$HOME/.cache/sugo-flatpak-build" io.github.mineraleyt.sugo.yml
+    "$HOME/.cache/sugo-flatpak-build" stream.sugo.app.yml
 ```
 
-The sandbox permissions are in the `finish-args` of `io.github.mineraleyt.sugo.yml`.
+The sandbox permissions are in the `finish-args` of `stream.sugo.app.yml`.
 
 ---
 
@@ -244,18 +244,18 @@ A release is a version bump, a commit, an annotated tag on `main` and a push. Th
 
 **Nightly builds.** Every push to `testing` that passes CI is built by `nightly.yml` and published as a new pre-release tagged `vX.Y.Z-nightly.YYYYMMDD.N` (`release.yml` ignores these tags): the AppImage and `nightly.json`. Started by hand (Run workflow on `testing`), it publishes only when the newest CI run of that commit on `testing` passed. The pre-release `nightly` stays as the fixed address of the feed of the nightly channel (it holds only the latest `nightly.json`; its tag follows `testing`, the branch can't be called `nightly` like the tag) and as the starting point of the next release notes. Old nightlies are not deleted. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. `YYYYMMDD` is the day the workflow run was created (UTC), not the date of the commit, and `N` its run number, so each nightly is newer than the ones before it even when `testing` moves to an older commit. The feed and the tag `nightly` only move forward: a publish that finds `nightly.json` already announcing a newer version (an older run re-run, or one that reached the publish job late) keeps its own pre-release and leaves them as they are. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
 
-**macOS.** Both workflows also build `Sugo-macOS-universal.dmg` with `macos.yml` (on a macOS runner, see [Building the macOS app](#building-the-macos-app)). For now a failure there does not stop the release: the Linux packages and the feed are published without the disk image. When it is there it is uploaded with the other files, the notes explain how to open it the first time (Gatekeeper), and the feed gets a `macos` entry (`url`, `sha256`, `size` of the disk image) next to the AppImage's keys, which the AppImages ignore. The macOS app reads that entry to update itself, like the AppImage, when its bundle is in a folder it can write to (`/Applications` for an administrator; `MacBundle::path()`, `MacBundleInstaller` in `src/core/UpdateInstaller.h`): it downloads the disk image next to the bundle, checks its size and SHA-256, mounts it (`hdiutil attach -nobrowse -readonly`), checks that its `Sugo.app` has the bundle identifier `io.github.mineraleyt.sugo` and a valid signature (`codesign --verify --deep --strict`), copies it next to the running app as `.Sugo.app.new`, hidden so that Spotlight and launchers do not list it (`ditto`, then `xattr -cr`) and detaches the image; when Sugo quits, the new bundle takes the old one's place, and "Restart to update" opens it (`open -n`). Any failure leaves the installed app as it was. Only the disk image's app does this: `packaging/macos/build.sh` configures with `-DSUGO_INSTALLS_UPDATES=ON`, which puts `SugoInstallsUpdates` = true in its `Info.plist`; a `Sugo.app` built from source has it false and, like a build from source on Linux, only reports new versions (otherwise "Install update" would replace the build being worked on with the release). A feed without `macos`, or an app in a folder it cannot write to, also only reports the new version, with a link to the release page.
+**macOS.** Both workflows also build `Sugo-macOS-universal.dmg` with `macos.yml` (on a macOS runner, see [Building the macOS app](#building-the-macos-app)). For now a failure there does not stop the release: the Linux packages and the feed are published without the disk image. When it is there it is uploaded with the other files, the notes explain how to open it the first time (Gatekeeper), and the feed gets a `macos` entry (`url`, `sha256`, `size` of the disk image) next to the AppImage's keys, which the AppImages ignore. The macOS app reads that entry to update itself, like the AppImage, when its bundle is in a folder it can write to (`/Applications` for an administrator; `MacBundle::path()`, `MacBundleInstaller` in `src/core/UpdateInstaller.h`): it downloads the disk image next to the bundle, checks its size and SHA-256, mounts it (`hdiutil attach -nobrowse -readonly`), checks that its `Sugo.app` has the bundle identifier `stream.sugo.app` and a valid signature (`codesign --verify --deep --strict`), copies it next to the running app as `.Sugo.app.new`, hidden so that Spotlight and launchers do not list it (`ditto`, then `xattr -cr`) and detaches the image; when Sugo quits, the new bundle takes the old one's place, and "Restart to update" opens it (`open -n`). Any failure leaves the installed app as it was. Only the disk image's app does this: `packaging/macos/build.sh` configures with `-DSUGO_INSTALLS_UPDATES=ON`, which puts `SugoInstallsUpdates` = true in its `Info.plist`; a `Sugo.app` built from source has it false and, like a build from source on Linux, only reports new versions (otherwise "Install update" would replace the build being worked on with the release). A feed without `macos`, or an app in a folder it cannot write to, also only reports the new version, with a link to the release page.
 
 **Checklist** for version `X.Y.Z`:
 
 1. `CMakeLists.txt`: `project(Sugo VERSION X.Y.Z …)`.
-2. `data/io.github.mineraleyt.sugo.metainfo.xml`: add a new `<release version="X.Y.Z" date="YYYY-MM-DD">` **above** the previous ones, with a short list of what changed.
+2. `data/stream.sugo.app.metainfo.xml`: add a new `<release version="X.Y.Z" date="YYYY-MM-DD">` **above** the previous ones, with a short list of what changed.
 3. Build and run the whole test suite in a clean environment.
 4. Validate the metadata:
    ```sh
-   appstreamcli validate --no-net data/io.github.mineraleyt.sugo.metainfo.xml
-   desktop-file-validate data/io.github.mineraleyt.sugo.desktop \
-       build/io.github.mineraleyt.sugo.runner.desktop
+   appstreamcli validate --no-net data/stream.sugo.app.metainfo.xml
+   desktop-file-validate data/stream.sugo.app.desktop \
+       build/stream.sugo.app.runner.desktop
    ```
 5. Commit (`Release vX.Y.Z: …`), then tag and push:
    ```sh

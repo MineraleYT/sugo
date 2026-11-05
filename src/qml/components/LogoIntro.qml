@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Shapes
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * The application icon drawn live, with its entrance: the tile comes in, the spiral draws itself
  * from the centre outwards, the leaf sprouts at its tip and a soft light of the brand settles
  * behind it. `play()` runs it (about 1.3 s); until then nothing shows, and `finish()` jumps to
- * the end. Same picture as data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg.
+ * the end. Same picture as data/icons/hicolor/scalable/apps/stream.sugo.app.svg.
  */
 Item {
     id: logo

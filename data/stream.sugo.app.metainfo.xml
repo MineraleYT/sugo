@@ -4,7 +4,7 @@
   SPDX-License-Identifier: CC0-1.0
 -->
 <component type="desktop-application">
-  <id>io.github.mineraleyt.sugo</id>
+  <id>stream.sugo.app</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Sugo</name>
@@ -24,15 +24,19 @@
       <li>KRunner integration, optional automatic pause when the screen is locked, and task notes for completed sessions</li>
     </ul>
   </description>
-  <launchable type="desktop-id">io.github.mineraleyt.sugo.desktop</launchable>
-  <developer id="io.github.mineraleyt">
+  <launchable type="desktop-id">stream.sugo.app.desktop</launchable>
+  <developer id="stream.sugo">
     <name>MinerAle</name>
   </developer>
   <url type="homepage">https://github.com/sugoHQ/sugo</url>
   <url type="bugtracker">https://github.com/sugoHQ/sugo/issues</url>
   <provides>
     <binary>sugo</binary>
+    <id>io.github.mineraleyt.sugo</id>
   </provides>
+  <replaces>
+    <id>io.github.mineraleyt.sugo</id>
+  </replaces>
   <releases>
     <release version="1.0.1" date="2026-11-04">
       <description>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * A Banner in a place of its own, so that nothing around it moves when the message comes, goes

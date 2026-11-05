@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma Singleton
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * Every colour and size of the interface. The QML elsewhere uses only these (tests/check_qml_colours.sh

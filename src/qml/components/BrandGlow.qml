@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Shapes
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A soft round light in the brand colours, fading out towards its edge (behind the welcome logo).
 Shape {

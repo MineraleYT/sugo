@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Shapes
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// The focus page: the time in large, where it sits in the cycle, the three controls and the timer in use.
 QQC2.Page {

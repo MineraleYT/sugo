@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// How much was done: the period's figures (the total and how it compares, sessions, breaks,
 /// the streak), one chart, where the time went, and the task notes.

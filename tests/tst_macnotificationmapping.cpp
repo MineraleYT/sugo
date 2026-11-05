@@ -55,7 +55,7 @@ private Q_SLOTS:
         // Field boundaries matter: "ab"+"c" is not "a"+"bc".
         const QString shifted1 = categoryIdentifier(actionsFor(withActions({QStringLiteral("ab"), QStringLiteral("c")}, false)));
         const QString shifted2 = categoryIdentifier(actionsFor(withActions({QStringLiteral("a"), QStringLiteral("bc")}, false)));
-        QVERIFY(a.startsWith(QStringLiteral("io.github.mineraleyt.sugo.actions.")));
+        QVERIFY(a.startsWith(QStringLiteral("stream.sugo.app.actions.")));
         QCOMPARE(a, same);
         QVERIFY(a != otherLabel);
         QVERIFY(a != withReply);

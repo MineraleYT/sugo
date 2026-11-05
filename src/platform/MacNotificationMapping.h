@@ -41,7 +41,7 @@ struct ActionSpec {
 /// The buttons of `notification`, in order: its actions, then the reply field.
 QList<ActionSpec> actionsFor(const Notifier::Notification &notification);
 
-/// The category for `actions`: "io.github.mineraleyt.sugo.actions.<hash>", empty if there are none.
+/// The category for `actions`: "stream.sugo.app.actions.<hash>", empty if there are none.
 QString categoryIdentifier(const QList<ActionSpec> &actions);
 } // namespace MacNotificationMapping
 

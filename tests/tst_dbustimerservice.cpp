@@ -26,7 +26,7 @@ private:
     {
         QDBusConnection caller(QStringLiteral("caller"));
         QDBusMessage message = QDBusMessage::createMethodCall(
-            service, QStringLiteral("/Timer"), QStringLiteral("io.github.mineraleyt.sugo.Timer"), method);
+            service, QStringLiteral("/Timer"), QStringLiteral("stream.sugo.app.Timer"), method);
         message.setArguments(arguments);
         const QDBusPendingCall pending = caller.asyncCall(message);
         QDBusPendingCallWatcher watcher(pending);
@@ -97,7 +97,7 @@ private Q_SLOTS:
         QVERIFY(app.registerObject(QStringLiteral("/Timer"), &host, QDBusConnection::ExportAdaptors));
 
         const QDBusMessage message = QDBusMessage::createMethodCall(
-            service, QStringLiteral("/Timer"), QStringLiteral("io.github.mineraleyt.sugo.Timer"), QStringLiteral("start"));
+            service, QStringLiteral("/Timer"), QStringLiteral("stream.sugo.app.Timer"), QStringLiteral("start"));
         const QDBusPendingCall pending = QDBusConnection(QStringLiteral("caller")).asyncCall(message);
 
         FakeClock clock;

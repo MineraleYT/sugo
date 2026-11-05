@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A row of choices where one is on: `model` is an array of { id, text }.
 Rectangle {

@@ -90,15 +90,15 @@ endif()
 # Linux desktop integration. The configured files stay on every system (tst_runner_version reads one).
 # KRunner only looks for D-Bus runners in share/krunner/dbusplugins. The plugin version
 # comes from project() so it can never fall behind a release.
-configure_file(data/io.github.mineraleyt.sugo.runner.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop @ONLY)
+configure_file(data/stream.sugo.app.runner.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/stream.sugo.app.runner.desktop @ONLY)
 # D-Bus activation: KRunner or a `qdbus` call can start Sugo (hidden in the tray) on demand.
-configure_file(data/io.github.mineraleyt.sugo.service.in ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.service @ONLY)
+configure_file(data/stream.sugo.app.service.in ${CMAKE_CURRENT_BINARY_DIR}/stream.sugo.app.service @ONLY)
 if(NOT APPLE)
-    install(FILES data/io.github.mineraleyt.sugo.desktop DESTINATION ${KDE_INSTALL_APPDIR})
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop DESTINATION ${KDE_INSTALL_DATADIR}/krunner/dbusplugins)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.mineraleyt.sugo.service DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR})
-    install(FILES data/io.github.mineraleyt.sugo.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
-    install(FILES data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg
+    install(FILES data/stream.sugo.app.desktop DESTINATION ${KDE_INSTALL_APPDIR})
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stream.sugo.app.runner.desktop DESTINATION ${KDE_INSTALL_DATADIR}/krunner/dbusplugins)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/stream.sugo.app.service DESTINATION ${KDE_INSTALL_DBUSSERVICEDIR})
+    install(FILES data/stream.sugo.app.metainfo.xml DESTINATION ${KDE_INSTALL_METAINFODIR})
+    install(FILES data/icons/hicolor/scalable/apps/stream.sugo.app.svg
             DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps)
 endif()
 

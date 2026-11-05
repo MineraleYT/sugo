@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// The icon of a timer (`iconName` as stored with it): one of the built-in tiles, or a theme icon.
 ThemeIcon {

@@ -117,8 +117,8 @@ jobs:
 
       - name: Validate metadata
         run: |
-          appstreamcli validate --no-net data/io.github.mineraleyt.sugo.metainfo.xml
-          desktop-file-validate data/io.github.mineraleyt.sugo.desktop
+          appstreamcli validate --no-net data/stream.sugo.app.metainfo.xml
+          desktop-file-validate data/stream.sugo.app.desktop
 
       # The compiler cache of the newest run on this branch, else on the branch a pull request
       # targets, else on main (the branches a run may read caches from): only what changed recompiles.
@@ -139,7 +139,7 @@ jobs:
             -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Validate the generated runner definition
-        run: desktop-file-validate build/io.github.mineraleyt.sugo.runner.desktop
+        run: desktop-file-validate build/stream.sugo.app.runner.desktop
 
       - name: Build
         run: |

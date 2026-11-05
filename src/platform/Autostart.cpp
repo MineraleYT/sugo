@@ -197,7 +197,7 @@ std::unique_ptr<Autostart> createAutostart()
     // The bundle's executable (Sugo.app/Contents/MacOS/Sugo); repair() follows the bundle if it moves.
     return std::make_unique<LaunchAgentAutostart>(
         QDir::homePath() + QStringLiteral("/Library/LaunchAgents"),
-        QStringLiteral("io.github.mineraleyt.sugo"),
+        QStringLiteral("stream.sugo.app"),
         QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--background")});
 #else
     return std::make_unique<UnsupportedAutostart>();

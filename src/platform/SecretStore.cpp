@@ -44,6 +44,8 @@ bool AskOnceSecretStore::write(const QString &key, const QString &secret)
 
 QString secretStoreService()
 {
+    // The app ID before 1.0.3 (now stream.sugo.app), kept: the keyring's items are found by it, and
+    // a new name would lose the calendar password and Sugo Sync's keys.
     return QStringLiteral("io.github.mineraleyt.sugo");
 }
 

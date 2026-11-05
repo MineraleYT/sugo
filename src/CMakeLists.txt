@@ -7,7 +7,7 @@ qt6_add_library(sugo_core STATIC)
 set_source_files_properties(qml/theme/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(sugo_core
-    URI "io.github.mineraleyt.sugo"
+    URI "stream.sugo.app"
     VERSION 1.0
     PLUGIN_TARGET sugo_qml
     CLASS_NAME SugoQmlPlugin
@@ -181,7 +181,7 @@ if(APPLE)
     # Sugo.app: the icon (Contents/Resources/Sugo.icns, from packaging/macos/render-icons.sh's PNGs)
     # and an Info.plist whose version is only X.Y.Z (nightly suffixes are not valid there).
     include(ECMAddAppIcon)
-    file(GLOB sugo_macos_icons "${PROJECT_SOURCE_DIR}/data/icons/macos/*-apps-io.github.mineraleyt.sugo.png")
+    file(GLOB sugo_macos_icons "${PROJECT_SOURCE_DIR}/data/icons/macos/*-apps-stream.sugo.app.png")
     if(sugo_macos_icons)
         ecm_add_app_icon(sugo_app_sources ICONS ${sugo_macos_icons} OUTFILE_BASENAME Sugo)
     endif()
@@ -204,7 +204,7 @@ add_executable(sugo MACOSX_BUNDLE ${sugo_app_sources})
 if(APPLE)
     set_target_properties(sugo PROPERTIES
         OUTPUT_NAME Sugo
-        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.mineraleyt.sugo
+        MACOSX_BUNDLE_GUI_IDENTIFIER stream.sugo.app
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
     )
 endif()
@@ -232,7 +232,7 @@ qt6_add_resources(sugo "preseticons"
 qt6_add_resources(sugo "appicon"
     PREFIX "/icons"
     BASE "${CMAKE_SOURCE_DIR}/data/icons/hicolor/scalable/apps"
-    FILES "${CMAKE_SOURCE_DIR}/data/icons/hicolor/scalable/apps/io.github.mineraleyt.sugo.svg"
+    FILES "${CMAKE_SOURCE_DIR}/data/icons/hicolor/scalable/apps/stream.sugo.app.svg"
 )
 
 # The QML plugin first, then the library it links privately: listed the other way round, CMake repeats
@@ -328,7 +328,7 @@ endif()
 # The macOS menu bar (Qt.labs.platform). A plain resource next to the module's QML, not one of its
 # QML_FILES: Main.qml loads it by URL only on macOS, so Linux neither compiles nor imports it.
 qt_add_resources(sugo_core "sugo_macos_menu"
-    PREFIX "/qt/qml/io/github/mineraleyt/sugo"
+    PREFIX "/qt/qml/stream/sugo/app"
     FILES qml/components/MacMenuBar.qml
 )
 
