@@ -656,12 +656,20 @@ private Q_SLOTS:
         onB.sort();
         QCOMPARE(onA, onB);
         const int settled = puts();
+        const int pulled = gets();
         a.sync->syncNow();
         b.sync->syncNow();
-        QTest::qWait(30 * kUnitMs);
+        // Idle only once no request runs (an upload follows its download at once): wait for it
+        // rather than a fixed time, which a loaded machine outlasts.
+        QTRY_COMPARE_WITH_TIMEOUT(a.sync->state(), SyncController::Idle, 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(b.sync->state(), SyncController::Idle, 10000);
+        QVERIFY(gets() >= pulled + 2); // both asked the server
+        QTest::qWait(10 * kUnitMs); // longer than the push delay: nothing is left to go out
         QCOMPARE(puts(), settled);
-        QCOMPARE(a.sync->state(), SyncController::Idle);
-        QCOMPARE(b.sync->state(), SyncController::Idle);
+        // (The periodic pull may have started meanwhile: wait for it, it must not fail either.)
+        QTRY_COMPARE_WITH_TIMEOUT(a.sync->state(), SyncController::Idle, 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(b.sync->state(), SyncController::Idle, 10000);
+        QCOMPARE(puts(), settled);
     }
 
     void keyringIsReadOncePerStartAndNeverWhileOff()
