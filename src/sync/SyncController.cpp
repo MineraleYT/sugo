@@ -503,8 +503,19 @@ void SyncController::takeRemote(const SyncReply &reply)
         return;
     }
     m_heldForTimer = false;
-    if (merged.changedLocal) {
-        applyLocally(merged.result.presets, merged.result.tombstones);
+    // While saves fail, the model may already hold the merge the database lacks: store it again.
+    if ((merged.changedLocal || m_persistence->isSaveFailing())
+        && !applyLocally(merged.result.presets, merged.result.tombstones)) {
+        // Keep the old ETag and Dirty: the next download brings this blob again (not 304) and
+        // merges it with what the database holds, and no upload takes the unsaved state as
+        // what the server has.
+        qCWarning(lcSyncController) << "Cannot store the synced timers; downloading them again later";
+        m_pullWanted = true;
+        setError(LocalSaveFailed);
+        constexpr int steps = int(std::size(kRetryDelays));
+        scheduleRetry(kRetryDelays[std::min(m_failures, steps - 1)]);
+        ++m_failures;
+        return;
     }
     setEtag(reply.etag);
     setLastSyncNow();
@@ -521,14 +532,15 @@ void SyncController::takeRemote(const SyncReply &reply)
     succeeded();
 }
 
-void SyncController::applyLocally(const QList<TimerPreset> &presets, const QList<PresetTombstone> &tombstones)
+bool SyncController::applyLocally(const QList<TimerPreset> &presets, const QList<PresetTombstone> &tombstones)
 {
     // Neither the model nor the save may answer with an upload of what just arrived.
     m_applyingRemote = true;
     // A selected timer deleted elsewhere falls back to the built-in one.
     m_presets->setPresets(presets, m_presets->currentUuid());
-    m_persistence->save(tombstones);
+    const bool stored = m_persistence->save(tombstones);
     m_applyingRemote = false;
+    return stored;
 }
 
 bool SyncController::wouldStopTimer(const QList<TimerPreset> &presets) const
@@ -775,6 +787,8 @@ QString SyncController::errorText(ErrorKind kind)
         return i18n("Sugo Sync is busy. Trying again later.");
     case Server:
         return i18n("Sugo Sync could not save the timers. Trying again later.");
+    case LocalSaveFailed:
+        return i18n("Sugo could not save the synced timers on this device. Trying again later.");
     case SignedOutRemotely:
         return i18n("This device was disconnected. Sign in again.");
     case NoError:
