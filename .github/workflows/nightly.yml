@@ -112,7 +112,8 @@ jobs:
     needs: [version, appimage, macos]
     # Waits for the macOS build but does not need it; a build cancelled by a newer run skips it.
     if: ${{ !cancelled() && needs.version.result == 'success' && needs.appimage.result == 'success' && needs.macos.result != 'cancelled' }}
-    # One publish at a time, in the order the runs reach it, each running to its end.
+    # One publish at a time, in the order the runs reach it, each running to its end. That order
+    # need not be the order of the versions: the feed and the tag nightly never move back.
     concurrency:
       group: nightly-publish
       cancel-in-progress: false
@@ -214,6 +215,56 @@ jobs:
             gh release create "$tag" --repo "$REPO" --prerelease --latest=false --verify-tag --title "$title" --notes-file notes.md
           fi
           gh release upload "$tag" "${files[@]}" nightly.json --repo "$REPO" --clobber
+
+          # The feed and the tag nightly only move forward. Publishes run one at a time, but not
+          # always in the order of their versions: a re-run keeps its version, and the group keeps
+          # one pending run, not a queue. A feed already announcing a newer nightly stays as it is;
+          # this build keeps its own pre-release above.
+          # compare A B prints 1, 0 or -1 as UpdateChecker::compareVersions orders them: the
+          # numbers, then a release above its pre-releases, then each pre-release identifier
+          # (numerically when both are numbers), then more identifiers above fewer.
+          compare() {
+            local a=${1%%+*} b=${2%%+*} ap= bp= i n p q
+            [[ $a == *-* ]] && ap=${a#*-}
+            [[ $b == *-* ]] && bp=${b#*-}
+            local -a x y
+            IFS=. read -ra x <<< "${a%%-*}"
+            IFS=. read -ra y <<< "${b%%-*}"
+            n=$(( ${#x[@]} > ${#y[@]} ? ${#x[@]} : ${#y[@]} ))
+            for ((i = 0; i < n; i++)); do
+              p=$((10#${x[i]:-0})) q=$((10#${y[i]:-0}))
+              if ((p != q)); then ((p > q)) && echo 1 || echo -1; return; fi
+            done
+            if [ -z "$ap" ] || [ -z "$bp" ]; then
+              if [ "$ap" = "$bp" ]; then echo 0; elif [ -z "$ap" ]; then echo 1; else echo -1; fi
+              return
+            fi
+            IFS=. read -ra x <<< "$ap"
+            IFS=. read -ra y <<< "$bp"
+            n=$(( ${#x[@]} < ${#y[@]} ? ${#x[@]} : ${#y[@]} ))
+            for ((i = 0; i < n; i++)); do
+              p=${x[i]} q=${y[i]}
+              if [[ $p =~ ^[0-9]+$ && $q =~ ^[0-9]+$ ]]; then
+                p=$((10#$p)) q=$((10#$q))
+                if ((p != q)); then ((p > q)) && echo 1 || echo -1; return; fi
+              elif [ "$p" != "$q" ]; then
+                [[ $p > $q ]] && echo 1 || echo -1; return
+              fi
+            done
+            if ((${#x[@]} != ${#y[@]})); then ((${#x[@]} > ${#y[@]})) && echo 1 || echo -1; else echo 0; fi
+          }
+          feed_dir=$RUNNER_TEMP/current-feed
+          current=
+          if gh release download nightly --repo "$REPO" --pattern nightly.json --dir "$feed_dir" 2> "$RUNNER_TEMP/feed-error"; then
+            current=$(jq -r '.version // empty' "$feed_dir/nightly.json" 2>/dev/null || true)
+          elif ! grep -qiE 'release not found|no assets match' "$RUNNER_TEMP/feed-error"; then
+            echo "::error::Cannot read the current nightly feed: $(cat "$RUNNER_TEMP/feed-error")"
+            exit 1
+          fi
+          if [[ $current =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.-]+)?$ ]] && [ "$(compare "$current" "$VERSION")" = 1 ]; then
+            echo "::notice::The feed already announces $current, newer than $VERSION: the feed and the tag nightly stay as they are."
+            exit 0
+          fi
 
           # The feed last: it must never announce a file that is not there yet. The tag nightly
           # follows the branch testing.
