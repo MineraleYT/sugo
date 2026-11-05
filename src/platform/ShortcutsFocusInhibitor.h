@@ -55,8 +55,9 @@ public:
     void release() override;
     bool isInhibited() const override { return m_on || m_busy; }
     bool isReleasing() const override { return isInhibited() && !m_wanted; }
-    /// An "on" in flight, the pause after it if it timed out, then the "off".
-    int releaseTimeoutMs() const override { return 2 * m_runTimeoutMs + m_retryDelayMs + 500; }
+    /// The longest release: an "on" in flight that times out, the pause, an "off" that times
+    /// out, the pause, the retried "off" (three runs, two pauses), plus a margin.
+    int releaseTimeoutMs() const override { return 3 * m_runTimeoutMs + 2 * m_retryDelayMs + 500; }
 
     /// The shortcuts to run; reads the list again when they change.
     void setShortcutNames(const QString &onShortcut, const QString &offShortcut);
