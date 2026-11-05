@@ -35,6 +35,9 @@ QString key(const char *name)
 constexpr int kMaxNameLength = 64;
 /// Seconds before a failed step of the key phase is tried again.
 constexpr int kRetrySeconds = 30;
+/// The longest wait between two requests, whatever the server asks (interval, Retry-After): more
+/// would overflow the timers' milliseconds, and the polling would stop without a word.
+constexpr int kMaxWaitSeconds = 3600;
 
 QDateTime parseTime(const QJsonValue &value)
 {
@@ -240,7 +243,7 @@ void SyncAccount::startSignIn(const QString &deviceName)
 
 void SyncAccount::schedulePoll(int seconds)
 {
-    m_pollTimer.start(std::max(1, seconds) * m_unitMs);
+    m_pollTimer.start(std::clamp(seconds, 1, kMaxWaitSeconds) * m_unitMs);
 }
 
 void SyncAccount::pollToken()
@@ -372,7 +375,7 @@ void SyncAccount::setWindowActive(bool active)
 void SyncAccount::scheduleKeyStep(KeyStep step, int seconds)
 {
     m_keyStep = step;
-    m_keyTimer.start(std::max(1, seconds) * m_unitMs);
+    m_keyTimer.start(std::clamp(seconds, 1, kMaxWaitSeconds) * m_unitMs);
 }
 
 void SyncAccount::retryKeyStep(KeyStep step, const SyncError &error)

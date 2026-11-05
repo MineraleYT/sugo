@@ -12,6 +12,7 @@
 #include <QNetworkRequest>
 #include <QTimer>
 
+#include <algorithm>
 #include <chrono>
 #include <utility>
 
@@ -392,7 +393,8 @@ bool SyncApi::takeTokens(const QJsonObject &json)
         }
     }
     m_accessToken = accessToken;
-    const qint64 expiresIn = json.value(QLatin1String("expires_in")).toInteger(3600);
+    // Within reason whatever the server says: not renewed before every request, not kept for days.
+    const qint64 expiresIn = std::clamp<qint64>(json.value(QLatin1String("expires_in")).toInteger(3600), 60, 86400);
     m_accessExpiresAt = now() + expiresIn * 1000;
     return true;
 }
