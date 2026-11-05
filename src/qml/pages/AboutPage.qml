@@ -247,7 +247,7 @@ QQC2.Page {
                     SButton {
                         iconName: "external"
                         text: i18n("Project website")
-                        onClicked: Qt.openUrlExternally("https://github.com/MineraleYT/sugo")
+                        onClicked: Qt.openUrlExternally("https://sugo.stream")
                     }
                 }
             }
