@@ -44,6 +44,8 @@ private Q_SLOTS:
     void testDateCheckKeepsAPeriodUnderWayCurrent();
     void testPreviousYearComparesTheSameDate();
     void testPreviousMonthCountsAClampedDayWhole();
+    void testTodayWhateverThePeriod();
+    void testTodayMovesOnAtMidnight();
 
 private:
     void insertWork(const QDateTime &start, bool completed = true);
@@ -541,6 +543,57 @@ void TestStatsModel::testDays()
 
     m_model->setPeriod(StatsModel::Period::Year);
     QCOMPARE(m_model->days().size(), 365);
+}
+
+void TestStatsModel::testTodayWhateverThePeriod()
+{
+    // "Now" is Saturday 2026-10-03 12:00: yesterday's work is not today's.
+    insertWork(QDateTime(QDate(2026, 10, 2), QTime(9, 0), QTimeZone::utc()));
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(8, 0), QTimeZone::utc()));
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(9, 0), QTimeZone::utc()), false);
+    m_model->refresh();
+    QCOMPARE(m_model->todayCompletedSessions(), 1);
+    QCOMPARE(m_model->todayWorkSeconds(), 1500 + 600);
+
+    // The shown period does not matter, nor does going back to an older one.
+    QSignalSpy todaySpy(m_model.get(), &StatsModel::todayChanged);
+    m_model->setPeriod(StatsModel::Period::Year);
+    m_model->previousPeriod();
+    QCOMPARE(m_model->todayCompletedSessions(), 1);
+    QCOMPARE(m_model->todayWorkSeconds(), 2100);
+    QCOMPARE(todaySpy.count(), 0);
+
+    // A session recorded now counts at once.
+    PresetRepository presetRepo(m_db->connectionName());
+    PresetModel presets;
+    PresetPersistence persistence(&presets, &presetRepo);
+    TimerEngine engine;
+    SessionRecorder recorder(&engine, &presets, m_repo.get());
+    m_model->attach(m_repo.get(), &recorder);
+    todaySpy.clear();
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(11, 0), QTimeZone::utc()));
+    Q_EMIT recorder.sessionRecorded();
+    QCOMPARE(todaySpy.count(), 1);
+    QCOMPARE(m_model->todayCompletedSessions(), 2);
+    QCOMPARE(m_model->todayWorkSeconds(), 3600);
+}
+
+void TestStatsModel::testTodayMovesOnAtMidnight()
+{
+    auto now = std::make_shared<QDateTime>(QDate(2026, 10, 3), QTime(23, 59), QTimeZone::utc());
+    StatsModel::Environment env = m_env;
+    env.now = [now]() { return *now; };
+    m_model->setEnvironment(env);
+    insertWork(QDateTime(QDate(2026, 10, 3), QTime(10, 0), QTimeZone::utc()));
+    m_model->refresh();
+    QCOMPARE(m_model->todayCompletedSessions(), 1);
+
+    QSignalSpy todaySpy(m_model.get(), &StatsModel::todayChanged);
+    *now = QDateTime(QDate(2026, 10, 4), QTime(0, 0, 30), QTimeZone::utc());
+    m_model->checkDateChange();
+    QCOMPARE(todaySpy.count(), 1);
+    QCOMPARE(m_model->todayCompletedSessions(), 0);
+    QCOMPARE(m_model->todayWorkSeconds(), 0);
 }
 
 QTEST_MAIN(TestStatsModel)

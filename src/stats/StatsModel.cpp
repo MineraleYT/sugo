@@ -131,6 +131,7 @@ void StatsModel::checkDateChange()
     }
     recompute();
     recomputeStreaks();
+    recomputeToday();
     Q_EMIT periodChanged();
 }
 
@@ -274,6 +275,7 @@ void StatsModel::refresh()
     reloadCompletedStarts();
     recompute();
     recomputeStreaks();
+    recomputeToday();
 }
 
 void StatsModel::onSessionRecorded()
@@ -282,6 +284,7 @@ void StatsModel::onSessionRecorded()
     loadNewCompletedStarts();
     recompute();
     recomputeStreaks();
+    recomputeToday();
 }
 
 void StatsModel::reloadCompletedStarts()
@@ -553,3 +556,26 @@ QString StatsModel::formatDuration(qint64 seconds) const
     return i18n("%1s", secs);
 }
 
+
+// --- Today, whatever period is shown ---------------------------------------------------------
+
+void StatsModel::recomputeToday()
+{
+    qint64 workSeconds = 0;
+    int completed = 0;
+    if (m_repository) {
+        // The real today (not m_today, which checkDateChange() compares against to notice a new
+        // day), as recomputeStreaks() does.
+        const QDate today = todayDate();
+        const PeriodRange range = Stats::rangeFor(StatsPeriod::Day, today, m_env.firstDayOfWeek, m_env.timeZone);
+        const StatsSummary summary = Stats::summarize(m_repository->between(range.startMs, range.endMs), StatsPeriod::Day,
+                                                      today, m_env.firstDayOfWeek, m_env.timeZone, m_env.locale, m_env.now());
+        workSeconds = summary.workSeconds;
+        completed = summary.completedWorkSessions;
+    }
+    if (workSeconds != m_todayWorkSeconds || completed != m_todayCompletedSessions) {
+        m_todayWorkSeconds = workSeconds;
+        m_todayCompletedSessions = completed;
+        Q_EMIT todayChanged();
+    }
+}
