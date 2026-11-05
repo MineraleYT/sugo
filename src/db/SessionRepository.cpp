@@ -226,6 +226,13 @@ QList<qint64> SessionRepository::completedWorkStartsAfter(qint64 afterId, qint64
         highest = std::max(highest, query.value(0).toLongLong());
         result.append(query.value(1).toLongLong());
     }
+    // A row that cannot be read (a damaged page, an I/O error) ends the loop early. The rows are
+    // in start order, not id order, so `highest` may already be past rows never read: keep the
+    // cursor where it was and return nothing, so the next call reads them again.
+    if (query.lastError().isValid()) {
+        qCWarning(lcSessionRepo) << "Cannot read the completed work sessions:" << query.lastError().text();
+        return {};
+    }
     if (maxId) {
         *maxId = highest;
     }
