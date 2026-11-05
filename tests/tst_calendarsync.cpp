@@ -1261,6 +1261,7 @@ private Q_SLOTS:
         QTest::newRow("huge") << 429 << QByteArray("2500000") << 3600 * 1000;
         // Shorter than the backoff, or unreadable: the backoff's own delay.
         QTest::newRow("shorter") << 429 << QByteArray("30") << 60 * 1000;
+        QTest::newRow("zero") << 429 << QByteArray("0") << 60 * 1000;
         QTest::newRow("http date") << 503 << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 60 * 1000;
     }
     void retryAfterIsHonoured()
