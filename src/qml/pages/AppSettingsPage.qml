@@ -476,14 +476,6 @@ QQC2.Page {
         onTriggered: page.diagnosticsCopied = false
     }
 
-    // The result of an export, in a toast: a message in the card would move what is below it.
-    function showDiagnosticsResult(exported: bool, error: string): void {
-        applicationWindow().showPassiveNotification(
-            exported ? i18n("Diagnostic report successfully exported.")
-                     : (error.length > 0 ? error : i18n("Failed to export diagnostic report.")),
-            exported ? 3500 : "long");
-    }
-
     Connections {
         target: AppSettings
         function onAutostartFailed(message) {
@@ -2261,12 +2253,6 @@ QQC2.Page {
                     first: true
                     title: i18n("Diagnostic report")
                     description: i18n("Generate a redacted report with system information and recent logs to share when reporting an issue.")
-                    Item { implicitWidth: 1 }
-                }
-                Flow {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
-                    spacing: Theme.spaceSm
                     SButton {
                         labels: [i18n("Copied"), i18n("Copy to Clipboard")]
                         text: page.diagnosticsCopied ? i18n("Copied") : i18n("Copy to Clipboard")
@@ -2276,24 +2262,6 @@ QQC2.Page {
                             page.showDiagnosticsCopied();
                         }
                     }
-                    SButton {
-                        text: i18n("Export Diagnostics…")
-                        iconName: "download"
-                        onClicked: exportDiagnosticsDialog.open()
-                    }
-                    SButton {
-                        text: i18n("View Report…")
-                        iconName: "search"
-                        onClicked: {
-                            diagnosticsPreviewDialog.reportText = Diagnostics.generateReport();
-                            diagnosticsPreviewDialog.open();
-                        }
-                    }
-                }
-                SettingRow {
-                    title: i18n("Verbose logging")
-                    description: i18n("Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce the problem, then copy the report.")
-                    SettingSwitch { setting: "verboseLogging" }
                 }
                 SettingRow {
                     title: i18n("Welcome tour")
@@ -2529,57 +2497,6 @@ QQC2.Page {
             fileMode: FileDialog.OpenFile
             nameFilters: [i18n("SQLite database (*.db)")]
             onAccepted: restoreConfirmDialog.open()
-        }
-
-        FileDialog {
-            id: exportDiagnosticsDialog
-            title: i18n("Export Diagnostics")
-            fileMode: FileDialog.SaveFile
-            defaultSuffix: "txt"
-            nameFilters: [i18n("Text files (*.txt)"), i18n("All files (*)")]
-            onAccepted: {
-                if (Diagnostics.exportReport(selectedFile)) {
-                    page.showDiagnosticsResult(true, "");
-                } else {
-                    page.showDiagnosticsResult(false, Diagnostics.lastExportError());
-                }
-            }
-        }
-
-        ConfirmDialog {
-            id: diagnosticsPreviewDialog
-            title: i18n("Diagnostics Report")
-            text: i18n("All personal details and usernames have been redacted.")
-            confirmText: i18n("Copy to Clipboard")
-            cancelText: i18n("Close")
-            width: Math.min(Theme.contentMaxWidth, (parent ? parent.width : Theme.contentMaxWidth) - Theme.space2xl * 2)
-            property string reportText: ""
-
-            QQC2.ScrollView {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Theme.space4xl * 6
-                QQC2.TextArea {
-                    readOnly: true
-                    text: diagnosticsPreviewDialog.reportText
-                    color: Theme.foreground
-                    font.family: Theme.monoFamily
-                    font.pixelSize: Theme.fontCaption
-                    wrapMode: Text.Wrap
-                    background: Rectangle {
-                        radius: Theme.radius
-                        color: Theme.background
-                        border.width: Theme.hairline
-                        border.color: Theme.border
-                    }
-                    Accessible.name: diagnosticsPreviewDialog.title
-                }
-            }
-
-            onConfirmed: {
-                Diagnostics.copyToClipboard();
-                diagnosticsPreviewDialog.close();
-                page.showDiagnosticsCopied();
-            }
         }
 
 }
