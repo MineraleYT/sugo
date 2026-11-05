@@ -454,7 +454,8 @@ private Q_SLOTS:
         QTRY_VERIFY(a.names().contains(QStringLiteral("From elsewhere")));
         QTest::qWait(20 * kUnitMs); // longer than the push delay
         QCOMPARE(puts(), before);
-        QCOMPARE(a.sync->state(), SyncController::Idle);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle); // (a periodic pull may be running)
+        QCOMPARE(puts(), before);
         QCOMPARE(a.repo->loadAll().size(), a.model->count()); // applied and stored
     }
 
@@ -613,8 +614,9 @@ private Q_SLOTS:
         QVERIFY(!remoteNames(a).contains(QStringLiteral("Edited later")));
         QTRY_COMPARE(a.sync->state(), SyncController::Idle);
         a.sync->syncNow();
-        QTest::qWait(20 * kUnitMs);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle); // the download is done
         QVERIFY(a.names().contains(QStringLiteral("Original")));
+        QVERIFY(!a.names().contains(QStringLiteral("Edited later")));
     }
 
     void twoDevices()
@@ -656,12 +658,20 @@ private Q_SLOTS:
         onB.sort();
         QCOMPARE(onA, onB);
         const int settled = puts();
+        const int pulled = gets();
         a.sync->syncNow();
         b.sync->syncNow();
-        QTest::qWait(30 * kUnitMs);
+        // Idle only once no request runs (an upload follows its download at once): wait for it
+        // rather than a fixed time, which a loaded machine outlasts.
+        QTRY_COMPARE_WITH_TIMEOUT(a.sync->state(), SyncController::Idle, 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(b.sync->state(), SyncController::Idle, 10000);
+        QVERIFY(gets() >= pulled + 2); // both asked the server
+        QTest::qWait(10 * kUnitMs); // longer than the push delay: nothing is left to go out
         QCOMPARE(puts(), settled);
-        QCOMPARE(a.sync->state(), SyncController::Idle);
-        QCOMPARE(b.sync->state(), SyncController::Idle);
+        // (The periodic pull may have started meanwhile: wait for it, it must not fail either.)
+        QTRY_COMPARE_WITH_TIMEOUT(a.sync->state(), SyncController::Idle, 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(b.sync->state(), SyncController::Idle, 10000);
+        QCOMPARE(puts(), settled);
     }
 
     void keyringIsReadOncePerStartAndNeverWhileOff()
