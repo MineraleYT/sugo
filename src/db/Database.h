@@ -7,7 +7,8 @@
 /**
  * Owns the SQLite connection and brings the schema up to date.
  *
- * Ownership: our files carry `PRAGMA application_id` = kApplicationId. A file that
+ * Ownership: our files carry `PRAGMA application_id` = kApplicationId, or, as Sugo 1.0.0 wrote
+ * them, kSugo100ApplicationId (such a file is converted on open: see migrate()). A file that
  * already has tables but is not ours (another program that
  * happens to use the same path) is never migrated or modified: it is moved aside to
  * `<path>.foreign-<timestamp>` and a fresh database is created. See movedAsidePath().
@@ -25,6 +26,12 @@ class Database
 public:
     /// Identifies Sugo databases: "Sugo" in ASCII.
     static constexpr int kApplicationId = 0x5375676F;
+    /// The id Sugo 1.0.0 stamped its files with ("kTmt"). Its files are ours: open() gives them
+    /// kApplicationId and today's schema numbering.
+    static constexpr int kSugo100ApplicationId = 0x6B546D74;
+    /// The last user_version Sugo 1.0.0 wrote: its version 2, which added session.note, is the
+    /// schema of today's version 1.
+    static constexpr int kSugo100SchemaVersion = 2;
 
     /// `path` may be ":memory:" (tests, or fallback when the file is unusable).
     explicit Database(const QString &path);
@@ -66,6 +73,7 @@ private:
     static bool isCorruptionError(const QString &nativeCode);
     void closeConnection();
     bool migrate(QSqlDatabase &db);
+    bool convertSugo100File(QSqlDatabase &db);
 
     QString m_path;
     QString m_connectionName;
