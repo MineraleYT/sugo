@@ -960,6 +960,56 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
     }
 
+    void a403TestAfterARejectedLoginLiftsThePause()
+    {
+        // Paused on a 401; then the password works on the server, but the calendar refuses the
+        // test event. The login was taken: no "Login rejected" coming back, the event is tried.
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->defaultPut = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 3); // refused (401), the test's, the event again
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("does not accept new events")));
+        QTest::qWait(100);
+        QVERIFY2(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")), qPrintable(m_sync->statusText()));
+        QCOMPARE(m_sync->pendingCount(), 1);
+    }
+
+    void a403LookupAfterARejectedLoginLiftsThePause()
+    {
+        configureCustom();
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void a403LookupKeepsThePauseOf403sInARow()
+    {
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_server->count("PROPFIND"), 1);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTest::qWait(100);
+        QVERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3); // nothing sent again with the credentials in doubt
+    }
+
     void put403IsTheCalendarRefusingNotTheLogin()
     {
         // A calendar shared read-only: the login is fine, the calendar does not take events.

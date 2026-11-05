@@ -1461,19 +1461,25 @@ void CalendarSync::testConnection()
     auto fail = [this](const Result &r) {
         --m_busy;
         // As for a real event (onSendFinished()): a 401 is the login and pauses sending, a 403
-        // only once it comes kForbiddenBeforePause times in a row.
+        // only once it comes kForbiddenBeforePause times in a row. Before that, a 403 lifts the
+        // pause of an earlier 401: this server answers a wrong password with 401, so it took the
+        // login this time, and the events waiting are tried again.
         if (r.http == 401) {
             m_paused = true;
             m_forbiddenStreak = 0;
-        } else if (r.http == 403 && ++m_forbiddenStreak >= kForbiddenBeforePause) {
-            m_paused = true;
+        } else if (r.http == 403) {
+            ++m_forbiddenStreak;
+            m_paused = m_forbiddenStreak >= kForbiddenBeforePause;
         }
         QString message = describeFailure(r);
         if (r.http == 403) {
-            message = m_forbiddenStreak >= kForbiddenBeforePause ? forbiddenTooOften() : calendarRefusesEvents();
+            message = m_paused ? forbiddenTooOften() : calendarRefusesEvents();
         }
         setLastError(message);
         setStatus(Failed, message);
+        if (r.http == 403) {
+            trySend();
+        }
     };
 
     // The test event is removed from where it was put, even if the calendar changes meanwhile.
@@ -1655,12 +1661,19 @@ void CalendarSync::discoveryFailed(const Result &r)
     if (r.http == 401) {
         m_paused = true;
         m_forbiddenStreak = 0;
+    } else if (r.http == 403) {
+        // Lifts the pause of an earlier 401 (this server took the login this time), not the one
+        // of 403s in a row: a refused lookup says nothing more about those.
+        m_paused = m_forbiddenStreak >= kForbiddenBeforePause;
     }
     const QString message = r.http == 403
         ? i18n("The server does not let this account list the calendars at this address (HTTP 403): check the address.")
         : describeFailure(r);
     setLastError(message);
     setStatus(Failed, message);
+    if (r.http == 403) {
+        trySend();
+    }
 }
 
 void CalendarSync::refreshCalendars()
