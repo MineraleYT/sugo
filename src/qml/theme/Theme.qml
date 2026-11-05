@@ -157,6 +157,7 @@ QtObject {
     readonly property int phaseDot: 6
 
     // --- Title bar
+    /// On macOS the bar takes the height of the system's title bar instead (TitleBar.qml).
     readonly property int titleBarHeight: 44
     readonly property int titleBarPaddingLeft: 14
     readonly property int titleBarPaddingRight: 8

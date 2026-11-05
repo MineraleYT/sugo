@@ -48,12 +48,36 @@ QuitPolicy::Origin macCurrentQuitOrigin()
     return reason && reason.typeCodeValue != 0 ? QuitPolicy::Origin::SessionEnding : QuitPolicy::Origin::External;
 }
 
-void macHideWindowTitle(QWindow *window)
+void macSetUpTitleBar(QWindow *window)
 {
     if (!window || QGuiApplication::platformName() != QLatin1String("cocoa")) {
         return;
     }
     // With the cocoa platform the native handle is the window's NSView.
     auto *view = (__bridge NSView *)reinterpret_cast<void *>(window->winId());
-    view.window.titleVisibility = NSWindowTitleHidden;
+    NSWindow *nsWindow = view.window;
+    nsWindow.titleVisibility = NSWindowTitleHidden;
+    // Without a toolbar the lights sit near the top of a strip lower than Sugo's title bar; an
+    // empty toolbar makes the strip that of a compact toolbar, with the lights in its middle.
+    // The toolbar has no items and draws nothing (the title bar is transparent): clicks and
+    // drags on it still reach the content, i.e. the title bar.
+    if (!nsWindow.toolbar) {
+        NSToolbar *toolbar = [[NSToolbar alloc] initWithIdentifier:@"io.github.mineraleyt.sugo.titlebar"];
+        toolbar.allowsUserCustomization = NO;
+        nsWindow.toolbar = toolbar;
+        // In full screen the system would keep the toolbar shown, in a window of its own over the
+        // top of the content, where it would take the clicks meant for the title bar's tabs; the
+        // traffic lights are hidden there anyway. Hidden once the window is full screen, back once
+        // it has left it: only a change that succeeded sends these (a failed one would leave a
+        // "will" without its "did"). (The window lives as long as the application: the
+        // observers are never removed.)
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        __weak NSToolbar *weakToolbar = toolbar;
+        [center addObserverForName:NSWindowDidEnterFullScreenNotification object:nsWindow queue:nil
+                        usingBlock:^(NSNotification *) { weakToolbar.visible = NO; }];
+        [center addObserverForName:NSWindowDidExitFullScreenNotification object:nsWindow queue:nil
+                        usingBlock:^(NSNotification *) { weakToolbar.visible = YES; }];
+    }
+    nsWindow.toolbarStyle = NSWindowToolbarStyleUnifiedCompact;
+    nsWindow.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
 }

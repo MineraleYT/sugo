@@ -1402,6 +1402,7 @@ QQC2.ApplicationWindow {
             current: root.currentDestination
             bare: root.isWelcomeActive
             maximized: root.maximized
+            fullScreen: root.visibility === Window.FullScreen
             onTabRequested: name => root.navigate(name)
             onSearchRequested: root.openSearch()
             onRestartRequested: root.requestRestart()
