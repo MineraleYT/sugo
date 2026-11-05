@@ -233,6 +233,7 @@ QtObject {
     readonly property int welcomeTextWidth: 400
     readonly property int welcomeGroupWidth: 440
     readonly property int welcomeFooterHeight: 56
+    readonly property int welcomeFooterPaddingX: 14
     readonly property int fontWelcomeTitle: 22
 
     // --- Type --------------------------------------------------------------------------------
