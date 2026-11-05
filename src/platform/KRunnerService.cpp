@@ -132,6 +132,8 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
     }
 
     // 2. One-off work phase: e.g. "pomodoro 15". The preset's own duration is not changed.
+    // While a phase is active it would throw that phase away, so (as a preset below) it is
+    // refused: it is still listed, saying why.
     // ASCII digits only (\\d would also take other scripts' digits, which toInt() cannot read).
     static const QRegularExpression numRegex(QStringLiteral("^([0-9]+)$"));
     const auto matchNum = numRegex.match(subCommand);
@@ -139,8 +141,12 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         bool ok = false;
         const int mins = matchNum.captured(1).toInt(&ok); // ok is false on overflow
         if (ok && mins > 0 && mins <= kMaxCustomMinutes) {
-            matches.append(commandMatch(QStringLiteral("custom:") + QString::number(mins), i18n("Start %1-minute timer", mins),
-                                        i18n("Start custom focus session"), QStringLiteral("chronometer")));
+            const bool blocked = m_timer->isActive();
+            matches.append(commandMatch(QStringLiteral("custom:") + QString::number(mins),
+                                        blocked ? i18n("%1-minute timer", mins) : i18n("Start %1-minute timer", mins),
+                                        blocked ? i18n("A timer is running. Stop it before choosing another timer.")
+                                                : i18n("Start custom focus session"),
+                                        QStringLiteral("chronometer")));
         } else {
             // Say why nothing can start, instead of showing nothing at all.
             matches.append(commandMatch(kInvalidMinutesId, i18n("Choose between 1 and %1 minutes", kMaxCustomMinutes),
@@ -247,7 +253,8 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
 
     if (id.startsWith(QStringLiteral("custom:"))) {
         const int mins = id.mid(7).toInt();
-        if (mins > 0 && mins <= kMaxCustomMinutes) {
+        // Refused while a phase is active (see Match()): starting would end it as interrupted.
+        if (mins > 0 && mins <= kMaxCustomMinutes && !m_timer->isActive()) {
             m_timer->startCustomWork(mins * 60);
         }
     } else if (id.startsWith(QStringLiteral("preset:"))) {
