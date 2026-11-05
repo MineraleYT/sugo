@@ -21,6 +21,7 @@
 #include "SyncAccount.h"
 #include "TimerPreset.h"
 
+class Notifier;
 class PresetModel;
 class PresetPersistence;
 class PresetRepository;
@@ -58,6 +59,9 @@ class SyncController : public QObject
 
     Q_PROPERTY(State state READ state NOTIFY stateChanged FINAL)
     Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged FINAL)
+    /// Every text statusText() can give in the state Error, so the interface can keep room for the
+    /// longest of them.
+    Q_PROPERTY(QStringList errorTexts READ errorTexts CONSTANT FINAL)
     Q_PROPERTY(ErrorKind errorKind READ errorKind NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool keyringAvailable READ keyringAvailable NOTIFY keyringAvailableChanged FINAL)
     Q_PROPERTY(QDateTime lastSync READ lastSync NOTIFY lastSyncChanged FINAL)
@@ -114,11 +118,19 @@ public:
     /// How the desktop opens a page and copies text (main.cpp; QML may also do it itself).
     void setDesktopActions(std::function<bool(const QUrl &)> openUrl, std::function<void(const QString &)> copyText);
 
+    /**
+     * Desktop notifications: a device asking for approval while the window is hidden (as
+     * `windowVisible` says) is announced, and a click on it emits showSyncPageRequested().
+     * `notifier` is not owned; nullptr stops the notifications.
+     */
+    void attachNotifier(Notifier *notifier, std::function<bool()> windowVisible);
+
     /// One second in ms for every wait (tests make it short).
     void setTimeUnitMs(int ms);
 
     State state() const { return m_state; }
     QString statusText() const;
+    static QStringList errorTexts();
     ErrorKind errorKind() const { return m_errorKind; }
     bool keyringAvailable() const;
     QDateTime lastSync() const;
@@ -130,13 +142,18 @@ public:
     QString verificationCode() const;
 
     QVariantList devices() const;
-    /// This device's name; while signed out, the name sign-in suggests (the host name).
+    /// This device's name; while signed out, the name sign-in suggests: the one last signed in
+    /// with, else the host name.
     QString deviceName() const;
     bool recoveryCodeShowable() const;
     /// The first device asking for the key: id, name, platform, verificationCode; empty if none.
     QVariantMap pendingApproval() const;
 
     SyncAccount *account() const { return m_account; }
+    /// This computer is linked to an account (the settings say so; the keyring is not read).
+    bool linked() const;
+    /// Whether the server is https://api.sugo.stream (not one set with SUGO_SYNC_URL).
+    bool usesDefaultServer() const;
 
     // --- Sign-in ------------------------------------------------------------------------------
     Q_INVOKABLE void signIn(const QString &deviceName);
@@ -195,8 +212,13 @@ Q_SIGNALS:
     void signedOut(bool remoteDone);
     /// Something worth a toast.
     void message(const QString &text);
+    /// The approval notification was clicked: show the window on the Sync settings.
+    /// `activationToken` (may be empty) lets the window take the focus on Wayland.
+    void showSyncPageRequested(const QString &activationToken);
 
 private:
+    /// What statusText() says in the state Error about `kind` (empty for NoError).
+    static QString errorText(ErrorKind kind);
     enum class Op { None, Pull, Push };
 
     SyncController(Settings::Ptr settings, std::unique_ptr<SecretStore> ownedStore, SecretStore *store, const QUrl &baseUrl,
@@ -230,6 +252,7 @@ private:
     void writeSetting(const char *name, const QVariant &value);
     bool readyToSync() const;
     void showNextApproval();
+    void notifyApproval();
     void dropApproval(const QString &id);
 
     Settings::Ptr m_settings;
@@ -245,6 +268,8 @@ private:
 
     std::function<bool(const QUrl &)> m_openUrl;
     std::function<void(const QString &)> m_copyText;
+    QPointer<Notifier> m_notifier;
+    std::function<bool()> m_windowVisible;
     int m_unitMs = 1000;
 
     State m_state = Off;

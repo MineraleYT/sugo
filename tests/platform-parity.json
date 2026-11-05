@@ -134,6 +134,7 @@
         "button: Focus",
         "button: General",
         "button: Sounds",
+        "button: Sync",
         "choice: Badge style",
         "choice: Color scheme",
         "row: Badge style",
@@ -168,6 +169,7 @@
         "button: General",
         "button: Preview",
         "button: Sounds",
+        "button: Sync",
         "button: Test",
         "choice: Focus sound",
         "choice: Phase sound",
@@ -190,6 +192,7 @@
         "button: Focus",
         "button: General",
         "button: Sounds",
+        "button: Sync",
         "row: Keep the screen awake during work sessions",
         "row: Pause timer when screen is locked",
         "row: Prompt for a task note when a work session finishes",
@@ -212,6 +215,7 @@
         "button: General",
         "button: Log in",
         "button: Sounds",
+        "button: Sync",
         "choice: Calendar service",
         "field: Server address",
         "row: Add an event to your calendar each time you finish a work session.",
@@ -220,6 +224,23 @@
         "row: Server address",
         "switch: Add an event to your calendar each time you finish a work session.",
         "switch: Include the task note in the event description"
+      ]
+    },
+    "settings/sync": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: Sign in",
+        "button: Sounds",
+        "button: Sync",
+        "field: Device name",
+        "row: Device name",
+        "row: Session history and statistics",
+        "row: Sign in",
+        "row: Task notes",
+        "row: Your timers on all your computers"
       ]
     },
     "settings/advanced": {
@@ -239,6 +260,7 @@
         "button: Restore…",
         "button: Show the Welcome Tour",
         "button: Sounds",
+        "button: Sync",
         "button: View Report…",
         "choice: Sessions to remove",
         "row: Allow other programs to control the timer",

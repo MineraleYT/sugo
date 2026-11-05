@@ -12,6 +12,17 @@ Rectangle {
     property string current
     signal activated(string id)
 
+    /// Where the choice `id` is, in this item's coordinates; null when there is none.
+    function choiceRect(id: string): var {
+        for (let i = 0; i < choices.count; ++i) {
+            const choice = choices.itemAt(i);
+            if (choice && choice.modelData.id === id) {
+                return choice.mapToItem(segmented, 0, 0, choice.width, choice.height);
+            }
+        }
+        return null;
+    }
+
     implicitWidth: row.implicitWidth + Theme.hairline * 6
     implicitHeight: Theme.controlHeight + Theme.hairline * 2
     radius: Theme.radiusMd
@@ -26,6 +37,7 @@ Rectangle {
         spacing: Theme.hairline * 2
 
         Repeater {
+            id: choices
             model: segmented.model
             delegate: QQC2.AbstractButton {
                 id: choice

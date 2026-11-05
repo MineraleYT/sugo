@@ -425,6 +425,9 @@ QQC2.ApplicationWindow {
                 fail(32, "Disconnecting the calendar did not ask first");
                 return;
             }
+            if (!checkSync(page)) {
+                return;
+            }
                         // Quitting while a phase runs asks first.
             // Also with the window closed (Cmd+Q on macOS): the window comes back to ask.
             TimerEngine.start();
@@ -439,6 +442,47 @@ QQC2.ApplicationWindow {
             } else if (!shown) {
                 fail(38, "Quitting with the window closed asked in the hidden window");
             }
+        }
+
+        // Settings, Sync tab (signed out: the controller is not attached in a smoke run).
+        function checkSync(page: var): bool {
+            const ids = page.categories.map(category => category.id);
+            const at = ids.indexOf("sync");
+            if (at < 0 || ids[at - 1] !== "calendar" || ids[at + 1] !== "advanced") {
+                fail(56, "The Sync tab is missing, or not between Calendar and Advanced: " + ids.join(","));
+                return false;
+            }
+            page.category = "sync";
+            const signIn = findItem(page, item => item.objectName === "syncSignInButton");
+            if (SyncController.state !== SyncController.Off || !signIn || !signIn.visible || signIn.text.length === 0) {
+                fail(57, "Signed out, the Sync tab does not offer Sign in");
+                return false;
+            }
+            // A message (no keyring, signed out on sugo.stream) goes in the Sign in row's
+            // description, which keeps room for the longest of its texts. The layout catches up
+            // only later, so each text is compared with that room rather than the row's height.
+            const row = findItem(page, item => item.objectName === "syncSignInRow");
+            if (!row || row.height <= 0 || row.descriptionVariants.length < 3 || row.descriptionRoom <= 0) {
+                fail(58, "The Sync tab's Sign in row, or the messages it can show, is missing");
+                return false;
+            }
+            for (const variant of [page.syncSignInText, page.syncNoKeyringText, page.syncSignedOutRemotelyText]) {
+                row.description = variant;
+                if (row.descriptionHeight > row.descriptionRoom + 0.5) {
+                    fail(58, "A message would move the Sync tab: " + row.descriptionHeight + " > " + row.descriptionRoom
+                         + " for \"" + variant + "\"");
+                    return false;
+                }
+            }
+            // Signing out asks first.
+            page.requestSyncSignOut();
+            const asked = page.syncSignOutConfirming;
+            page.category = "general";
+            if (!asked) {
+                fail(59, "Signing out of Sugo Sync did not ask first");
+                return false;
+            }
+            return true;
         }
 
         // Welcome: the tray icon's colours, the Focus row, the step dots; then a message on the
@@ -1108,7 +1152,8 @@ QQC2.ApplicationWindow {
                                                      || activeFocusItem.hasOwnProperty("checkable")
                                                      || activeFocusItem.hasOwnProperty("popup"))
     readonly property bool dialogOpen: quitDialog.visible || taskNoteDialog.visible || screenLockResumeDialog.visible
-                                     || endPhaseDialog.visible
+                                       || syncApprovalDialog.visible || syncRecoveryDialog.visible
+                                       || endPhaseDialog.visible
 
     // Space starts, pauses or resumes the timer while the timer page is shown.
     Shortcut {
@@ -1523,6 +1568,196 @@ QQC2.ApplicationWindow {
         }
         function onPausedBySleepChanged() {
             onPausedByScreenLockChanged();
+        }
+    }
+
+    // Sugo Sync: what happened, once, in a toast (the Sync tab shows how things stand).
+    Connections {
+        target: SyncController
+        function onMessage(text) {
+            root.showPassiveNotification(text, "long");
+        }
+        // Signed out here, but the server was not told: the device keeps its place on the plan.
+        function onSignedOut(remoteDone) {
+            if (!remoteDone) {
+                root.showPassiveNotification(i18n("Signed out on this computer, but Sugo Sync could not be reached. Disconnect this device on sugo.stream to free its place."), "long");
+            }
+        }
+        function onApprovalRequested() {
+            root.showSyncApproval();
+        }
+        function onRecoveryCodeToConfirm(code) {
+            syncRecoveryDialog.show(code);
+        }
+    }
+
+    // A new recovery code (first device, or a new one asked for): shown once here, kept by the
+    // user, and checked by typing one of its groups back.
+    ConfirmDialog {
+        id: syncRecoveryDialog
+        property string code
+        property int group: 0
+        readonly property int groups: code.length > 0 ? code.split("-").length : 0
+
+        function show(newCode: string): void {
+            code = newCode;
+            group = Math.floor(Math.random() * Math.max(1, groups));
+            recoveryGroupField.text = "";
+            open();
+        }
+
+        title: i18n("Keep your recovery code")
+        text: i18n("With this code a new device opens your synced timers when none of your other devices is at hand. If you lose all your devices and this code, the synced timers cannot be opened again: write it down or keep it in a password manager.")
+        confirmText: i18n("Done")
+        cancelText: i18n("Later")
+        confirmEnabled: SyncController !== null && SyncController.confirmRecoveryGroup(group, recoveryGroupField.text)
+        onConfirmed: {
+            syncRecoveryDialog.close();
+            root.showPassiveNotification(i18n("Recovery code checked. Keep it somewhere safe."));
+        }
+        onOpened: recoveryGroupField.forceActiveFocus()
+        onClosed: {
+            code = "";
+            recoveryGroupField.text = "";
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: Math.max(recoveryCodeText.implicitHeight, recoveryCopyButton.implicitHeight) + Theme.spaceMd * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            TextEdit {
+                id: recoveryCodeText
+                anchors.left: parent.left
+                anchors.right: recoveryCopyButton.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Theme.spaceLg
+                anchors.rightMargin: Theme.spaceSm
+                readOnly: true
+                selectByMouse: true
+                text: syncRecoveryDialog.code
+                color: Theme.foreground
+                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Accessible.name: i18n("Recovery code")
+            }
+            SButton {
+                id: recoveryCopyButton
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: Theme.spaceSm
+                kind: "ghost"
+                iconOnly: true
+                iconName: "copy"
+                text: i18n("Copy recovery code")
+                onClicked: {
+                    recoveryCodeText.selectAll();
+                    recoveryCodeText.copy();
+                    recoveryCodeText.deselect();
+                    root.showPassiveNotification(i18n("Recovery code copied to the clipboard."));
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            text: i18n("To check that you have kept it, type group %1 of %2.",
+                       syncRecoveryDialog.group + 1, syncRecoveryDialog.groups)
+            color: Theme.muted
+            font.pixelSize: Theme.fontBody
+            wrapMode: Text.WordWrap
+        }
+        STextField {
+            id: recoveryGroupField
+            Layout.fillWidth: true
+            font.family: Theme.monoFamily
+            maximumLength: 8
+            placeholderText: i18n("Group %1", syncRecoveryDialog.group + 1)
+            inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+            Accessible.name: i18n("Group %1 of the recovery code", syncRecoveryDialog.group + 1)
+            onAccepted: {
+                if (syncRecoveryDialog.confirmEnabled) {
+                    syncRecoveryDialog.confirmed();
+                }
+            }
+        }
+    }
+
+    /// The first device waiting for approval, in the dialog (unless it is already open: the next
+    /// one follows when it closes).
+    function showSyncApproval(): void {
+        const device = SyncController ? SyncController.pendingApproval : null;
+        if (syncApprovalDialog.visible || !device || !device.id) {
+            return;
+        }
+        syncApprovalDialog.device = device;
+        syncApprovalDialog.approved = false;
+        syncApprovalDialog.open();
+    }
+
+    // A new device asks for the timers' key. It gets it only from here, and only if the user sees
+    // the same verification code on both screens (a key sent to anyone else is refused there).
+    ConfirmDialog {
+        id: syncApprovalDialog
+        property var device: ({})
+        property bool approved: false
+        title: i18n("Approve “%1”?", device.name || "")
+        text: i18n("A new device wants to sync your timers. Approve it only if it is yours and shows the same code as here.")
+        confirmText: i18n("Approve")
+        cancelText: i18n("Not Now")
+        onConfirmed: {
+            approved = true;
+            syncApprovalDialog.close();
+        }
+        // Approve, Not Now or Escape: answered once it has closed, then the next device, if any.
+        onClosed: {
+            const id = device.id || "";
+            device = ({});
+            if (SyncController && id.length > 0) {
+                if (approved) {
+                    SyncController.approveDevice(id);
+                } else {
+                    SyncController.ignoreDevice(id);
+                }
+            }
+            Qt.callLater(root.showSyncApproval);
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: approvalCode.implicitHeight + approvalCaption.implicitHeight + Theme.spaceXs + Theme.spaceLg * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            Column {
+                anchors.centerIn: parent
+                spacing: Theme.spaceXs
+                Text {
+                    id: approvalCaption
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: i18n("Verification code")
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                }
+                Text {
+                    id: approvalCode
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: syncApprovalDialog.device.verificationCode || ""
+                    color: Theme.foreground
+                    font.family: Theme.monoFamily
+                    font.pixelSize: Theme.fontDisplay
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: Theme.letterSpacingCaps * 2
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: i18n("Verification code") + " " + text
+                }
+            }
         }
     }
 

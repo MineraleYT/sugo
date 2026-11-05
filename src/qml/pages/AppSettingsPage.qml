@@ -19,6 +19,7 @@ QQC2.Page {
         { id: "sounds", text: i18n("Sounds") },
         { id: "focus", text: i18n("Focus") },
         { id: "calendar", text: i18n("Calendar") },
+        { id: "sync", text: i18n("Sync") },
         { id: "advanced", text: i18n("Advanced") }
     ]
 
@@ -136,6 +137,192 @@ QQC2.Page {
     }
     function commitCalendarFields(): void {
         calFocusSink.forceActiveFocus();
+    }
+
+    // Sugo Sync state, guarded because the singleton can be gone at shutdown.
+    readonly property int syncState: SyncController ? SyncController.state : 0
+    readonly property bool syncOff: !SyncController || syncState === SyncController.Off
+    readonly property bool syncSigningIn: SyncController !== null && syncState === SyncController.SigningIn
+    readonly property bool syncWaiting: SyncController !== null && syncState === SyncController.WaitingForApproval
+    readonly property bool syncSyncing: SyncController !== null && syncState === SyncController.Syncing
+    readonly property bool syncError: SyncController !== null && syncState === SyncController.Error
+    /// Linked, with the timers' key: the status, the devices and the recovery code.
+    readonly property bool syncLinked: SyncController !== null
+                                       && (syncState === SyncController.Idle || syncSyncing || syncError)
+    readonly property int syncErrorKind: SyncController ? SyncController.errorKind : 0
+    readonly property string syncStatusText: SyncController ? SyncController.statusText : ""
+    readonly property bool syncKeyring: SyncController ? SyncController.keyringAvailable : true
+    readonly property bool syncSignedOutRemotely: syncOff && SyncController !== null
+                                                  && syncErrorKind === SyncController.SignedOutRemotely
+    readonly property bool syncLimit: syncSigningIn && SyncController.deviceLimitReached
+    readonly property string syncLastSync: {
+        const d = SyncController ? SyncController.lastSync : null;
+        if (!d) {
+            return "";
+        }
+        const date = new Date(d);
+        return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
+    }
+    readonly property var syncDevices: SyncController ? SyncController.devices : []
+    readonly property string syncSignInText:
+        i18n("Your browser opens sugo.stream, where you sign in and enter a code that Sugo shows here.")
+    readonly property string syncSignedOutRemotelyText:
+        i18n("This device was disconnected on sugo.stream. Sign in again to keep syncing.")
+    readonly property string syncNoKeyringText: DesktopStyle.macos
+        ? i18n("Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use the Keychain, then restart Sugo.")
+        : i18n("Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock one (for example KWallet or GNOME Keyring), then restart Sugo.")
+    readonly property string syncEnterCodeText:
+        i18n("Sign in on sugo.stream in your browser and enter the code. Sugo goes on by itself once you have.")
+    readonly property string syncLimitText:
+        i18n("Your account already links as many devices as the plan allows. Disconnect one on sugo.stream to free a place: Sugo goes on by itself.")
+    // The device list is otherwise read only when this computer becomes ready and after an
+    // approval: read it again whenever the Sync tab is shown, so a device signed out or
+    // disconnected elsewhere since then disappears from it.
+    onCategoryChanged: {
+        // When linked, onSyncDevicesShownChanged does it.
+        if (category === "sync" && SyncController && !syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    // While the tab is on screen, "Last seen" keeps up: read the list again when the window comes
+    // back, every minute (the server moves a device's last_seen at most every 5 minutes), and
+    // after each sync of this device, which the server counts as seeing it.
+    readonly property bool syncDevicesShown: category === "sync" && page.visible && syncLinked
+                                             && !!page.Window.window && page.Window.window.active
+    onSyncDevicesShownChanged: {
+        if (syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    Timer {
+        interval: 60 * 1000
+        repeat: true
+        running: page.syncDevicesShown
+        onTriggered: SyncController.refreshDevices()
+    }
+    onSyncLastSyncChanged: {
+        if (syncDevicesShown) {
+            SyncController.refreshDevices();
+        }
+    }
+    function syncDate(value: var): string {
+        if (!value) {
+            return "";
+        }
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? "" : date.toLocaleString(Qt.locale(), Locale.ShortFormat);
+    }
+    function syncPlatformName(platform: string): string {
+        return platform === "macos" ? i18n("macOS") : platform === "linux" ? i18n("Linux") : platform;
+    }
+    /// What the list of devices says under a device's name.
+    function syncDeviceDetails(device: var): string {
+        const platform = syncPlatformName(device.platform || "");
+        const seen = syncDate(device.lastSeen);
+        const state = device.pending ? i18n("Waiting for approval")
+                    : seen.length > 0 ? i18n("Last seen %1", seen)
+                    : i18n("Not synced yet");
+        return platform.length > 0 ? i18nc("platform · last seen", "%1 · %2", platform, state) : state;
+    }
+
+    /// Signing out asks first.
+    function requestSyncSignOut(): void {
+        syncSignOutDialog.open();
+    }
+    readonly property bool syncSignOutConfirming: syncSignOutDialog.visible
+
+    ConfirmDialog {
+        id: syncSignOutDialog
+        title: i18n("Sign out of Sugo Sync?")
+        text: i18n("This computer stops syncing and leaves your list of devices. Your timers stay on this computer.")
+        confirmText: i18n("Sign Out")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncSignOutDialog.close();
+            if (SyncController) {
+                SyncController.signOut();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncDisconnectDialog
+        property string deviceId
+        property string deviceName
+        title: i18n("Disconnect “%1”?", deviceName)
+        text: i18n("That device stops syncing and its place on your plan is free again. Its timers stay on it, and it can sign in again later.")
+        confirmText: i18n("Disconnect")
+        confirmKind: "danger"
+        onConfirmed: {
+            syncDisconnectDialog.close();
+            if (SyncController) {
+                SyncController.disconnectDevice(deviceId);
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncNewRecoveryDialog
+        title: i18n("Create a new recovery code?")
+        text: i18n("The recovery code you have now stops working. Sugo shows you the new one, to keep in a safe place.")
+        confirmText: i18n("Create New Code")
+        onConfirmed: {
+            syncNewRecoveryDialog.close();
+            if (SyncController) {
+                SyncController.regenerateRecoveryCode();
+            }
+        }
+    }
+
+    ConfirmDialog {
+        id: syncShowRecoveryDialog
+        property string code
+        title: i18n("Recovery code")
+        text: i18n("With this code a new device opens your timers when none of your other devices is at hand. Keep it somewhere safe, away from this computer.")
+        confirmText: i18n("Copy")
+        cancelText: i18n("Close")
+        onConfirmed: {
+            syncRecoveryText.selectAll();
+            syncRecoveryText.copy();
+            syncRecoveryText.deselect();
+            syncShowRecoveryDialog.close();
+            applicationWindow().showPassiveNotification(i18n("Recovery code copied to the clipboard."));
+        }
+        onClosed: code = ""
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: syncRecoveryText.implicitHeight + Theme.spaceLg * 2
+            radius: Theme.radius
+            color: Theme.background
+            border.width: Theme.hairline
+            border.color: Theme.border
+            TextEdit {
+                id: syncRecoveryText
+                anchors.fill: parent
+                anchors.margins: Theme.spaceLg
+                verticalAlignment: TextEdit.AlignVCenter
+                readOnly: true
+                selectByMouse: true
+                text: syncShowRecoveryDialog.code
+                color: Theme.foreground
+                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                Accessible.name: i18n("Recovery code")
+            }
+        }
+    }
+
+    // A copied sign-in code is shown on the Copy button itself (a check for a few seconds).
+    property bool syncCodeCopied: false
+    Timer {
+        id: syncCodeCopiedTimer
+        interval: 3000
+        onTriggered: page.syncCodeCopied = false
     }
 
     // The calendar list is not kept between runs, and calendars made on the server since the last
@@ -351,6 +538,56 @@ QQC2.Page {
         color: Theme.muted
     }
 
+    /// A code to read out or type elsewhere (Sugo Sync): large, spaced, with a caption above it.
+    /// While `code` is empty the place is kept and a busy indicator turns in it.
+    component SyncCode: ColumnLayout {
+        id: syncCode
+        property string caption
+        property string code
+        Layout.fillWidth: true
+        Layout.topMargin: Theme.spaceXl
+        Layout.bottomMargin: Theme.spaceXl
+        spacing: Theme.spaceSm
+
+        Text {
+            Layout.fillWidth: true
+            text: syncCode.caption
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+        }
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: codeText.implicitHeight
+            Text {
+                id: codeText
+                anchors.left: parent.left
+                anchors.right: parent.right
+                // "M" keeps the line's height while there is no code yet.
+                text: syncCode.code.length > 0 ? syncCode.code : "M"
+                opacity: syncCode.code.length > 0 ? 1 : 0
+                color: Theme.foreground
+                font.family: Theme.monoFamily
+                font.pixelSize: Theme.fontHero
+                font.weight: Font.DemiBold
+                font.letterSpacing: Theme.letterSpacingCaps * 2
+                horizontalAlignment: Text.AlignHCenter
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: Theme.fontTitle
+                Accessible.role: Accessible.StaticText
+                Accessible.name: syncCode.caption + " " + syncCode.code
+            }
+            QQC2.BusyIndicator {
+                anchors.centerIn: parent
+                width: Theme.iconLg
+                height: Theme.iconLg
+                visible: syncCode.code.length === 0
+                running: visible && page.visible
+            }
+        }
+    }
+
     /// A titled group of setting rows, shown when its category is chosen.
     component SettingsCard: ColumnLayout {
         id: card
@@ -402,6 +639,10 @@ QQC2.Page {
         /// Every text `description` can show, when it changes with a state: the row keeps the
         /// height of the tallest, so nothing moves when the description changes.
         property var descriptionVariants: []
+        /// The height of the description shown, and the room the row keeps for its variants
+        /// (smoke checks: both follow the text at once, while the layout catches up later).
+        readonly property real descriptionHeight: descriptionText.implicitHeight
+        readonly property real descriptionRoom: descriptionText.reservedHeight
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
@@ -428,9 +669,10 @@ QQC2.Page {
                 Layout.preferredWidth: 0
                 Layout.alignment: Qt.AlignVCenter
                 // With variants, as tall as the title and the tallest of them; the text shown sits
-                // in the middle of that room, in line with the controls.
+                // in the middle of that room, in line with the controls. The two fillers make three
+                // gaps, all counted, or the tallest text would push the row taller.
                 Layout.minimumHeight: row.descriptionVariants.length > 0
-                                      ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
+                                      ? titleText.implicitHeight + descriptionText.reservedHeight + spacing * 3 : 0
                 spacing: Theme.hairline * 2
                 opacity: row.enabled ? 1 : 0.5
                 Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
@@ -478,6 +720,8 @@ QQC2.Page {
 
             RowLayout {
                 id: controlBox
+                // A row of text only leaves the text the whole width.
+                visible: children.length > 0
                 Layout.alignment: page.wide ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
                 spacing: Theme.spaceSm
             }
@@ -500,11 +744,63 @@ QQC2.Page {
             width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
             spacing: Theme.space2xl
 
-            // The categories: only the groups of the chosen one are shown.
-            Segmented {
-                model: page.categories
-                current: page.category
-                onActivated: id => page.category = id
+            // The categories: only the groups of the chosen one are shown. In a narrow window they
+            // scroll sideways rather than widen the page past the window.
+            Flickable {
+                id: categoryStrip
+                Layout.fillWidth: true
+                implicitHeight: categoryTabs.implicitHeight
+                contentWidth: categoryTabs.implicitWidth
+                contentHeight: categoryTabs.implicitHeight
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentWidth > width
+                clip: interactive
+
+                /// Scrolls just enough to show the chosen category, with a margin when it can.
+                function showCurrent(animated: bool): void {
+                    const rect = categoryTabs.choiceRect(page.category);
+                    if (!rect) {
+                        return;
+                    }
+                    let x = contentX;
+                    if (rect.x - Theme.spaceLg < x) {
+                        x = rect.x - Theme.spaceLg;
+                    } else if (rect.x + rect.width + Theme.spaceLg > x + width) {
+                        x = rect.x + rect.width + Theme.spaceLg - width;
+                    }
+                    x = Math.max(0, Math.min(contentWidth - width, x));
+                    stripScroll.stop();
+                    if (animated && x !== contentX) {
+                        stripScroll.to = x;
+                        stripScroll.start();
+                    } else {
+                        contentX = x;
+                    }
+                }
+                NumberAnimation {
+                    id: stripScroll
+                    target: categoryStrip
+                    property: "contentX"
+                    duration: Theme.durationShort
+                    easing.type: Easing.OutCubic
+                }
+                onWidthChanged: showCurrent(false)
+                onContentWidthChanged: showCurrent(false)
+                Component.onCompleted: Qt.callLater(() => showCurrent(false))
+                Connections {
+                    target: page
+                    function onCategoryChanged() {
+                        categoryStrip.showCurrent(true);
+                    }
+                }
+
+                Segmented {
+                    id: categoryTabs
+                    model: page.categories
+                    current: page.category
+                    onActivated: id => page.category = id
+                }
             }
 
             SettingsCard {
@@ -1274,6 +1570,289 @@ QQC2.Page {
                     FontMetrics {
                         id: calendarFooterMetrics
                         font.pixelSize: Theme.fontCaption + 1
+                    }
+                }
+            }
+
+            // Sugo Sync: signing in, approval by another device, then the status of the timers.
+            SettingsCard {
+                id: syncCard
+                objectName: "syncCard"
+                category: "sync"
+                title: i18n("Sugo Sync")
+                iconName: "refresh"
+
+                // --- Signed out -------------------------------------------------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncOff
+                    title: i18n("Your timers on all your computers")
+                    description: i18n("Sugo Sync keeps your timers the same on every computer you sign in on. They are encrypted on this computer, so only your devices can read them. The free plan links 2 devices.")
+                }
+                SettingRow {
+                    visible: page.syncOff
+                    title: i18n("Device name")
+                    description: i18n("How this computer appears in your list of devices.")
+                    STextField {
+                        id: syncDeviceName
+                        Layout.fillWidth: !page.wide
+                        Layout.preferredWidth: Theme.space4xl * 5
+                        text: SyncController ? SyncController.deviceName : ""
+                        maximumLength: 64
+                        Accessible.name: i18n("Device name")
+                        onAccepted: syncSignInButton.clicked()
+                    }
+                }
+                // What keeps Sugo Sync from starting is said here, in a description that keeps the
+                // height of its longest text (the toast tells what happened once, this how things are).
+                SettingRow {
+                    objectName: "syncSignInRow"
+                    visible: page.syncOff
+                    title: i18n("Sign in")
+                    description: !page.syncKeyring ? page.syncNoKeyringText
+                               : page.syncSignedOutRemotely ? page.syncSignedOutRemotelyText
+                               : page.syncSignInText
+                    descriptionVariants: [page.syncSignInText, page.syncNoKeyringText, page.syncSignedOutRemotelyText]
+                    SButton {
+                        id: syncSignInButton
+                        objectName: "syncSignInButton"
+                        kind: "primary"
+                        text: i18n("Sign in")
+                        enabled: page.syncKeyring && syncDeviceName.text.trim().length > 0
+                        onClicked: {
+                            if (enabled && SyncController) {
+                                SyncController.signIn(syncDeviceName.text.trim());
+                            }
+                        }
+                    }
+                }
+
+                // --- Signing in: the code to enter on sugo.stream ---------------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncSigningIn
+                    title: i18n("Enter this code on sugo.stream")
+                    description: page.syncLimit ? page.syncLimitText : page.syncEnterCodeText
+                    descriptionVariants: [page.syncEnterCodeText, page.syncLimitText]
+                }
+                SyncCode {
+                    visible: page.syncSigningIn
+                    caption: i18n("Your code")
+                    code: SyncController ? SyncController.userCode : ""
+                }
+                RowLayout {
+                    visible: page.syncSigningIn
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.bottomMargin: Theme.spaceXl
+                    spacing: Theme.spaceSm
+                    SButton {
+                        kind: "primary"
+                        text: i18n("Open in browser")
+                        iconName: "external"
+                        enabled: SyncController !== null && SyncController.userCode.length > 0
+                        onClicked: {
+                            if (!SyncController.openVerificationPage()) {
+                                applicationWindow().showPassiveNotification(i18n("The browser could not be opened. Go to sugo.stream and enter the code."));
+                            }
+                        }
+                    }
+                    SButton {
+                        labels: [i18n("Copy"), i18n("Copied")]
+                        text: page.syncCodeCopied ? i18n("Copied") : i18n("Copy")
+                        iconName: page.syncCodeCopied ? "check" : "copy"
+                        enabled: SyncController !== null && SyncController.userCode.length > 0
+                        onClicked: {
+                            if (SyncController.copyUserCode()) {
+                                page.syncCodeCopied = true;
+                                syncCodeCopiedTimer.restart();
+                            }
+                        }
+                    }
+                    SButton {
+                        kind: "ghost"
+                        text: i18n("Cancel")
+                        onClicked: SyncController.cancelSignIn()
+                    }
+                }
+
+                // --- Waiting for another device, or for the recovery code -------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncWaiting
+                    title: i18n("Approve this computer on another device")
+                    description: SyncController && SyncController.verificationCode.length > 0
+                        ? i18n("Open Sugo on a device that already syncs and approve this computer there. Check that it shows the same code as here.")
+                        : i18n("Open Sugo on a device that already syncs and approve this computer there.")
+                    descriptionVariants: [i18n("Open Sugo on a device that already syncs and approve this computer there. Check that it shows the same code as here."),
+                                          i18n("Open Sugo on a device that already syncs and approve this computer there.")]
+                }
+                SyncCode {
+                    visible: page.syncWaiting
+                    caption: i18n("Check that your other device shows the same code")
+                    code: SyncController ? SyncController.verificationCode : ""
+                }
+                SettingRow {
+                    visible: page.syncWaiting
+                    title: i18n("Use recovery code")
+                    description: i18n("No other device at hand? Enter the recovery code you saved when you first signed in.")
+                    STextField {
+                        id: syncRecoveryField
+                        Layout.fillWidth: !page.wide
+                        Layout.preferredWidth: Theme.space4xl * 5
+                        font.family: Theme.monoFamily
+                        placeholderText: "XXXX-XXXX-…"
+                        inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhSensitiveData
+                        Accessible.name: i18n("Recovery code")
+                        onAccepted: syncRecoveryButton.clicked()
+                    }
+                    SButton {
+                        id: syncRecoveryButton
+                        text: i18n("Use")
+                        Accessible.name: i18n("Use recovery code")
+                        enabled: syncRecoveryField.text.trim().length > 0
+                        onClicked: {
+                            if (enabled) {
+                                SyncController.useRecoveryCode(syncRecoveryField.text.trim());
+                                syncRecoveryField.text = "";
+                            }
+                        }
+                    }
+                }
+
+                // --- Linked: the status of the timers ---------------------------------------
+                SettingRow {
+                    first: true
+                    visible: page.syncLinked
+                    objectName: "syncTimersRow"
+                    title: i18n("Timers")
+                    // What went wrong, else when the timers last synced; as tall as the longest.
+                    description: page.syncError && page.syncStatusText.length > 0 ? page.syncStatusText
+                               : page.syncLastSync.length > 0 ? i18n("Last synced %1", page.syncLastSync)
+                               : i18n("Not synced yet")
+                    descriptionVariants: [i18n("Last synced %1", page.syncLastSync), i18n("Not synced yet")]
+                                         .concat(SyncController ? SyncController.errorTexts : [])
+                    StatusPill {
+                        objectName: "syncStatusPill"
+                        text: page.syncSyncing ? i18n("Syncing")
+                            : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
+                            : i18n("Up to date")
+                        dotColor: page.syncSyncing ? Theme.brand
+                                : page.syncError ? (page.syncErrorKind === SyncController.Network || page.syncErrorKind === SyncController.RateLimited
+                                                    ? Theme.warning : Theme.danger)
+                                : Theme.positive
+                        pulsing: page.syncSyncing
+                    }
+                    SButton {
+                        objectName: "syncNowButton"
+                        labels: [i18n("Sync now"), i18n("Syncing…")]
+                        text: page.syncSyncing ? i18n("Syncing…") : i18n("Sync now")
+                        iconName: "refresh"
+                        enabled: !page.syncSyncing
+                        onClicked: SyncController.syncNow()
+                    }
+                }
+            }
+
+            // The devices linked to the account: this one, and the others to disconnect.
+            SettingsCard {
+                objectName: "syncDevicesCard"
+                category: "sync"
+                available: page.syncLinked && page.syncDevices.length > 0
+                title: i18n("Devices")
+                iconName: "computer"
+
+                Repeater {
+                    model: page.syncDevices
+                    delegate: SettingRow {
+                        id: deviceRow
+                        required property var modelData
+                        required property int index
+                        first: index === 0
+                        title: modelData.name
+                        description: page.syncDeviceDetails(modelData)
+                        StatusPill {
+                            visible: deviceRow.modelData.current
+                            text: i18n("This device")
+                            dotColor: Theme.positive
+                        }
+                        SButton {
+                            visible: !deviceRow.modelData.current
+                            text: i18n("Disconnect…")
+                            destructive: true
+                            Accessible.name: i18n("Disconnect %1", deviceRow.modelData.name)
+                            onClicked: {
+                                syncDisconnectDialog.deviceId = deviceRow.modelData.id;
+                                syncDisconnectDialog.deviceName = deviceRow.modelData.name;
+                                syncDisconnectDialog.open();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The recovery code and signing out.
+            SettingsCard {
+                objectName: "syncAccountCard"
+                category: "sync"
+                available: page.syncLinked || page.syncWaiting
+                title: i18n("Account")
+                iconName: "user-identity"
+
+                SettingRow {
+                    first: true
+                    visible: page.syncLinked
+                    title: i18n("Recovery code")
+                    description: i18n("With it, a new device opens your timers when none of your other devices is at hand. Without any device and without the code, the synced timers cannot be opened again.")
+                    SButton {
+                        visible: SyncController !== null && SyncController.recoveryCodeShowable
+                        text: i18n("Show")
+                        Accessible.name: i18n("Show recovery code")
+                        onClicked: {
+                            syncShowRecoveryDialog.code = SyncController.recoveryCode();
+                            syncShowRecoveryDialog.open();
+                        }
+                    }
+                    SButton {
+                        text: i18n("Create a new one…")
+                        Accessible.name: i18n("Create a new recovery code")
+                        onClicked: syncNewRecoveryDialog.open()
+                    }
+                }
+                SettingRow {
+                    first: !page.syncLinked
+                    title: i18n("Sign out")
+                    description: i18n("This computer stops syncing. Your timers stay on it.")
+                    SButton {
+                        objectName: "syncSignOutButton"
+                        text: i18n("Sign out…")
+                        destructive: true
+                        onClicked: page.requestSyncSignOut()
+                    }
+                }
+            }
+
+            // What Sugo Sync will carry next: shown, not offered yet.
+            SettingsCard {
+                objectName: "syncComingSoonCard"
+                category: "sync"
+                title: i18n("Coming to Sugo Sync")
+                iconName: "appointment-soon"
+
+                SettingRow {
+                    first: true
+                    title: i18n("Session history and statistics")
+                    description: i18n("Your finished sessions and their statistics, the same on every device.")
+                    StatusPill {
+                        text: i18n("Coming soon")
+                        dotColor: Theme.subtle
+                    }
+                }
+                SettingRow {
+                    title: i18n("Task notes")
+                    description: i18n("The notes you write after a work session, on every device.")
+                    StatusPill {
+                        text: i18n("Coming soon")
+                        dotColor: Theme.subtle
                     }
                 }
             }

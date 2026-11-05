@@ -3,6 +3,7 @@
 
 #include "AppSettings.h"
 #include "DataManager.h"
+#include "SyncController.h"
 
 #include "Localization.h"
 
@@ -22,6 +23,7 @@
 #include <QTime>
 
 #include <QLoggingCategory>
+#include <QMetaEnum>
 
 #include <atomic>
 #include <deque>
@@ -77,6 +79,11 @@ Diagnostics::Diagnostics(QObject *parent)
 }
 
 Diagnostics::~Diagnostics() = default;
+
+void Diagnostics::attachSync(SyncController *sync)
+{
+    m_sync = sync;
+}
 
 void Diagnostics::attach(AppSettings *settings, DataManager *dataManager)
 {
@@ -331,6 +338,27 @@ QString Diagnostics::generateReport() const
         lines << QStringLiteral("- Timers / Presets Count: ") + QString::number(m_dataManager->presetCount());
     } else {
         lines << QStringLiteral("- Storage: (Not attached)");
+    }
+    lines << QString();
+
+    lines << QStringLiteral("## Sync");
+    if (m_sync) {
+        const auto key = [](const char *enumName, int value) {
+            const QMetaObject &meta = SyncController::staticMetaObject;
+            return QString::fromLatin1(meta.enumerator(meta.indexOfEnumerator(enumName)).valueToKey(value));
+        };
+        const auto yesNo = [](bool value) { return value ? QStringLiteral("Yes") : QStringLiteral("No"); };
+        const QDateTime lastSync = m_sync->lastSync();
+        lines << QStringLiteral("- State: ") + key("State", m_sync->state());
+        lines << QStringLiteral("- Error: ") + key("ErrorKind", m_sync->errorKind());
+        lines << QStringLiteral("- Keyring Available: ") + yesNo(m_sync->keyringAvailable());
+        lines << QStringLiteral("- Linked: ") + yesNo(m_sync->linked());
+        lines << QStringLiteral("- Last Sync: ")
+                + (lastSync.isValid() ? lastSync.toUTC().toString(Qt::ISODate) + QStringLiteral(" (UTC)") : QStringLiteral("Never"));
+        lines << QStringLiteral("- Devices: ") + QString::number(m_sync->devices().size());
+        lines << QStringLiteral("- Server: ") + (m_sync->usesDefaultServer() ? QStringLiteral("default") : QStringLiteral("custom"));
+    } else {
+        lines << QStringLiteral("- Sync: (Not attached)");
     }
     lines << QString();
 

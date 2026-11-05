@@ -2,6 +2,7 @@
 #include "SyncController.h"
 
 #include "Localization.h"
+#include "Notifier.h"
 #include "PresetModel.h"
 #include "PresetPersistence.h"
 #include "PresetRepository.h"
@@ -12,6 +13,7 @@
 #include "SyncSecrets.h"
 
 #include <QLoggingCategory>
+#include <QMetaEnum>
 #include <QSysInfo>
 
 #include <algorithm>
@@ -112,6 +114,12 @@ void SyncController::setDesktopActions(std::function<bool(const QUrl &)> openUrl
 {
     m_openUrl = std::move(openUrl);
     m_copyText = std::move(copyText);
+}
+
+void SyncController::attachNotifier(Notifier *notifier, std::function<bool()> windowVisible)
+{
+    m_notifier = notifier;
+    m_windowVisible = std::move(windowVisible);
 }
 
 void SyncController::connectAccount()
@@ -695,7 +703,12 @@ QString SyncController::statusText() const
     case Error:
         break;
     }
-    switch (m_errorKind) {
+    return errorText(m_errorKind);
+}
+
+QString SyncController::errorText(ErrorKind kind)
+{
+    switch (kind) {
     case Network:
         return i18n("Cannot reach Sugo Sync. Trying again later.");
     case FormatTooNew:
@@ -718,6 +731,19 @@ QString SyncController::statusText() const
         break;
     }
     return QString();
+}
+
+QStringList SyncController::errorTexts()
+{
+    QStringList texts;
+    const QMetaEnum kinds = QMetaEnum::fromType<ErrorKind>();
+    for (int i = 0; i < kinds.keyCount(); ++i) {
+        const QString text = errorText(static_cast<ErrorKind>(kinds.value(i)));
+        if (!text.isEmpty() && !texts.contains(text)) {
+            texts.append(text);
+        }
+    }
+    return texts;
 }
 
 bool SyncController::keyringAvailable() const
@@ -774,6 +800,16 @@ void SyncController::writeSetting(const char *name, const QVariant &value)
 // Account, for QML
 // ---------------------------------------------------------------------------------------------
 
+bool SyncController::linked() const
+{
+    return m_account->isLinked();
+}
+
+bool SyncController::usesDefaultServer() const
+{
+    return SyncApi::isDefaultBaseUrl(m_api->baseUrl());
+}
+
 QString SyncController::userCode() const
 {
     return m_account->userCode();
@@ -806,7 +842,11 @@ QVariantList SyncController::devices() const
 
 QString SyncController::deviceName() const
 {
-    const QString name = m_account->deviceName();
+    // Signed out: the name last signed in with, so signing in again keeps it.
+    QString name = m_account->deviceName();
+    if (name.isEmpty()) {
+        name = m_account->lastDeviceName();
+    }
     return name.isEmpty() ? QSysInfo::machineHostName() : name;
 }
 
@@ -871,7 +911,26 @@ void SyncController::showNextApproval()
     Q_EMIT pendingApprovalChanged();
     if (!m_approvals.isEmpty()) {
         Q_EMIT approvalRequested();
+        notifyApproval();
     }
+}
+
+void SyncController::notifyApproval()
+{
+    // The window asks by itself when it is on screen.
+    if (!m_notifier || (m_windowVisible && m_windowVisible())) {
+        return;
+    }
+    const QString name = m_approvals.constFirst().value(QStringLiteral("name")).toString();
+    Notifier::Notification notification;
+    notification.title = i18n("New device wants to sync");
+    notification.text = i18n("%1 asks for your timers. Open Sugo to compare the verification code and approve it.", name);
+    notification.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+    const Notifier::Handler review = [this](const QString &token) { Q_EMIT showSyncPageRequested(token); };
+    notification.actions.append({i18n("Review"), review});
+    notification.defaultActionLabel = i18n("Review");
+    notification.defaultAction = review;
+    m_notifier->notify(this, notification);
 }
 
 void SyncController::dropApproval(const QString &id)

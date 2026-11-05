@@ -61,9 +61,27 @@ Secrets (the calendar password; the sync's token and key once the sync is in) ar
 - [ ] Without a usable Keychain (start `Sugo.app/Contents/MacOS/Sugo` from an SSH session, which has no login session: every Keychain call fails at once with OSStatus -25308, no dialog): Sugo starts normally; once the sync is in, Settings → Sync says it needs the system keyring and stays off (sync-plan S4), the same as on a Linux desktop without Secret Service.
 - [ ] Once the sync is in: sign in, update the app (build 1 → 2), let a sync run: at most one question per secret, then syncing goes on; "Sign out" removes Sugo's sync items from Keychain Access.
 
+## Sugo Sync (dev server)
+
+Run the sync server locally (`sugo-sync/worker`: `npm run db:migrate:local`, `npx wrangler dev`, with `CLERK_DEV_BYPASS=1` in `.dev.vars`) and start each copy of Sugo with `SUGO_SYNC_URL=http://localhost:8787` and its own `SUGO_DATA_DIR`. Approve a sign-in code with `curl -X POST localhost:8787/v1/auth/device/approve -H 'Authorization: Bearer dev:user_local' -H 'Content-Type: application/json' -d '{"user_code":"…"}'`. Two copies on one Linux desktop need separate session buses (one Sugo per bus), each with a keyring.
+
+- [ ] Signed out, Settings → Sync shows the description, the device name (the host name) and Sign in. Sign in: the code appears large; "Open in browser" opens the verification page with the code, "Copy" copies it and reads "Copied" for a few seconds without moving anything; Cancel goes back.
+- [ ] Approve the code: the first device shows "Keep your recovery code"; "Done" stays off until the asked group is typed (any case, O for 0); then the tab shows "Up to date" and the last sync, the device as "This device", the recovery code and Sign out.
+- [ ] Sign in a second copy: it shows a 6-digit code. The first copy asks "Approve …?" with the same code (with its window hidden in the tray, a notification comes first; clicking it opens Settings → Sync). Approve: the second copy becomes "Up to date". "Not Now" leaves it waiting until the next start.
+- [ ] A third copy, with the free plan's 2 devices taken: after approving its code on the site it says to disconnect a device on sugo.stream, and goes on by itself once one is disconnected.
+- [ ] The second copy uses the recovery code instead of an approval: a wrong code says so; the right one opens the timers.
+- [ ] Change, add and delete a timer on one copy: after "Sync now" (or within a minute of activating the window) the other copy shows the change; a deleted timer stays deleted.
+- [ ] Stop the server: "Sync now" shows "Offline" with a message in its place, nothing moves, and the timers keep working; start it again and sync.
+- [ ] Without a keyring (Linux without Secret Service, `DBUS_SESSION_BUS_ADDRESS=unix:path=/dev/null`; an unsigned Mac from SSH): Sign in is refused with "Sugo Sync needs the system keyring" and the button turns off; nothing is sent to the server.
+- [ ] On macOS, after updating an ad hoc signed build while linked: one Keychain question for the sync (its single item), a few seconds after the start; while signed out, starting never asks.
+- [ ] Show the recovery code and copy it; "Create a new one…" warns that the old code stops working and then asks to confirm the new one.
+- [ ] Disconnect the other device: it asks first, and the other copy is signed out with "This device was disconnected". Sign out asks first and says the timers stay; with the server stopped, a toast says to disconnect the device on sugo.stream. The timers are still there afterwards.
+- [ ] In a narrow window (about 400 px) and in light and dark colours, every state of the Sync tab fits, and the category tabs scroll sideways.
+- [ ] Settings → Advanced → diagnostics: the Sync section has the state, error, keyring, linked, last sync, device count and server (default/custom), and no names, ids, codes or tokens.
+
 ## No layout shift
 
-- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
+- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Sync (no keyring, the device limit, offline), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
 - [ ] On a timer's page, make silencing notifications available or unavailable while the page is open (macOS: install or remove the Focus shortcuts; Linux: start or stop the notification inhibitor service): the "Silence notifications while working" row and those below do not move.
 
 ## Window and dialogs
