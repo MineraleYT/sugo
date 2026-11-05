@@ -37,9 +37,12 @@ Rectangle {
                                         : current === "stats" ? "stats"
                                         : current === "settings" || current === "preset" || current === "about" ? "settings" : ""
 
+    /// Full screen: macOS hides the traffic lights, so the bar leaves no room for them.
+    property bool fullScreen: false
+
     // On macOS the bar is as tall as the system's title bar (a compact toolbar's, MacApp.mm), so
-    // its middle is that of the traffic lights.
-    implicitHeight: DesktopStyle.nativeChrome && bar.SafeArea.margins.top > 0
+    // its middle is that of the traffic lights; in full screen the system has none there.
+    implicitHeight: DesktopStyle.nativeChrome && !bar.fullScreen && bar.SafeArea.margins.top > 0
                     ? bar.SafeArea.margins.top : Theme.titleBarHeight
     color: Theme.background
 
@@ -89,7 +92,7 @@ Rectangle {
         id: leftGroup
         objectName: "titleBarBrand"
         anchors.left: parent.left
-        anchors.leftMargin: DesktopStyle.nativeChrome ? Theme.titleBarMacInset : Theme.titleBarPaddingLeft
+        anchors.leftMargin: DesktopStyle.nativeChrome && !bar.fullScreen ? Theme.titleBarMacInset : Theme.titleBarPaddingLeft
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.spaceMd
 
