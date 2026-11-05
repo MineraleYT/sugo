@@ -20,7 +20,7 @@ void macSetDockIconHidden(bool hidden);
 
 class QWindow;
 /// Hides the title text the system draws in the window's title bar (the traffic lights stay):
-/// the sidebar already shows the name. The title still names the window in the Window menu and
+/// the title bar of the window already shows the name. The title still names the window in the Window menu and
 /// Mission Control. Does nothing without the cocoa platform (offscreen runs).
 void macHideWindowTitle(QWindow *window);
 #endif

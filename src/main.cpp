@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setApplicationDisplayName(i18n("Sugo"));
     QCoreApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
-    // What the About page and the sidebar show.
+    // What the About page shows.
     const QVariantMap about{
         {QStringLiteral("displayName"), i18n("Sugo")},
         {QStringLiteral("version"), QStringLiteral(PROJECT_VERSION)},

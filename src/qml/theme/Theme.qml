@@ -20,7 +20,6 @@ QtObject {
 
     // --- Surfaces ----------------------------------------------------------------------------
     readonly property color background: dark ? "#0e0e10" : "#fbfbfb"
-    readonly property color sidebar: dark ? "#131315" : "#f4f4f5"
     readonly property color card: dark ? "#161618" : "#ffffff"
     readonly property color raised: dark ? "#1c1c1f" : "#ffffff"
     readonly property color border: dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.08)
@@ -131,15 +130,11 @@ QtObject {
     readonly property int controlHeight: 32
     readonly property int controlHeightLg: 40
     readonly property int navHeight: 34
-    readonly property int sidebarWidth: 236
-    readonly property int topBarHeight: 46
     readonly property int contentMaxWidth: 760
     readonly property int windowWidth: 980
     readonly property int windowHeight: 680
     readonly property int windowMinWidth: 380
     readonly property int windowMinHeight: 520
-    /// Below this window width the sidebar becomes a drawer.
-    readonly property int wideBreakpoint: 680
 
     // The redesign's sizes, one block per part of the window (each part adds its own here).
     readonly property int radiusXs: 4
@@ -241,7 +236,7 @@ QtObject {
     readonly property int fontCaption: 12
     readonly property int fontBody: 13
     readonly property int fontTitle: 14
-    /// The name of the application in the sidebar.
+    /// A title a step above the body's.
     readonly property int fontTitleLg: 16
     /// The title of a section inside a page.
     readonly property int fontSection: 17
