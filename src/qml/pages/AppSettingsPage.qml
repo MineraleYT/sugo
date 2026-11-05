@@ -1713,6 +1713,16 @@ QQC2.Page {
                         onClicked: {
                             if (enabled) {
                                 SyncController.useRecoveryCode(syncRecoveryField.text.trim());
+                            }
+                        }
+                    }
+                    // Kept while the device waits, so a wrong character is corrected rather than
+                    // the whole code typed again; cleared once the code opened the timers (or the
+                    // device stopped waiting some other way).
+                    Connections {
+                        target: page
+                        function onSyncWaitingChanged() {
+                            if (!page.syncWaiting) {
                                 syncRecoveryField.text = "";
                             }
                         }
