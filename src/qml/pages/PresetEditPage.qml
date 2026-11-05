@@ -17,7 +17,9 @@ QQC2.Page {
              longBreakSeconds: 15 * 60, cyclesBeforeLong: 4, builtin: false,
              options: ({ autoStartMode: 0, silenceWhileWorking: false, soundOnEnd: true, notifyOnEnd: true }) })
         : PresetModel.get(uuid)
-    property string selectedIcon: isNew ? "sugo-timer" : (preset.iconName || "sugo-timer")
+    /// The controls' starting values: what they show for `preset`.
+    readonly property var shown: shownFields(preset)
+    property string selectedIcon: shown.iconName
     readonly property var iconChoices: PresetModel.availableIcons()
     readonly property bool valid: nameField.text.trim().length > 0
     readonly property bool isCurrent: !isNew && PresetModel.currentUuid === uuid
@@ -25,13 +27,15 @@ QQC2.Page {
     readonly property bool lockedByTimer: isCurrent && TimerEngine.active
 
     // `preset` is read once, for the controls' starting values; what shows the stored name follows
-    // every change of the timer (a save, a rename elsewhere) through this count.
+    // every change of the timer (a save, a rename elsewhere) through this count, and so do the
+    // controls the user has not changed (followStored()).
     property int storedRevision: 0
     Connections {
         target: PresetModel
         function onPresetChanged(changedUuid) {
             if (changedUuid === page.uuid) {
                 ++page.storedRevision;
+                page.followStored();
             }
         }
     }
@@ -63,7 +67,60 @@ QQC2.Page {
         };
     }
 
-    // The fields as the page opened, to tell whether anything was changed since.
+    /// What the controls show for the stored timer `p` (a PresetModel.get() map), as currentFields() reads them.
+    function shownFields(p: var): var {
+        const o = p.options || {};
+        return {
+            name: p.name || "",
+            category: p.category || "",
+            iconName: p.iconName || "sugo-timer",
+            workSeconds: Math.max(1, Math.round(p.workSeconds / 60)) * 60,
+            shortBreakSeconds: Math.round(p.shortBreakSeconds / 60) * 60,
+            longBreakSeconds: Math.round(p.longBreakSeconds / 60) * 60,
+            cyclesBeforeLong: p.cyclesBeforeLong,
+            autoStartMode: o.autoStartMode !== undefined ? Math.max(0, Math.min(2, Number(o.autoStartMode))) : 0,
+            silenceWhileWorking: o.silenceWhileWorking !== undefined ? Boolean(o.silenceWhileWorking) : false,
+            soundOnEnd: o.soundOnEnd !== undefined ? Boolean(o.soundOnEnd) : true,
+            notifyOnEnd: o.notifyOnEnd !== undefined ? Boolean(o.notifyOnEnd) : true
+        };
+    }
+
+    /// The timer changed while the page is open (Sugo Sync brought another computer's version, or a
+    /// save): the controls the user has not changed show the stored values, the others keep what
+    /// the user made of them.
+    function followStored(): void {
+        if (isNew || initialFields.length === 0) {
+            return;
+        }
+        const stored = PresetModel.get(uuid);
+        if (stored.uuid === undefined) {
+            return;
+        }
+        const was = JSON.parse(initialFields);
+        const now = currentFields();
+        const next = shownFields(stored);
+        const show = {
+            name: v => nameField.text = v,
+            category: v => categoryField.text = v,
+            iconName: v => page.selectedIcon = v,
+            workSeconds: v => workBox.value = v / 60,
+            shortBreakSeconds: v => shortBox.value = v / 60,
+            longBreakSeconds: v => longBox.value = v / 60,
+            cyclesBeforeLong: v => cyclesBox.value = v,
+            autoStartMode: v => autoStartBox.currentIndex = v,
+            silenceWhileWorking: v => silenceBox.checked = v,
+            soundOnEnd: v => soundBox.checked = v,
+            notifyOnEnd: v => notifyBox.checked = v
+        };
+        for (const key in show) {
+            if (now[key] === was[key] && next[key] !== was[key]) {
+                show[key](next[key]);
+            }
+        }
+        initialFields = JSON.stringify(next);
+    }
+
+    // The fields as stored when the page opened or last followed the timer, to tell what was changed since.
     property string initialFields: ""
     // Taken once every control has its starting value.
     Component.onCompleted: Qt.callLater(() => initialFields = JSON.stringify(currentFields()))
@@ -93,7 +150,21 @@ QQC2.Page {
             leaving = true;
             applicationWindow().openTimer(created);
         } else {
-            PresetModel.update(uuid, fields);
+            // Only what the user changed: the rest keeps what is stored, which may have come from
+            // another computer since the page opened.
+            const was = JSON.parse(initialFields);
+            const changed = {};
+            for (const key in fields) {
+                if (fields[key] !== was[key]) {
+                    changed[key] = fields[key];
+                }
+            }
+            if (!PresetModel.update(uuid, changed)) {
+                // Deleted meanwhile (on another computer, through Sugo Sync).
+                applicationWindow().showPassiveNotification(
+                    i18n("This timer no longer exists, so your changes were not saved."));
+                return;
+            }
             initialFields = JSON.stringify(currentFields());
         }
     }
@@ -394,7 +465,7 @@ QQC2.Page {
                     spacing: 0
                     InlineField {
                         id: nameField
-                        text: page.preset.name
+                        text: page.shown.name
                         maximumLength: PresetModel.maxNameLength
                         placeholderText: i18n("Name this timer")
                         font.pixelSize: Theme.fontHeading
@@ -405,7 +476,7 @@ QQC2.Page {
                     }
                     InlineField {
                         id: categoryField
-                        text: page.preset.category
+                        text: page.shown.category
                         maximumLength: PresetModel.maxNameLength
                         placeholderText: i18n("Add a category, e.g. Work or Study")
                         color: Theme.muted
@@ -666,7 +737,7 @@ QQC2.Page {
                         Layout.leftMargin: Theme.spaceSm
                         from: 1
                         to: PresetModel.maxWorkMinutes
-                        value: Math.max(1, Math.round(page.preset.workSeconds / 60))
+                        value: page.shown.workSeconds / 60
                         unit: i18nc("minutes, short", "min")
                         Accessible.name: i18n("Work")
                     }
@@ -679,7 +750,7 @@ QQC2.Page {
                         // 0 is no break (the engine goes straight back to work): typed, not dragged.
                         from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.round(page.preset.shortBreakSeconds / 60)
+                        value: page.shown.shortBreakSeconds / 60
                         unit: i18nc("minutes, short", "min")
                         fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Short break")
@@ -693,7 +764,7 @@ QQC2.Page {
                         // 0 is no break (the engine goes straight back to work): typed, not dragged.
                         from: 0
                         to: PresetModel.maxBreakMinutes
-                        value: Math.round(page.preset.longBreakSeconds / 60)
+                        value: page.shown.longBreakSeconds / 60
                         unit: i18nc("minutes, short", "min")
                         fromText: i18nc("no break", "None")
                         Accessible.name: i18n("Long break")
@@ -707,7 +778,7 @@ QQC2.Page {
                         objectName: "cyclesField"
                         from: 0
                         to: PresetModel.maxCycles
-                        value: page.preset.cyclesBeforeLong
+                        value: page.shown.cyclesBeforeLong
                         unit: i18ncp("work sessions, short", "session", "sessions", cyclesBox.value)
                         fromText: i18n("Never")
                         Accessible.name: i18n("Long break after")
@@ -726,9 +797,7 @@ QQC2.Page {
                         id: autoStartBox
                         Accessible.name: i18n("Start automatically")
                         model: [i18n("Manual"), i18n("Breaks only"), i18n("All phases")]
-                        currentIndex: (page.preset.options && page.preset.options.autoStartMode !== undefined)
-                            ? Math.max(0, Math.min(2, Number(page.preset.options.autoStartMode)))
-                            : 0
+                        currentIndex: page.shown.autoStartMode
                     }
                 }
                 FormRow {
@@ -756,9 +825,7 @@ QQC2.Page {
                         visible: SilenceController.available || !DesktopStyle.macos
                         enabled: SilenceController.available
                         Accessible.name: i18n("Silence notifications while working")
-                        checked: (page.preset.options && page.preset.options.silenceWhileWorking !== undefined)
-                            ? Boolean(page.preset.options.silenceWhileWorking)
-                            : false
+                        checked: page.shown.silenceWhileWorking
                     }
                 }
                 FormRow {
@@ -766,9 +833,7 @@ QQC2.Page {
                     SSwitch {
                         id: soundBox
                         Accessible.name: i18n("Play a sound when a phase ends")
-                        checked: (page.preset.options && page.preset.options.soundOnEnd !== undefined)
-                            ? Boolean(page.preset.options.soundOnEnd)
-                            : true
+                        checked: page.shown.soundOnEnd
                     }
                 }
                 FormRow {
@@ -776,9 +841,7 @@ QQC2.Page {
                     SSwitch {
                         id: notifyBox
                         Accessible.name: i18n("Show a notification when a phase ends")
-                        checked: (page.preset.options && page.preset.options.notifyOnEnd !== undefined)
-                            ? Boolean(page.preset.options.notifyOnEnd)
-                            : true
+                        checked: page.shown.notifyOnEnd
                     }
                 }
             }

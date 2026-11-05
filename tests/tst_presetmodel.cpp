@@ -245,6 +245,20 @@ private Q_SLOTS:
         QVERIFY(!model->update(QStringLiteral("missing"), {}));
     }
 
+    void updateKeepsTheFieldsItIsNotGiven()
+    {
+        // The editor passes only what the user changed: the rest stays as stored, which may be a
+        // change that arrived from another computer while the editor was open.
+        const QString uuid = model->create({{QStringLiteral("name"), QStringLiteral("A")},
+                                            {QStringLiteral("category"), QStringLiteral("Work")},
+                                            {QStringLiteral("workSeconds"), 25 * 60}});
+        QVERIFY(model->update(uuid, {{QStringLiteral("workSeconds"), 30 * 60}}));
+        const QVariantMap p = model->get(uuid);
+        QCOMPARE(p.value(QStringLiteral("name")).toString(), QStringLiteral("A"));
+        QCOMPARE(p.value(QStringLiteral("category")).toString(), QStringLiteral("Work"));
+        QCOMPARE(p.value(QStringLiteral("workSeconds")).toInt(), 30 * 60);
+    }
+
     void replacingTheListAnnouncesTheTimersThatChanged()
     {
         const QString renamed = model->create({{QStringLiteral("name"), QStringLiteral("A")}});
