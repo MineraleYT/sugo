@@ -25,7 +25,8 @@ class PortalResponse;
  * The portal's dialog may still be open when setEnabled() stops waiting: the request is
  * still listened to, and if the user answers yes after all (the portal then changes the
  * login entry), the choice is stored and the changed callback called. A newer request
- * replaces it: only the latest one counts.
+ * replaces it, and so does destroying this object (quitting): the old request is then
+ * closed (Request.Close), so its dialog cannot change the entry unseen.
  */
 class PortalAutostart final : public Autostart
 {

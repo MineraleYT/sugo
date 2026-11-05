@@ -3,6 +3,7 @@
 
 #include <QDBusMessage>
 #include <QDBusObjectPath>
+#include <QDBusPendingCallWatcher>
 #include <QDBusReply>
 #include <QDir>
 #include <QEventLoop>
@@ -99,7 +100,20 @@ void PortalAutostart::dropPendingRequest()
         return;
     }
     stopListening(m_pending->handle, m_pending.get());
+    // Its dialog may still be open: closed, it cannot change the login entry behind Sugo's back.
+    // Not waited for (the portal may be gone, and quitting must not hang on it): a failure is logged.
+    const QString handle = m_pending->handle;
     m_pending.reset();
+    const QDBusPendingCall call = m_bus.asyncCall(
+        QDBusMessage::createMethodCall(kPortalService, handle, kRequestInterface, QStringLiteral("Close")));
+    auto *watcher = new QDBusPendingCallWatcher(call);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, watcher, [handle](QDBusPendingCallWatcher *finished) {
+        if (finished->isError()) {
+            qCWarning(lcPortalAutostart) << "Cannot close the Background portal request" << handle << ":"
+                                         << finished->error().message();
+        }
+        finished->deleteLater();
+    });
 }
 
 bool PortalAutostart::confirms(const PortalResponse &response, bool enabled)
