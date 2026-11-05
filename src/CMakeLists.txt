@@ -21,7 +21,6 @@ qt6_add_qml_module(sugo_core
         qml/components/ProgressRing.qml
         qml/theme/Theme.qml
         qml/components/LineIcon.qml
-        qml/components/Kbd.qml
         qml/components/SButton.qml
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
