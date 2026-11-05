@@ -3,6 +3,7 @@
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimeZone>
 
@@ -10,6 +11,7 @@
 
 #include <memory>
 
+#include "DamagedDatabase.h"
 #include "Database.h"
 #include "PresetModel.h"
 #include "PresetPersistence.h"
@@ -456,6 +458,76 @@ private Q_SLOTS:
 
         model.create({{QStringLiteral("name"), QStringLiteral("Edit after failed load")}});
         QCOMPARE(uuids(repo->loadAll()), (QStringList{PresetModel::DefaultUuid, QStringLiteral("mine")}));
+    }
+    // A page that cannot be read (a bad sector, an I/O error) must fail the load, not end it early:
+    // a short list would be saved back over the database, deleting the timers it lacks and
+    // leaving tombstones that Sugo Sync spreads to the other devices.
+    void loadAllFailsWhenAPageCannotBeRead_data()
+    {
+        QTest::addColumn<QByteArray>("marker");
+        QTest::newRow("timer") << QByteArray("timer-name-0280");
+        QTest::newRow("option") << QByteArray("option-value-0280");
+    }
+
+    void loadAllFailsWhenAPageCannotBeRead()
+    {
+        QFETCH(QByteArray, marker);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            PresetRepository writer(file.connectionName());
+            QList<TimerPreset> presets{builtinDefault()};
+            for (int i = 0; i < 300; ++i) {
+                TimerPreset p = makePreset(QStringLiteral("uuid-%1").arg(i),
+                                           QStringLiteral("timer-name-%1").arg(i, 4, 10, QLatin1Char('0')));
+                p.options.insert(QStringLiteral("note"), QStringLiteral("option-value-%1").arg(i, 4, 10, QLatin1Char('0')));
+                presets.append(p);
+            }
+            QVERIFY(writer.saveAll(presets));
+            bool ok = false;
+            QCOMPARE(writer.loadAll(&ok).size(), 301);
+            QVERIFY(ok);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, marker) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        PresetRepository reader(damaged.name());
+        bool ok = true;
+        QVERIFY(reader.loadAll(&ok).isEmpty());
+        QVERIFY(!ok);
+    }
+
+    void tombstonesFailWhenAPageCannotBeRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            PresetRepository writer(file.connectionName());
+            QList<TimerPreset> presets{builtinDefault()};
+            for (int i = 0; i < 300; ++i) {
+                presets.append(makePreset(QStringLiteral("deleted-timer-%1").arg(i, 4, 10, QLatin1Char('0')), QStringLiteral("Gone")));
+            }
+            QVERIFY(writer.saveAll(presets));
+            QVERIFY(writer.saveAll({builtinDefault()}));
+            bool ok = false;
+            QCOMPARE(writer.tombstones(&ok).size(), 300);
+            QVERIFY(ok);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, QByteArray("deleted-timer-0280")) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        PresetRepository reader(damaged.name());
+        bool ok = true;
+        QVERIFY(reader.tombstones(&ok).isEmpty());
+        QVERIFY(!ok);
     }
 };
 

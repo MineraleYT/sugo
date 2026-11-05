@@ -3,6 +3,7 @@
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "Localization.h"
@@ -10,6 +11,7 @@
 #include <limits>
 #include <memory>
 
+#include "DamagedDatabase.h"
 #include "Database.h"
 #include "FakeClock.h"
 #include "PresetModel.h"
@@ -511,6 +513,33 @@ private Q_SLOTS:
         engine->stop();
         QCOMPARE(all().size(), 2);
         QCOMPARE(recorder->lastWorkSessionId(), -1);
+    }
+    // A page that cannot be read ends the query partway: the cursor must not move past the rows
+    // that were never read, or the statistics would never count them.
+    void completedWorkStartsAfterKeepsItsPlaceWhenAPageCannotBeRead()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        {
+            Database file(path);
+            QVERIFY(file.open());
+            SessionRepository writer(file.connectionName());
+            for (int i = 0; i < 300; ++i) {
+                SessionRecord r = makeRecord(1000 * (i + 1));
+                r.note = QStringLiteral("session-note-%1").arg(i, 4, 10, QLatin1Char('0'));
+                QVERIFY(writer.insert(r));
+            }
+            QCOMPARE(writer.completedWorkStartsAfter(0).size(), 300);
+        }
+        QVERIFY(DamagedDatabase::damagePagesHolding(path, QByteArray("session-note-0280")) > 0);
+
+        DamagedDatabase::Connection damaged(path, QStringLiteral("damaged"));
+        QVERIFY(damaged.isOpen());
+        SessionRepository reader(damaged.name());
+        qint64 maxId = -1;
+        QVERIFY(reader.completedWorkStartsAfter(0, &maxId).isEmpty());
+        QCOMPARE(maxId, 0);
     }
 };
 
