@@ -33,8 +33,9 @@ class TimerEngine;
  * request, whose locker may never say it unlocked) is forgotten when the user sets the timer running
  * again (resume, start, skip): they are back, and the next lock must count. A phase that ends and
  * starts the next one by itself proves nothing, also when it ends while a lock is being handled.
- * Automatically pauses the active work phase when the screen is locked, and
- * signals when the user returns so they can resume or review their session.
+ * Automatically pauses the active work phase when the screen is locked, and also a work phase
+ * that starts by itself while it is locked (a break that ran on behind the lock screen ended),
+ * and signals when the user returns so they can resume or review their session.
  *
  * If the name that reported the lock loses its owner (the locker crashed or restarted), its
  * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
@@ -118,6 +119,8 @@ private:
     void setPausedBySleep(bool paused);
     /// `source`: the D-Bus name that reported the change, or empty (macOS, direct calls).
     void setScreenLocked(bool locked, const QString &source);
+    /// Pauses the running Work and marks the pause as the lock's, so the unlock asks to resume.
+    void pauseForScreenLock();
 
 #ifndef Q_OS_MACOS
     void onLockerGone(const QString &name);

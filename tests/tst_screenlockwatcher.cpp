@@ -356,6 +356,62 @@ private Q_SLOTS:
         QVERIFY(!watcher->isPausedByScreenLock());
     }
 
+    void aWorkThatStartsByItselfWhileLockedIsPaused()
+    {
+        // The screen is locked during a break, which is not paused; when it ends, the work that
+        // starts by itself must not run on behind the lock screen.
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        engine->skip();
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        QSignalSpy pauseSpy(watcher.get(), &ScreenLockWatcher::pausedByScreenLockChanged);
+        QSignalSpy unlockSpy(watcher.get(), &ScreenLockWatcher::screenUnlockedAfterPause);
+        watcher->onActiveChanged(true);
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        QVERIFY(!watcher->isPausedByScreenLock());
+
+        clock->advanceSeconds(engine->remainingSeconds() + 1);
+        engine->refresh(); // what the next tick does
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(watcher->isPausedByScreenLock());
+        QCOMPARE(pauseSpy.count(), 1);
+        QCOMPARE(engine->remainingSeconds(), engine->workSeconds()); // none of it ran
+
+        // The unlock asks whether to resume, as after a lock that paused Work itself.
+        watcher->onActiveChanged(false);
+        QCOMPARE(unlockSpy.count(), 1);
+        engine->resume();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(!watcher->isPausedByScreenLock());
+    }
+
+    void aWorkThatStartsByItselfRunsWhenNotLockedOrNotAsked_data()
+    {
+        QTest::addColumn<bool>("autoPause");
+        QTest::addColumn<bool>("unlockedFirst");
+        QTest::newRow("setting off") << false << false;
+        QTest::newRow("unlocked during the break") << true << true;
+    }
+
+    void aWorkThatStartsByItselfRunsWhenNotLockedOrNotAsked()
+    {
+        QFETCH(bool, autoPause);
+        QFETCH(bool, unlockedFirst);
+        settings->setAutoPauseOnScreenLock(autoPause);
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        engine->skip();
+        watcher->onActiveChanged(true);
+        if (unlockedFirst) {
+            watcher->onActiveChanged(false);
+        }
+        clock->advanceSeconds(engine->remainingSeconds() + 1);
+        engine->refresh();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(!watcher->isPausedByScreenLock());
+    }
+
     void wakingUpAfterTheUserResumedSaysNothing()
     {
         engine->start();
@@ -942,6 +998,39 @@ private Q_SLOTS:
         QVERIFY(logindHint(false));
         QCOMPARE(unlockSpy.count(), 1);
         QCOMPARE(engine->state(), TimerEngine::State::Paused);
+#endif
+    }
+
+    void aLogindLockKeptThroughABreakPausesTheWorkThatFollows()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // Locked during the break through logind's hint: the work that starts by itself when the
+        // break ends is no sign of the user, so the lock holds and that work is paused.
+        const auto logindHint = [this](bool locked) {
+            return QMetaObject::invokeMethod(watcher.get(),
+                                             "onLogindPropertiesChanged",
+                                             Qt::DirectConnection,
+                                             Q_ARG(QString, kSessionInterface),
+                                             Q_ARG(QVariantMap, QVariantMap({{QStringLiteral("LockedHint"), locked}})),
+                                             Q_ARG(QStringList, QStringList()));
+        };
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        engine->skip();
+        QSignalSpy unlockSpy(watcher.get(), &ScreenLockWatcher::screenUnlockedAfterPause);
+        QVERIFY(logindHint(true));
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+
+        clock->advanceSeconds(engine->remainingSeconds() + 1);
+        engine->refresh();
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(watcher->isPausedByScreenLock());
+
+        QVERIFY(logindHint(false));
+        QCOMPARE(unlockSpy.count(), 1);
 #endif
     }
 
