@@ -622,6 +622,10 @@ private Q_SLOTS:
         QCOMPARE(a.keyringReads(), 0); // not while the window first shows
         QCOMPARE(a.sync->state(), SyncController::Syncing);
         QCOMPARE(a.sync->statusText(), QStringLiteral("Waiting for the keyring…"));
+        QVERIFY(!a.sync->keysLoaded());
+        QSignalSpy stateChanged(a.sync.get(), &SyncController::stateChanged);
+        QTRY_VERIFY(a.sync->keysLoaded());
+        QVERIFY(!stateChanged.isEmpty()); // announced, also while the state stays Syncing
         QTRY_COMPARE(a.sync->state(), SyncController::Idle);
         QCOMPARE(a.keyringReads(), 1);
 
@@ -642,6 +646,7 @@ private Q_SLOTS:
         a.build(*server);
         QTRY_COMPARE(a.sync->state(), SyncController::Error);
         QCOMPARE(a.sync->errorKind(), SyncController::KeyringUnavailable);
+        QVERIFY(!a.sync->keysLoaded()); // no new recovery code without the key
         QCOMPARE(a.keyringReads(), 1);
         QVERIFY(a.settings->contains(QStringLiteral("Sync/DeviceId"))); // still linked
 
@@ -703,6 +708,32 @@ private Q_SLOTS:
         QTRY_VERIFY(!b.sync->verificationCode().isEmpty());
         QVERIFY(asked.wait(400 * kUnitMs));
         QCOMPARE(a.sync->pendingApproval().value(QStringLiteral("verificationCode")).toString(), b.sync->verificationCode());
+    }
+
+    void approvalGoesAwayWithTheDevice()
+    {
+        Device a(*server);
+        Device b(*server);
+        signInFirst(a);
+        b.sync->signIn(QStringLiteral("B"));
+        QTRY_VERIFY(!b.sync->userCode().isEmpty());
+        QVERIFY(server->approve(b.sync->userCode(), kUser).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.sync->verificationCode().isEmpty());
+
+        QSignalSpy asked(a.sync.get(), &SyncController::approvalRequested);
+        a.sync->syncNow();
+        QVERIFY(asked.wait(5000));
+        QCOMPARE(a.sync->pendingApproval().value(QStringLiteral("id")).toString(), b.account()->deviceId());
+
+        // B gives up and signs out: once the list no longer shows it, nobody is asked about it.
+        QSignalSpy signedOut(b.sync.get(), &SyncController::signedOut);
+        b.sync->signOut();
+        QVERIFY(signedOut.wait(5000));
+        QSignalSpy changed(a.sync.get(), &SyncController::pendingApprovalChanged);
+        a.sync->refreshDevices();
+        QTRY_VERIFY(a.sync->pendingApproval().isEmpty());
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(asked.size(), 1);
     }
 
     void approvalIsNotifiedOnlyWhileTheWindowIsHidden()

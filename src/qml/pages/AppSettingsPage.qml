@@ -1713,6 +1713,16 @@ QQC2.Page {
                         onClicked: {
                             if (enabled) {
                                 SyncController.useRecoveryCode(syncRecoveryField.text.trim());
+                            }
+                        }
+                    }
+                    // Kept while the device waits, so a wrong character is corrected rather than
+                    // the whole code typed again; cleared once the code opened the timers (or the
+                    // device stopped waiting some other way).
+                    Connections {
+                        target: page
+                        function onSyncWaitingChanged() {
+                            if (!page.syncWaiting) {
                                 syncRecoveryField.text = "";
                             }
                         }
@@ -1733,6 +1743,7 @@ QQC2.Page {
                                          .concat(SyncController ? SyncController.errorTexts : [])
                     StatusPill {
                         objectName: "syncStatusPill"
+                        labels: [i18n("Syncing"), i18n("Offline"), i18n("Not synced"), i18n("Up to date")]
                         text: page.syncSyncing ? i18n("Syncing")
                             : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
                             : i18n("Up to date")
@@ -1825,6 +1836,8 @@ QQC2.Page {
                     SButton {
                         text: i18n("Create a new one…")
                         Accessible.name: i18n("Create a new recovery code")
+                        // It needs the timers' key: not while the keyring has not given it.
+                        enabled: SyncController !== null && SyncController.keysLoaded
                         onClicked: syncNewRecoveryDialog.open()
                     }
                 }
