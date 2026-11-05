@@ -12,16 +12,17 @@ QQC2.Page {
     title: i18n("Settings")
     background: null
 
-    // The settings are split in categories; only the cards of the chosen one are shown.
+    // The settings are split in categories; only the cards of the chosen one are shown. The
+    // window lists them (SettingsNav), or this page in a drop-down list when the window is narrow.
     property string category: "general"
-    readonly property var categories: [
-        { id: "general", text: i18n("General") },
-        { id: "sounds", text: i18n("Sounds") },
-        { id: "focus", text: i18n("Focus") },
-        { id: "calendar", text: i18n("Calendar") },
-        { id: "sync", text: i18n("Sync") },
-        { id: "advanced", text: i18n("Advanced") }
-    ]
+    readonly property var categories: applicationWindow().settingsCategories
+    /// The window is too narrow for the list of the categories beside the page.
+    readonly property bool narrow: page.Window.width > 0 && page.Window.width < Theme.settingsNavBreakpoint
+
+    /// Index of the category shown in `categories`.
+    function categoryIndex(): int {
+        return Math.max(0, categories.findIndex(entry => entry.id === category));
+    }
 
     /// Index of the entry of `list` (an array of { value } objects) whose value is `value`;
     /// 0 when there is none. Used by the combo box bindings.
@@ -179,6 +180,8 @@ QQC2.Page {
     // approval: read it again whenever the Sync tab is shown, so a device signed out or
     // disconnected elsewhere since then disappears from it.
     onCategoryChanged: {
+        // Another category starts at its top.
+        flickable.contentY = 0;
         // When linked, onSyncDevicesShownChanged does it.
         if (category === "sync" && SyncController && !syncDevicesShown) {
             SyncController.refreshDevices();
@@ -744,62 +747,20 @@ QQC2.Page {
             width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
             spacing: Theme.space2xl
 
-            // The categories: only the groups of the chosen one are shown. In a narrow window they
-            // scroll sideways rather than widen the page past the window.
-            Flickable {
-                id: categoryStrip
-                Layout.fillWidth: true
-                implicitHeight: categoryTabs.implicitHeight
-                contentWidth: categoryTabs.implicitWidth
-                contentHeight: categoryTabs.implicitHeight
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                interactive: contentWidth > width
-                clip: interactive
-
-                /// Scrolls just enough to show the chosen category, with a margin when it can.
-                function showCurrent(animated: bool): void {
-                    const rect = categoryTabs.choiceRect(page.category);
-                    if (!rect) {
-                        return;
-                    }
-                    let x = contentX;
-                    if (rect.x - Theme.spaceLg < x) {
-                        x = rect.x - Theme.spaceLg;
-                    } else if (rect.x + rect.width + Theme.spaceLg > x + width) {
-                        x = rect.x + rect.width + Theme.spaceLg - width;
-                    }
-                    x = Math.max(0, Math.min(contentWidth - width, x));
-                    stripScroll.stop();
-                    if (animated && x !== contentX) {
-                        stripScroll.to = x;
-                        stripScroll.start();
-                    } else {
-                        contentX = x;
-                    }
-                }
-                NumberAnimation {
-                    id: stripScroll
-                    target: categoryStrip
-                    property: "contentX"
-                    duration: Theme.durationShort
-                    easing.type: Easing.OutCubic
-                }
-                onWidthChanged: showCurrent(false)
-                onContentWidthChanged: showCurrent(false)
-                Component.onCompleted: Qt.callLater(() => showCurrent(false))
-                Connections {
-                    target: page
-                    function onCategoryChanged() {
-                        categoryStrip.showCurrent(true);
-                    }
-                }
-
-                Segmented {
-                    id: categoryTabs
-                    model: page.categories
-                    current: page.category
-                    onActivated: id => page.category = id
+            // A narrow window has no room for the list of the categories beside the page: they
+            // are chosen here instead.
+            SComboBox {
+                id: categoryBox
+                objectName: "settingsCategoryBox"
+                visible: page.narrow
+                textRole: "text"
+                valueRole: "id"
+                model: page.categories
+                currentIndex: page.categoryIndex()
+                Accessible.name: i18n("Settings")
+                onActivated: {
+                    applicationWindow().openSettings(currentValue);
+                    currentIndex = Qt.binding(() => page.categoryIndex());
                 }
             }
 

@@ -15,7 +15,7 @@ import io.github.mineraleyt.sugo
 QtObject {
     id: inventory
 
-    /// Main.qml's window: navigate(), pageStack, paletteCommands().
+    /// Main.qml's window: navigate(), pageStack, settingsNavItem, paletteCommands().
     property var app: null
 
     property var screens: []
@@ -109,6 +109,8 @@ QtObject {
             return false;
         }
         const entries = [];
+        // The list of the settings' categories is beside the page, not in it.
+        collect(app.settingsNavItem, entries);
         collect(app.pageStack.currentItem, entries);
         entries.sort();
         collected[screens[index].name] = entries;

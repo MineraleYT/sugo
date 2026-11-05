@@ -1031,11 +1031,37 @@ QQC2.ApplicationWindow {
         navigate(name);
     }
 
+    /// The categories of the settings, in the order of their list (SettingsNav) and of the
+    /// drop-down list that takes its place in a narrow window.
+    readonly property var settingsCategories: [
+        { id: "general", text: i18n("General") },
+        { id: "sounds", text: i18n("Sounds") },
+        { id: "focus", text: i18n("Focus") },
+        { id: "calendar", text: i18n("Calendar") },
+        { id: "sync", text: i18n("Sync") },
+        { id: "advanced", text: i18n("Advanced") }
+    ]
+    /// The list of the categories is shown at the left of the settings and of a timer's page,
+    /// when the window is wide enough for it.
+    readonly property bool settingsNavShown: (currentDestination === "settings" || currentDestination === "preset")
+                                             && width >= Theme.settingsNavBreakpoint
+    /// The list, for the inventory (FeatureInventory), which lists its entries with the page's.
+    readonly property Item settingsNavItem: settingsNav
+
     /// The settings category the settings page opens on next ("" for its default).
     property string pendingSettingsCategory: ""
 
     /// Opens the settings on one category, e.g. "focus".
     function openSettings(category: string): void {
+        // A page with unsaved changes asks first, and then comes back here for the category.
+        const shown = pageStack.currentItem;
+        if (shown && typeof shown.commitFields === "function") {
+            shown.commitFields();
+        }
+        if (shown && shown.modified === true && shown.leaving !== true && typeof shown.requestClose === "function") {
+            shown.requestClose(() => root.openSettings(category));
+            return;
+        }
         pendingSettingsCategory = category;
         navigate("settings");
         // Already open: navigate() kept the page, so tell it here.
@@ -1284,83 +1310,101 @@ QQC2.ApplicationWindow {
             onCloseRequested: root.close()
         }
 
-        Item {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            spacing: 0
 
-            QQC2.StackView {
-                id: stack
-                anchors.fill: parent
-                clip: true
-                pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
-                }
-                pushExit: Transition {}
-                popEnter: Transition {}
-                popExit: Transition {}
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
+            // The settings' categories, beside the settings and a timer's page (one of the timers).
+            SettingsNav {
+                id: settingsNav
+                objectName: "settingsNav"
+                visible: root.settingsNavShown
+                Layout.fillHeight: true
+                categories: root.settingsCategories
+                current: root.currentDestination === "preset" ? "timers"
+                         : stack.currentItem && stack.currentItem.category !== undefined ? stack.currentItem.category : ""
+                onActivated: id => root.openSettings(id)
             }
 
-            // Shown on every page: nothing recorded now will survive a restart, or the last
-            // changes are still waiting to be stored, or (until dismissed) the database found
-            // at startup was damaged or not Sugo's and a new one was started. Laid over the
-            // top of the page, so the page does not move when it comes or goes.
-            Rectangle {
-                id: dataWarning
-                objectName: "dataWarning"
-                readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
-                property bool movedAsideDismissed: false
-                readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
-                readonly property bool shown: storageFailing || movedAside
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: Theme.spaceMd
-                height: dataBanner.implicitHeight
-                z: 1
-                // The banner's fill is see-through: the page must not show under it.
-                color: Theme.background
-                radius: Theme.radius
-                opacity: shown ? 1 : 0
-                visible: opacity > 0
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durationShort }
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                QQC2.StackView {
+                    id: stack
+                    anchors.fill: parent
+                    clip: true
+                    pushEnter: Transition {
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                    }
+                    pushExit: Transition {}
+                    popEnter: Transition {}
+                    popExit: Transition {}
+                    replaceEnter: Transition {}
+                    replaceExit: Transition {}
                 }
 
-                MessageSlot {
-                    id: dataBanner
-                    anchors.fill: parent
-                    shown: dataWarning.shown
-                    lines: 3
-                    tone: "warning"
-                    text: {
-                        if (DataManager === null) {
-                            return "";
-                        }
-                        if (DataManager.usingTemporaryDatabase === true) {
-                            return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
-                        }
-                        if (DataManager.saveFailing === true) {
-                            return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
-                        }
-                        return DataManager.movedAsideDatabaseWasCorrupt
-                            ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
-                            : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
+                // Shown on every page: nothing recorded now will survive a restart, or the last
+                // changes are still waiting to be stored, or (until dismissed) the database found
+                // at startup was damaged or not Sugo's and a new one was started. Laid over the
+                // top of the page, so the page does not move when it comes or goes.
+                Rectangle {
+                    id: dataWarning
+                    objectName: "dataWarning"
+                    readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    property bool movedAsideDismissed: false
+                    readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
+                    readonly property bool shown: storageFailing || movedAside
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spaceMd
+                    height: dataBanner.implicitHeight
+                    z: 1
+                    // The banner's fill is see-through: the page must not show under it.
+                    color: Theme.background
+                    radius: Theme.radius
+                    opacity: shown ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
                     }
-                    SButton {
-                        kind: "ghost"
-                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
-                        visible: dataWarning.movedAside && !dataWarning.storageFailing
-                        onClicked: DataManager.openDatabaseFolder()
-                    }
-                    SButton {
-                        kind: "ghost"
-                        iconOnly: true
-                        iconName: "close"
-                        text: i18n("Dismiss")
-                        visible: dataWarning.movedAside && !dataWarning.storageFailing
-                        onClicked: dataWarning.movedAsideDismissed = true
+
+                    MessageSlot {
+                        id: dataBanner
+                        anchors.fill: parent
+                        shown: dataWarning.shown
+                        lines: 3
+                        tone: "warning"
+                        text: {
+                            if (DataManager === null) {
+                                return "";
+                            }
+                            if (DataManager.usingTemporaryDatabase === true) {
+                                return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
+                            }
+                            if (DataManager.saveFailing === true) {
+                                return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
+                            }
+                            return DataManager.movedAsideDatabaseWasCorrupt
+                                ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
+                                : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
+                        }
+                        SButton {
+                            kind: "ghost"
+                            text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: DataManager.openDatabaseFolder()
+                        }
+                        SButton {
+                            kind: "ghost"
+                            iconOnly: true
+                            iconName: "close"
+                            text: i18n("Dismiss")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: dataWarning.movedAsideDismissed = true
+                        }
                     }
                 }
             }
