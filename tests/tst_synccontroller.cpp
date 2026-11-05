@@ -3,6 +3,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -454,6 +456,59 @@ private Q_SLOTS:
         QCOMPARE(puts(), before);
         QCOMPARE(a.sync->state(), SyncController::Idle);
         QCOMPARE(a.repo->loadAll().size(), a.model->count()); // applied and stored
+    }
+
+    void mergeThatCannotBeSavedIsDownloadedAgain()
+    {
+        Device a(*server);
+        signInFirst(a);
+        const QString doomed = a.model->create({{QStringLiteral("name"), QStringLiteral("Doomed")}});
+        const QString kept = a.model->create({{QStringLiteral("name"), QStringLiteral("Kept")}});
+        QTRY_VERIFY(remoteNames(a).contains(QStringLiteral("Kept")));
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+
+        // Another device deletes one timer and renames the other.
+        PresetSyncFormat::Data data = remoteData(a);
+        data.presets.removeIf([&doomed](const TimerPreset &p) { return p.uuid == doomed; });
+        const qint64 later = QDateTime::currentMSecsSinceEpoch() + 1000;
+        for (TimerPreset &p : data.presets) {
+            if (p.uuid == kept) {
+                p.name = QStringLiteral("Renamed elsewhere");
+                p.updatedAt = later;
+                p.updatedBy = kOther;
+            }
+        }
+        data.tombstones.append({doomed, later, kOther});
+        remoteWrite(a, data);
+
+        // The database refuses every write (disk full, locked): the merge never reaches it.
+        auto setQueryOnly = [&a](bool on) {
+            QSqlQuery query(QSqlDatabase::database(a.db->connectionName()));
+            return query.exec(on ? QStringLiteral("PRAGMA query_only = ON") : QStringLiteral("PRAGMA query_only = OFF"));
+        };
+        QVERIFY(setQueryOnly(true));
+        a.sync->syncNow();
+        QTRY_VERIFY(!a.names().contains(QStringLiteral("Doomed")));
+        QTRY_VERIFY(a.persistence->isSaveFailing());
+        QTRY_COMPARE(a.sync->state(), SyncController::Error);
+
+        // A restart finds the old timers in the database.
+        QVERIFY(setQueryOnly(false));
+        a.build(*server);
+        QVERIFY(a.names().contains(QStringLiteral("Doomed")));
+        QVERIFY(a.names().contains(QStringLiteral("Kept")));
+
+        // The blob is downloaded again (not 304) and merged once more.
+        QTRY_VERIFY_WITH_TIMEOUT(!a.names().contains(QStringLiteral("Doomed")), 5000);
+        QTRY_VERIFY(a.names().contains(QStringLiteral("Renamed elsewhere")));
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+
+        // A later edit here keeps the other device's changes on the server.
+        a.model->create({{QStringLiteral("name"), QStringLiteral("New here")}});
+        QTRY_VERIFY(remoteNames(a).contains(QStringLiteral("New here")));
+        QVERIFY(!remoteNames(a).contains(QStringLiteral("Doomed")));
+        QVERIFY(remoteNames(a).contains(QStringLiteral("Renamed elsewhere")));
+        QVERIFY(!remoteNames(a).contains(QStringLiteral("Kept")));
     }
 
     void selectedTimerDeletedElsewhere()
