@@ -156,8 +156,10 @@ QQC2.Page {
         id: glow
         readonly property color tint: page.isWorkPhase ? Theme.accent : Theme.breakAccent
         readonly property real diameter: page.clockSize * 4.4
-        anchors.centerIn: clockColumn
-        anchors.verticalCenterOffset: -page.clockSize * 0.3
+        // Centred on the digits, not on the column (whose label above and track below would
+        // pull it off them).
+        x: clockColumn.x + clockDigits.x + (clockDigits.width - width) / 2
+        y: clockColumn.y + clockDigits.y + (clockDigits.height - height) / 2
         width: diameter
         height: diameter
         transform: Scale {
@@ -240,6 +242,7 @@ QQC2.Page {
 
         // The time left: minutes, a quiet colon, seconds.
         Row {
+            id: clockDigits
             Layout.alignment: Qt.AlignHCenter
             Accessible.role: Accessible.StaticText
             // In words, unit by unit ("1 hour 5 minutes 3 seconds left"), not the clock's "1:05".
