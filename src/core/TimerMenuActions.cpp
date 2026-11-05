@@ -35,10 +35,10 @@ void TimerMenuActions::addControls(QMenu *menu)
         m_engine->toggle();
     });
     m_stopAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-playback-stop")), QString(), this, [this]() {
-        m_engine->stop();
+        Q_EMIT endPhaseRequested(false);
     });
     m_skipAction = menu->addAction(QIcon::fromTheme(QStringLiteral("media-skip-forward")), QString(), this, [this]() {
-        m_engine->skip();
+        Q_EMIT endPhaseRequested(true);
     });
 }
 
