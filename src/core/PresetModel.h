@@ -88,7 +88,8 @@ public:
 
     /// Replaces the whole list (used when loading from storage). Guarantees that the
     /// built-in preset exists, that no other preset claims to be built-in and that every
-    /// value is within PresetLimits. Does not emit modified(), so loading never writes back.
+    /// value is within PresetLimits. Does not emit modified(), so loading never writes back;
+    /// emits presetChanged() for each timer that was there before and whose content changed.
     void setPresets(const QList<TimerPreset> &presets, const QString &currentUuid);
 
     Q_INVOKABLE int indexOf(const QString &uuid) const;

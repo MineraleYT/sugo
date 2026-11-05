@@ -322,12 +322,25 @@ void PresetModel::setPresets(const QList<TimerPreset> &presets, const QString &c
         clean.prepend(makeDefaultPreset());
     }
 
+    // The timers that are still there but changed (a download from Sugo Sync), so that what
+    // shows one of them, such as an open editor, follows the new version.
+    QStringList changed;
+    for (const TimerPreset &preset : std::as_const(clean)) {
+        const int row = indexOf(preset.uuid);
+        if (row >= 0 && !m_presets.at(row).sameContent(preset)) {
+            changed.append(preset.uuid);
+        }
+    }
+
     beginResetModel();
     m_presets = clean;
     m_currentUuid = seen.contains(currentUuid) ? currentUuid : DefaultUuid;
     endResetModel();
     Q_EMIT countChanged();
     Q_EMIT currentChanged();
+    for (const QString &uuid : std::as_const(changed)) {
+        Q_EMIT presetChanged(uuid);
+    }
 }
 
 // --- Selection -------------------------------------------------------------

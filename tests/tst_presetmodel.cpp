@@ -6,6 +6,7 @@
 
 #include "Localization.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "PresetModel.h"
@@ -242,6 +243,41 @@ private Q_SLOTS:
         QCOMPARE(presetChanged.at(0).at(0).toString(), uuid);
 
         QVERIFY(!model->update(QStringLiteral("missing"), {}));
+    }
+
+    void replacingTheListAnnouncesTheTimersThatChanged()
+    {
+        const QString renamed = model->create({{QStringLiteral("name"), QStringLiteral("A")}});
+        const QString kept = model->create({{QStringLiteral("name"), QStringLiteral("B")}});
+        const QString gone = model->create({{QStringLiteral("name"), QStringLiteral("C")}});
+
+        // What a download from Sugo Sync brings: one timer renamed, one only restamped, one
+        // deleted, one new.
+        QList<TimerPreset> next = model->presets();
+        for (TimerPreset &preset : next) {
+            if (preset.uuid == renamed) {
+                preset.name = QStringLiteral("A2");
+                preset.updatedBy = QStringLiteral("desktop");
+            } else if (preset.uuid == kept) {
+                preset.updatedAt += 1000;
+            }
+        }
+        next.erase(std::remove_if(next.begin(), next.end(),
+                                  [&](const TimerPreset &preset) { return preset.uuid == gone; }),
+                   next.end());
+        TimerPreset added;
+        added.uuid = QStringLiteral("added");
+        added.name = QStringLiteral("D");
+        next.append(added);
+
+        QSignalSpy presetChanged(model.get(), &PresetModel::presetChanged);
+        QSignalSpy modified(model.get(), &PresetModel::modified);
+        model->setPresets(next, model->currentUuid());
+        QCOMPARE(modified.count(), 0);
+        QCOMPARE(presetChanged.count(), 1);
+        QCOMPARE(presetChanged.at(0).at(0).toString(), renamed);
+        // Listeners already read the new version.
+        QCOMPARE(model->get(renamed).value(QStringLiteral("name")).toString(), QStringLiteral("A2"));
     }
 
     void createAndApplyFieldsWithOptions()
