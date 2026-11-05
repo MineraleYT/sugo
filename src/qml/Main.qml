@@ -1503,10 +1503,10 @@ QQC2.ApplicationWindow {
             onAccepted: root.saveTaskNote(text)
         }
 
-        // The latest notes, to use one again.
-        Flow {
+        // The latest notes, a click to use one again.
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceSm
+            spacing: 0
             visible: recentRepeater.count > 0
 
             Repeater {
@@ -1514,30 +1514,29 @@ QQC2.ApplicationWindow {
                 model: []
 
                 QQC2.AbstractButton {
-                    id: chip
+                    id: recentNote
                     required property string modelData
+                    Layout.fillWidth: true
                     text: modelData
                     hoverEnabled: true
                     focusPolicy: Qt.TabFocus
-                    implicitHeight: Theme.controlHeight - Theme.spaceSm
-                    implicitWidth: Math.min(chipLabel.implicitWidth + leftPadding + rightPadding, taskNoteField.width)
-                    leftPadding: Theme.spaceMd + Theme.hairline * 2
-                    rightPadding: leftPadding
+                    implicitHeight: Theme.menuRowHeight
+                    leftPadding: Theme.spaceMd
+                    rightPadding: Theme.spaceMd
                     Accessible.name: i18nc("@action:button use a recent note", "Use “%1”", modelData)
                     onClicked: taskNoteField.text = modelData
 
                     background: Rectangle {
-                        radius: height / 2
-                        color: chip.down ? Theme.pressed : chip.hovered ? Theme.hover : "transparent"
-                        border.width: Theme.hairline
-                        border.color: chip.visualFocus ? Theme.focusRing : chip.hovered ? Theme.borderStrong : Theme.border
+                        radius: Theme.radiusSm
+                        color: recentNote.down ? Theme.pressed : recentNote.hovered ? Theme.hover : "transparent"
+                        border.width: recentNote.visualFocus ? Theme.hairline : 0
+                        border.color: Theme.focusRing
                         Behavior on color { ColorAnimation { duration: Theme.durationShort } }
                     }
                     contentItem: Text {
-                        id: chipLabel
-                        text: chip.text
-                        color: chip.hovered ? Theme.foreground : Theme.muted
-                        font.pixelSize: Theme.fontCaption
+                        text: recentNote.text
+                        color: recentNote.hovered ? Theme.foreground : Theme.muted
+                        font.pixelSize: Theme.fontBody
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                     }
