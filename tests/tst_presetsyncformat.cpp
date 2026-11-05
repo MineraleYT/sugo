@@ -208,12 +208,13 @@ private Q_SLOTS:
         QVERIFY(parsed.ok);
         QVERIFY(parsed.newerFormat());
 
-        // Its timers still arrive here, but nothing is sent back, even with local changes.
+        // Its timers still arrive here. The remote lacks the local change: changedRemote says so,
+        // and the caller (which never writes a newer format) keeps it for an updated Sugo.
         const Data local{{factoryDefault(), preset(QStringLiteral("mine"), QStringLiteral("Mine"), kNow)}, {}};
-        const PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(local, parsed.data, kMe, kNow, parsed.format);
+        const PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(local, parsed.data, kMe, kNow);
         QCOMPARE(names(merged.result.presets), (QStringList{QStringLiteral("Pomodoro"), QStringLiteral("Mine"), QStringLiteral("From the future")}));
         QVERIFY(merged.changedLocal);
-        QVERIFY(!merged.changedRemote);
+        QVERIFY(merged.changedRemote);
     }
 
     void unreadableJsonIsRefused()

@@ -319,7 +319,7 @@ ParseResult fromJson(const QByteArray &json)
     return result;
 }
 
-MergeResult merge(const Data &localSide, const Data &remoteSide, const QString &deviceId, qint64 nowMs, int remoteFormat)
+MergeResult merge(const Data &localSide, const Data &remoteSide, const QString &deviceId, qint64 nowMs)
 {
     const Data local = normalized(localSide, deviceId, nowMs);
     const Data remote = normalized(remoteSide, deviceId, nowMs);
@@ -369,8 +369,8 @@ MergeResult merge(const Data &localSide, const Data &remoteSide, const QString &
     // no reason to write (saveAll() drops old tombstones anyway).
     merged.changedLocal = !samePresetList(merged.result.presets, local.presets)
         || !sameTombstones(merged.result.tombstones, local.tombstones);
-    merged.changedRemote = remoteFormat <= Format
-        && (!samePresetSet(merged.result.presets, remote.presets) || !sameTombstones(merged.result.tombstones, remote.tombstones));
+    merged.changedRemote =
+        !samePresetSet(merged.result.presets, remote.presets) || !sameTombstones(merged.result.tombstones, remote.tombstones);
     return merged;
 }
 } // namespace PresetSyncFormat
