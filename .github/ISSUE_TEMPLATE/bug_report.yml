@@ -29,17 +29,19 @@ body:
     attributes:
       label: How you installed Sugo
       options:
-        - AppImage
-        - Flatpak
+        - AppImage (Linux)
+        - Flatpak (Linux)
+        - Distribution package (Linux)
+        - Disk image (macOS)
         - Built from source
-        - Distribution package
     validations:
       required: true
   - type: input
-    id: desktop
+    id: system
     attributes:
-      label: Distribution and desktop
-      placeholder: e.g. Fedora 44, KDE Plasma 6.5, Wayland
+      label: System
+      description: On Linux the distribution, desktop and session; on macOS the version and the kind of Mac.
+      placeholder: e.g. Fedora 44, KDE Plasma 6.5, Wayland or macOS 15.1, Apple Silicon
   - type: textarea
     id: diagnostics
     attributes:

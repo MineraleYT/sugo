@@ -3,6 +3,15 @@ name: Feature request
 description: Suggest an idea or an improvement.
 labels: [enhancement]
 body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: System
+      description: Where you would use it. Sugo offers the same on Linux and macOS, so say if it is about one of them only.
+      options:
+        - Linux and macOS
+        - Linux only
+        - macOS only
   - type: textarea
     id: problem
     attributes:
