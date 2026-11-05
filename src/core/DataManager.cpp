@@ -74,6 +74,9 @@ bool hasSqliteHeader(const QString &path)
 struct RestoredTable {
     QString name;
     QString columns;
+    /// The rows a restore replaces, if not all: the others belong to this computer's file, not to
+    /// the user's data, and are neither deleted here nor copied from the backup.
+    QString rows = {};
 };
 
 const QList<RestoredTable> &restoredTables()
@@ -87,7 +90,9 @@ const QList<RestoredTable> &restoredTables()
         {QStringLiteral("session"),
          QStringLiteral("id, kind, started_at, ended_at, duration_sec, planned_sec, completed, preset_id, "
                         "preset_name, category, note")},
-        {QStringLiteral("meta"), QStringLiteral("key, value")},
+        // The one-time look for Sugo 1.0.0's data (Database::recoverSugo100Database()) was made
+        // for this file: a backup from before it, or from another computer, must not undo it.
+        {QStringLiteral("meta"), QStringLiteral("key, value"), QStringLiteral("key <> 'sugo100_recovery'")},
     };
     return tables;
 }
@@ -488,10 +493,13 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         QStringLiteral("DELETE FROM main.preset_tombstone WHERE uuid IN (SELECT uuid FROM restore_db.preset)"),
     };
     for (auto it = restoredTables().crbegin(); it != restoredTables().crend(); ++it) {
-        statements.append(QStringLiteral("DELETE FROM main.%1").arg(it->name));
+        const QString where = it->rows.isEmpty() ? QString() : QStringLiteral(" WHERE ") + it->rows;
+        statements.append(QStringLiteral("DELETE FROM main.%1%2").arg(it->name, where));
     }
     for (const RestoredTable &table : restoredTables()) {
-        statements.append(QStringLiteral("INSERT INTO main.%1 (%2) SELECT %2 FROM restore_db.%1").arg(table.name, table.columns));
+        const QString where = table.rows.isEmpty() ? QString() : QStringLiteral(" WHERE ") + table.rows;
+        statements.append(QStringLiteral("INSERT INTO main.%1 (%2) SELECT %2 FROM restore_db.%1%3")
+                              .arg(table.name, table.columns, where));
     }
     bool ok = true;
     for (const QString &statement : std::as_const(statements)) {
