@@ -140,6 +140,64 @@ QQC2.Page {
         calFocusSink.forceActiveFocus();
     }
 
+    // The timers, for the Timers category: one group per category, in the order of the list
+    // (the timers without a category last, under "Other"). Read again whenever a timer changes.
+    property int presetsRevision: 0
+    Connections {
+        target: PresetModel
+        function onCountChanged() {
+            ++page.presetsRevision;
+        }
+        function onPresetChanged() {
+            ++page.presetsRevision;
+        }
+        function onRowsMoved() {
+            ++page.presetsRevision;
+        }
+        function onModelReset() {
+            ++page.presetsRevision;
+        }
+    }
+    readonly property var timerGroups: {
+        void presetsRevision;
+        const groups = [];
+        const byName = {};
+        const other = { title: i18n("Other"), timers: [] };
+        for (let i = 0; i < PresetModel.count; ++i) {
+            const uuid = PresetModel.uuidAt(i);
+            const preset = PresetModel.get(uuid);
+            const category = (preset.category || "").trim();
+            let group = other;
+            if (category.length > 0) {
+                group = byName[category];
+                if (!group) {
+                    group = { title: category, timers: [] };
+                    byName[category] = group;
+                    groups.push(group);
+                }
+            }
+            group.timers.push({ uuid: uuid, index: i, name: preset.name || "", summary: timerSummary(preset) });
+        }
+        if (other.timers.length > 0) {
+            groups.push(other);
+        }
+        return groups;
+    }
+    /// What a timer's row says under its name: its durations and when the long break comes.
+    function timerSummary(preset: var): string {
+        const work = Math.round(preset.workSeconds / 60);
+        const shortBreak = Math.round(preset.shortBreakSeconds / 60);
+        const longBreak = Math.round(preset.longBreakSeconds / 60);
+        const cycles = preset.cyclesBeforeLong;
+        if (cycles > 0 && longBreak > 0) {
+            return i18nc("a timer: work · short break · long break, in minutes; then when the long break comes",
+                         "%1 · %2 · %3 min · %4", work, shortBreak, longBreak,
+                         i18np("long break after %1", "long break after %1", cycles));
+        }
+        return i18nc("a timer: work · short break, in minutes; then that it has no long break",
+                     "%1 · %2 min · %3", work, shortBreak, i18n("no long break"));
+    }
+
     // Sugo Sync state, guarded because the singleton can be gone at shutdown.
     readonly property int syncState: SyncController ? SyncController.state : 0
     readonly property bool syncOff: !SyncController || syncState === SyncController.Off
@@ -745,6 +803,81 @@ QQC2.Page {
         }
     }
 
+    /// A timer in the Timers category: its name and durations; a click opens its page.
+    component TimerRow: QQC2.AbstractButton {
+        id: timerRow
+        required property var timer
+        property bool first: false
+
+        objectName: "timerRow-" + timer.index
+        Layout.fillWidth: true
+        implicitHeight: Math.max(Theme.settingsRowMinHeight, timerRowContent.implicitHeight + Theme.settingsRowPaddingY * 2)
+        hoverEnabled: true
+        focusPolicy: Qt.TabFocus
+        text: timer.name
+        Accessible.name: timer.name
+        Accessible.description: timer.summary
+        onClicked: applicationWindow().openTimer(timer.uuid)
+
+        background: Item {
+            // The line above the row, across the whole card.
+            Rectangle {
+                visible: !timerRow.first
+                x: -Theme.settingsRowPaddingX
+                width: parent.width + Theme.settingsRowPaddingX * 2
+                height: Theme.hairline
+                color: Theme.border
+            }
+            Rectangle {
+                visible: timerRow.visualFocus
+                anchors.fill: parent
+                anchors.topMargin: Theme.hairline * 2
+                anchors.bottomMargin: Theme.hairline
+                radius: Theme.radiusSm
+                color: "transparent"
+                border.width: Theme.hairline
+                border.color: Theme.focusRing
+            }
+        }
+        contentItem: RowLayout {
+            id: timerRowContent
+            spacing: Theme.spaceLg
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.hairline
+                Text {
+                    Layout.fillWidth: true
+                    text: timerRow.timer.name
+                    color: Theme.foreground
+                    font.pixelSize: Theme.fontBody
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: timerRow.timer.summary
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                    font.features: { "tnum": 1 }
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+            }
+            // The timer in use; faded rather than hidden, so the name keeps its room.
+            Text {
+                text: i18n("Selected")
+                opacity: PresetModel.currentUuid === timerRow.timer.uuid ? 1 : 0
+                color: Theme.subtle
+                font.pixelSize: Theme.fontCaption
+            }
+            LineIcon {
+                name: "chevron-right"
+                size: Theme.iconSm
+                color: timerRow.hovered ? Theme.foreground : Theme.subtle
+            }
+        }
+    }
+
     // The page's padding: less in a narrow window.
     readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
     readonly property real paddingY: narrow ? Theme.settingsBodyPaddingCompactY : Theme.settingsBodyPaddingY
@@ -765,31 +898,29 @@ QQC2.Page {
             width: Math.max(0, flickable.width - page.paddingX * 2)
             spacing: Theme.spaceSm
 
-            // A narrow window has no room for the list of the categories beside the page: they
-            // are chosen here instead.
-            SComboBox {
-                id: categoryBox
-                objectName: "settingsCategoryBox"
-                visible: page.narrow
-                textRole: "text"
-                valueRole: "id"
-                model: page.categories
-                currentIndex: page.categoryIndex()
-                Accessible.name: i18n("Settings")
-                onActivated: {
-                    applicationWindow().openSettings(currentValue);
-                    currentIndex = Qt.binding(() => page.categoryIndex());
-                }
-            }
-
-            // The category's title; in a narrow window the drop-down list above says it.
+            // The category's title, with what it offers (New timer). A narrow window has no room
+            // for the list of the categories beside the page: they are chosen here instead.
             RowLayout {
                 id: categoryHeader
-                visible: !page.narrow
                 Layout.fillWidth: true
                 Layout.bottomMargin: Theme.spaceXs
                 spacing: Theme.spaceMd
+                SComboBox {
+                    id: categoryBox
+                    objectName: "settingsCategoryBox"
+                    visible: page.narrow
+                    textRole: "text"
+                    valueRole: "id"
+                    model: page.categories
+                    currentIndex: page.categoryIndex()
+                    Accessible.name: i18n("Settings")
+                    onActivated: {
+                        applicationWindow().openSettings(currentValue);
+                        currentIndex = Qt.binding(() => page.categoryIndex());
+                    }
+                }
                 Text {
+                    visible: !page.narrow
                     Layout.fillWidth: true
                     text: page.categories[page.categoryIndex()].text
                     color: Theme.foreground
@@ -797,6 +928,38 @@ QQC2.Page {
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                     Accessible.role: Accessible.Heading
+                }
+                Item {
+                    visible: page.narrow
+                    Layout.fillWidth: true
+                }
+                SButton {
+                    objectName: "newTimerButton"
+                    visible: page.category === "timers"
+                    kind: "primary"
+                    iconName: "plus"
+                    text: i18n("New timer")
+                    onClicked: applicationWindow().newTimer()
+                }
+            }
+
+            // --- Timers -------------------------------------------------------------------
+            Repeater {
+                model: page.category === "timers" ? page.timerGroups : []
+                delegate: SettingsCard {
+                    id: timerGroup
+                    required property var modelData
+                    category: "timers"
+                    title: modelData.title
+                    Repeater {
+                        model: timerGroup.modelData.timers
+                        delegate: TimerRow {
+                            required property var modelData
+                            required property int index
+                            timer: modelData
+                            first: index === 0
+                        }
+                    }
                 }
             }
 

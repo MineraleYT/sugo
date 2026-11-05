@@ -1035,6 +1035,7 @@ QQC2.ApplicationWindow {
     /// drop-down list that takes its place in a narrow window.
     readonly property var settingsCategories: [
         { id: "general", text: i18n("General") },
+        { id: "timers", text: i18n("Timers") },
         { id: "sounds", text: i18n("Sounds") },
         { id: "focus", text: i18n("Focus") },
         { id: "calendar", text: i18n("Calendar") },

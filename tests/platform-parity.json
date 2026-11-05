@@ -65,6 +65,7 @@
         "button: Start",
         "button: Sync",
         "button: The default timer cannot be deleted",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -100,6 +101,7 @@
         "button: Icon",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -148,6 +150,7 @@
         "button: General",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "choice: Badge style",
         "choice: Color scheme",
         "row: Badge style",
@@ -174,6 +177,19 @@
         "setting: autoCheckUpdates"
       ]
     },
+    "settings/timers": {
+      "common": [
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: New timer",
+        "button: Pomodoro",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
+      ]
+    },
     "settings/sounds": {
       "common": [
         "button: Advanced",
@@ -184,6 +200,7 @@
         "button: Sounds",
         "button: Sync",
         "button: Test",
+        "button: Timers",
         "choice: Focus sound",
         "choice: Phase sound",
         "choice: Pre-alarm sound",
@@ -206,6 +223,7 @@
         "button: General",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "row: Keep the screen awake during work sessions",
         "row: Pause timer when screen is locked",
         "row: Prompt for a task note when a work session finishes",
@@ -229,6 +247,7 @@
         "button: Log in",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "choice: Calendar service",
         "field: Server address",
         "row: Add an event to your calendar each time you finish a work session.",
@@ -248,6 +267,7 @@
         "button: Sign in",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "field: Device name",
         "row: Device name",
         "row: Session history and statistics",
@@ -274,6 +294,7 @@
         "button: Show the Welcome Tour",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "button: View Report…",
         "choice: Sessions to remove",
         "row: Allow other programs to control the timer",

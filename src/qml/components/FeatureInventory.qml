@@ -31,11 +31,8 @@ QtObject {
             { name: "stats", open: () => app.navigate("stats") },
             { name: "about", open: () => app.navigate("about") }
         ];
-        for (const category of ["general", "sounds", "focus", "calendar", "sync", "advanced"]) {
-            list.push({ name: "settings/" + category, open: () => {
-                app.navigate("settings");
-                app.pageStack.currentItem.category = category;
-            } });
+        for (const category of app.settingsCategories.map(entry => entry.id)) {
+            list.push({ name: "settings/" + category, open: () => app.openSettings(category) });
         }
         for (let step = 0; step < 4; ++step) {
             list.push({ name: "welcome/" + step, open: () => {
