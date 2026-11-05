@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "Database.h"
+#include "PresetRepository.h"
 #include "Sugo100Database.h"
 
 namespace
@@ -86,12 +87,39 @@ QByteArray fileContents(const QString &path)
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
 }
 
-/// What Sugo 1.0.1 left: the 1.0.0 database moved aside, a new one with only the built-in timer.
-QString setUpMovedAsideSugo100(const QDir &dir, const QString &stamp = QStringLiteral("20261104-232400"))
+/// What Sugo 1.0.1 left: the 1.0.0 database moved aside (with its write-ahead log, if it had one).
+QString setUpMovedAsideSugo100(const QDir &dir, const QString &time = QStringLiteral("20261104-232400"),
+                               Sugo100Stamp stamp = Sugo100Stamp::InFile)
 {
-    const QString aside = dir.filePath(QStringLiteral("sugo.db.foreign-") + stamp);
-    createSugo100Database(aside);
+    const QString aside = dir.filePath(QStringLiteral("sugo.db.foreign-") + time);
+    createSugo100Database(aside, stamp);
     return aside;
+}
+
+/// Checks the timers of the 1.0.0 file as today's PresetRepository reads them.
+void verifySugo100Timers(const QString &connection)
+{
+    bool ok = false;
+    const QList<TimerPreset> presets = PresetRepository(connection).loadAll(&ok);
+    QVERIFY(ok);
+    QCOMPARE(presets.size(), 2);
+    QCOMPARE(presets.at(0).uuid, QStringLiteral("default"));
+    QVERIFY(presets.at(0).builtin);
+    QCOMPARE(presets.at(0).options.value(QStringLiteral("iconName")).toString(), QStringLiteral("sugo-timer"));
+    QCOMPARE(presets.at(0).options.value(QStringLiteral("silenceWhileWorking")).toBool(), true);
+    const TimerPreset &mine = presets.at(1);
+    QCOMPARE(mine.uuid, QStringLiteral("mine"));
+    QVERIFY(!mine.builtin);
+    QCOMPARE(mine.name, QStringLiteral("Deep work"));
+    QCOMPARE(mine.workSeconds, 3000);
+    QCOMPARE(mine.cyclesBeforeLong, 3);
+    QCOMPARE(mine.createdAt, 1761876000000LL);
+    QCOMPARE(mine.options.size(), 4);
+    QCOMPARE(mine.options.value(QStringLiteral("iconName")).toString(), QStringLiteral("sugo-focus"));
+    QCOMPARE(mine.options.value(QStringLiteral("autoStartMode")).toInt(), 2);
+    QCOMPARE(mine.options.value(QStringLiteral("autoStart")).toBool(), true);
+    QCOMPARE(mine.options.value(QStringLiteral("soundOnEnd")).toBool(), false);
+    QCOMPARE(PresetRepository(connection).currentUuid(), QStringLiteral("mine"));
 }
 
 void addBuiltinTimer(const QString &connection)
@@ -219,14 +247,23 @@ private Q_SLOTS:
         QVERIFY(!query.exec(QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 6)"))); // one per uuid
     }
 
+    void sugo100DatabaseIsKeptAndUpgraded_data()
+    {
+        QTest::addColumn<bool>("onlyInWal");
+        QTest::newRow("folded into the file") << false;
+        QTest::newRow("only in the write-ahead log") << true;
+    }
+
     void sugo100DatabaseIsKeptAndUpgraded()
     {
         // Sugo 1.0.0 was released with another application id and its own numbering of
         // user_version: its version 2 (session.note) is today's version 1. Such a file is ours.
+        QFETCH(bool, onlyInWal);
+        const Sugo100Stamp stamp = onlyInWal ? Sugo100Stamp::OnlyInWal : Sugo100Stamp::InFile;
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString path = dir.filePath(QStringLiteral("sugo.db"));
-        createSugo100Database(path);
+        createSugo100Database(path, stamp);
 
         {
             Database db(path);
@@ -238,8 +275,8 @@ private Q_SLOTS:
             QCOMPARE(scalar(c, QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
             QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
 
-            // The timer, now with what Sugo Sync needs, and its times in milliseconds.
-            QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM preset")).toInt(), 1);
+            // The timers, now with what Sugo Sync needs, and their times in milliseconds.
+            QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM preset")).toInt(), 2);
             QCOMPARE(scalar(c, QStringLiteral("SELECT name FROM preset WHERE uuid = 'mine'")).toString(),
                      QStringLiteral("Deep work"));
             QCOMPARE(scalar(c, QStringLiteral("SELECT work_sec FROM preset WHERE uuid = 'mine'")).toInt(), 3000);
@@ -247,17 +284,16 @@ private Q_SLOTS:
                      1761876000000LL);
             QCOMPARE(scalar(c, QStringLiteral("SELECT updated_at FROM preset WHERE uuid = 'mine'")).toLongLong(), 0);
             QCOMPARE(scalar(c, QStringLiteral("SELECT updated_by FROM preset WHERE uuid = 'mine'")).toString(), QString());
-            QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM preset_option WHERE key = 'autoStartBreaks'")).toString(),
-                     QStringLiteral("true"));
             QVERIFY(tableNames(c).contains(QStringLiteral("preset_tombstone")));
+            verifySugo100Timers(c);
 
             // The history, untouched (session times were milliseconds already).
             QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM session")).toInt(), 1);
             QCOMPARE(scalar(c, QStringLiteral("SELECT note FROM session")).toString(), QStringLiteral("Chapter 3"));
             QCOMPARE(scalar(c, QStringLiteral("SELECT started_at FROM session")).toLongLong(), 1761876100000LL);
-            QCOMPARE(scalar(c, QStringLiteral("SELECT preset_id FROM session")).toInt(), 1);
-            QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM meta WHERE key = 'selectedPreset'")).toString(),
-                     QStringLiteral("mine"));
+            QCOMPARE(scalar(c, QStringLiteral("SELECT preset_id FROM session")).toInt(), 2);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM meta WHERE key = 'presets_initialized'")).toString(),
+                     QStringLiteral("1"));
             QCOMPARE(scalar(c, QStringLiteral("PRAGMA foreign_key_check")), QVariant());
         }
         {
@@ -521,13 +557,24 @@ private Q_SLOTS:
 
     // --- Taking back what Sugo 1.0.1 moved aside ------------------------------
 
+    void sugo100DatabaseMovedAsideIsTakenBack_data()
+    {
+        QTest::addColumn<bool>("onlyInWal");
+        QTest::newRow("folded into the file") << false;
+        QTest::newRow("only in the write-ahead log") << true;
+    }
+
     void sugo100DatabaseMovedAsideIsTakenBack()
     {
+        QFETCH(bool, onlyInWal);
+        const Sugo100Stamp stamp = onlyInWal ? Sugo100Stamp::OnlyInWal : Sugo100Stamp::InFile;
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         const QString path = dir.filePath(QStringLiteral("sugo.db"));
-        const QString aside = setUpMovedAsideSugo100(QDir(dir.path()));
+        const QString aside = setUpMovedAsideSugo100(QDir(dir.path()), QStringLiteral("20261104-232400"), stamp);
         const QByteArray asideBefore = fileContents(aside);
+        const QByteArray asideWalBefore = fileContents(aside + QStringLiteral("-wal"));
+        QCOMPARE(asideWalBefore.isEmpty(), stamp == Sugo100Stamp::InFile);
         {
             Database db(path); // what 1.0.1 created
             QVERIFY(db.open());
@@ -546,13 +593,14 @@ private Q_SLOTS:
         QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
         QCOMPARE(scalar(c, QStringLiteral("SELECT note FROM session")).toString(), QStringLiteral("Chapter 3"));
         QCOMPARE(scalar(c, QStringLiteral("SELECT name FROM preset WHERE uuid = 'mine'")).toString(), QStringLiteral("Deep work"));
-        QCOMPARE(scalar(c, QStringLiteral("SELECT created_at FROM preset WHERE uuid = 'mine'")).toLongLong(), 1761876000000LL);
+        verifySugo100Timers(c);
         QSqlQuery query(QSqlDatabase::database(c, false));
         QVERIFY(query.exec(QStringLiteral("INSERT INTO meta (key, value) VALUES ('written', 'yes')"))); // usable
 
         // The file moved aside is left exactly as it was; the replaced one keeps its timer.
         QCOMPARE(fileContents(aside), asideBefore);
-        QVERIFY(!QFile::exists(aside + QStringLiteral("-wal")));
+        QCOMPARE(fileContents(aside + QStringLiteral("-wal")), asideWalBefore);
+        QVERIFY(!QFile::exists(aside + QStringLiteral("-shm")));
         {
             Database replaced(db.replacedPath());
             QVERIFY(replaced.open());

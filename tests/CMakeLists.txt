@@ -16,7 +16,7 @@ sugo_add_test(tst_focussoundcontroller Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS} 
 sugo_add_test(tst_datamanager Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetmodel Qt6::Core Qt6::Qml)
 sugo_add_test(tst_timerbinding Qt6::Core Qt6::Qml)
-sugo_add_test(tst_database Qt6::Core Qt6::Sql)
+sugo_add_test(tst_database Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_presetrepository Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
