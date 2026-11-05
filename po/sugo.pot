@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: sugo\n"
 "Report-Msgid-Bugs-To: https://github.com/MineraleYT/sugo/issues\n"
-"POT-Creation-Date: 2026-11-05 00:05+0000\n"
+"POT-Creation-Date: 2026-11-05 00:06+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -908,141 +908,141 @@ msgstr ""
 msgid "%1s"
 msgstr ""
 
-#: src/sync/SyncController.cpp:135 src/sync/SyncController.cpp:679
+#: src/sync/SyncController.cpp:136 src/sync/SyncController.cpp:680
 msgid "Sugo Sync needs the system keyring."
 msgstr ""
 
-#: src/sync/SyncController.cpp:137 src/sync/SyncController.cpp:717
+#: src/sync/SyncController.cpp:138 src/sync/SyncController.cpp:723
 msgid "Sugo could not store the Sugo Sync keys in the system keyring."
 msgstr ""
 
-#: src/sync/SyncController.cpp:149
+#: src/sync/SyncController.cpp:150
 msgid "The code expired. Sign in again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:151
+#: src/sync/SyncController.cpp:152
 msgid "Cannot reach Sugo Sync. Check the connection and sign in again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:152
+#: src/sync/SyncController.cpp:153
 msgid "Sign-in did not succeed. Try again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:157 src/sync/SyncController.cpp:676
-#: src/sync/SyncController.cpp:723
+#: src/sync/SyncController.cpp:158 src/sync/SyncController.cpp:677
+#: src/sync/SyncController.cpp:729
 msgid "This device was disconnected. Sign in again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:167
+#: src/sync/SyncController.cpp:168
 msgid ""
 "The key that arrived did not come from the device with this code, so it was "
 "refused."
 msgstr ""
 
-#: src/sync/SyncController.cpp:174
+#: src/sync/SyncController.cpp:175
 msgid "That recovery code does not open your timers."
 msgstr ""
 
-#: src/sync/SyncController.cpp:177
+#: src/sync/SyncController.cpp:178
 msgid "Cannot reach Sugo Sync. The old recovery code still works."
 msgstr ""
 
-#: src/sync/SyncController.cpp:178
+#: src/sync/SyncController.cpp:179
 msgid "A new recovery code could not be created."
 msgstr ""
 
-#: src/sync/SyncController.cpp:191
+#: src/sync/SyncController.cpp:192
 msgid "The device could not be approved. Try again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:192
+#: src/sync/SyncController.cpp:193
 msgid "The device could not be disconnected. Try again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:245
+#: src/sync/SyncController.cpp:246
 msgid "Sugo Sync lost this device's keys. Sign in again."
 msgstr ""
 
-#: src/sync/SyncController.cpp:681
+#: src/sync/SyncController.cpp:682
 msgid "Not signed in."
 msgstr ""
 
-#: src/sync/SyncController.cpp:684
+#: src/sync/SyncController.cpp:685
 msgid ""
 "Your account has as many devices as it can. Disconnect one on sugo.stream."
 msgstr ""
 
-#: src/sync/SyncController.cpp:687
+#: src/sync/SyncController.cpp:688
 msgid "Asking for a code…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:689
+#: src/sync/SyncController.cpp:690
 msgid "Enter this code on sugo.stream."
 msgstr ""
 
-#: src/sync/SyncController.cpp:692
+#: src/sync/SyncController.cpp:693
 msgid ""
 "Waiting for another device to approve this one, or for the recovery code."
 msgstr ""
 
-#: src/sync/SyncController.cpp:694
+#: src/sync/SyncController.cpp:695
 msgid ""
 "Check that your other device shows the same code, then approve it there."
 msgstr ""
 
-#: src/sync/SyncController.cpp:696
+#: src/sync/SyncController.cpp:697
 msgid "Up to date."
 msgstr ""
 
-#: src/sync/SyncController.cpp:699
+#: src/sync/SyncController.cpp:700
 msgid "Waiting for the keyring…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:701
+#: src/sync/SyncController.cpp:702
 msgid "Syncing…"
 msgstr ""
 
-#: src/sync/SyncController.cpp:707
+#: src/sync/SyncController.cpp:713
 msgid "Cannot reach Sugo Sync. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:709
+#: src/sync/SyncController.cpp:715
 msgid "Update Sugo to keep syncing."
 msgstr ""
 
-#: src/sync/SyncController.cpp:711
+#: src/sync/SyncController.cpp:717
 msgid "The synced timers do not open with this device's key."
 msgstr ""
 
-#: src/sync/SyncController.cpp:713
+#: src/sync/SyncController.cpp:719
 msgid "The timers are too large to sync."
 msgstr ""
 
-#: src/sync/SyncController.cpp:715
+#: src/sync/SyncController.cpp:721
 msgid ""
 "The system keyring did not answer. Sugo tries again when you return to the "
 "window."
 msgstr ""
 
-#: src/sync/SyncController.cpp:719
+#: src/sync/SyncController.cpp:725
 msgid "Sugo Sync is busy. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:721
+#: src/sync/SyncController.cpp:727
 msgid "Sugo Sync could not save the timers. Trying again later."
 msgstr ""
 
-#: src/sync/SyncController.cpp:903
+#: src/sync/SyncController.cpp:926
 msgid "New device wants to sync"
 msgstr ""
 
-#: src/sync/SyncController.cpp:904
+#: src/sync/SyncController.cpp:927
 msgid ""
 "%1 asks for your timers. Open Sugo to compare the verification code and "
 "approve it."
 msgstr ""
 
-#: src/sync/SyncController.cpp:907 src/sync/SyncController.cpp:908
+#: src/sync/SyncController.cpp:930 src/sync/SyncController.cpp:931
 msgid "Review"
 msgstr ""
 
@@ -1121,145 +1121,145 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/qml/Main.qml:1062
+#: src/qml/Main.qml:1063
 msgid "Skip This Work Session?"
 msgstr ""
 
-#: src/qml/Main.qml:1062
+#: src/qml/Main.qml:1063
 msgid "Stop This Work Session?"
 msgstr ""
 
-#: src/qml/Main.qml:1063
+#: src/qml/Main.qml:1064
 msgid ""
 "The rest of this work session is skipped and it is saved as interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:1064
+#: src/qml/Main.qml:1065
 msgid "The work session ends now and is saved as interrupted."
 msgstr ""
 
-#: src/qml/Main.qml:1067
+#: src/qml/Main.qml:1068
 msgid "Keep Working"
 msgstr ""
 
-#: src/qml/Main.qml:1081 src/qml/components/Sidebar.qml:153
+#: src/qml/Main.qml:1082 src/qml/components/Sidebar.qml:153
 #: src/qml/pages/AppSettingsPage.qml:20 src/qml/pages/TimerPage.qml:13
 msgid "Focus"
 msgstr ""
 
-#: src/qml/Main.qml:1084 src/qml/components/Sidebar.qml:254
+#: src/qml/Main.qml:1085 src/qml/components/Sidebar.qml:254
 #: src/qml/pages/AboutPage.qml:10
 msgid "About"
 msgstr ""
 
-#: src/qml/Main.qml:1085
+#: src/qml/Main.qml:1086
 msgid "Resume the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1085
+#: src/qml/Main.qml:1086
 msgid "Pause the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1085
+#: src/qml/Main.qml:1086
 msgid "Start the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1086 src/qml/pages/TimerPage.qml:377
+#: src/qml/Main.qml:1087 src/qml/pages/TimerPage.qml:377
 #: src/qml/pages/WelcomePage.qml:777
 msgctxt "keyboard key"
 msgid "Space"
 msgstr ""
 
-#: src/qml/Main.qml:1088 src/qml/components/Sidebar.qml:215
+#: src/qml/Main.qml:1089 src/qml/components/Sidebar.qml:215
 msgid "New timer"
 msgstr ""
 
-#: src/qml/Main.qml:1091
+#: src/qml/Main.qml:1092
 msgid "Stop the timer"
 msgstr ""
 
-#: src/qml/Main.qml:1092
+#: src/qml/Main.qml:1093
 msgid "Skip to the next phase"
 msgstr ""
 
-#: src/qml/Main.qml:1098 src/qml/components/Sidebar.qml:205
+#: src/qml/Main.qml:1099 src/qml/components/Sidebar.qml:205
 msgctxt "minutes, short"
 msgid "%1m"
 msgstr ""
 
-#: src/qml/Main.qml:1301
+#: src/qml/Main.qml:1302
 msgid ""
 "Your data cannot be saved: the database could not be opened. Sugo is using a "
 "temporary database."
 msgstr ""
 
-#: src/qml/Main.qml:1304
+#: src/qml/Main.qml:1305
 msgid ""
 "Your latest sessions or timer changes could not be saved yet. Sugo keeps "
 "them and tries again; do not quit until this message is gone."
 msgstr ""
 
-#: src/qml/Main.qml:1307
+#: src/qml/Main.qml:1308
 msgid ""
 "Your database was damaged, so Sugo started a new one. The old file is kept "
 "as %1."
 msgstr ""
 
-#: src/qml/Main.qml:1308
+#: src/qml/Main.qml:1309
 msgid ""
 "The database file did not belong to Sugo, so Sugo started a new one. That "
 "file is kept as %1."
 msgstr ""
 
-#: src/qml/Main.qml:1312 src/qml/pages/AppSettingsPage.qml:1808
+#: src/qml/Main.qml:1313 src/qml/pages/AppSettingsPage.qml:1864
 msgid "Show in Finder"
 msgstr ""
 
-#: src/qml/Main.qml:1312 src/qml/pages/AppSettingsPage.qml:1808
+#: src/qml/Main.qml:1313 src/qml/pages/AppSettingsPage.qml:1864
 msgid "Open folder"
 msgstr ""
 
-#: src/qml/Main.qml:1320 src/qml/pages/AboutPage.qml:227
+#: src/qml/Main.qml:1321 src/qml/pages/AboutPage.qml:227
 #: src/qml/pages/TimerPage.qml:431
 msgid "Dismiss"
 msgstr ""
 
-#: src/qml/Main.qml:1449
+#: src/qml/Main.qml:1450
 msgid "Work Session Finished"
 msgstr ""
 
-#: src/qml/Main.qml:1451
+#: src/qml/Main.qml:1452
 msgid "What did you accomplish during “%1”?"
 msgstr ""
 
-#: src/qml/Main.qml:1452
+#: src/qml/Main.qml:1453
 msgid "What did you accomplish during this session?"
 msgstr ""
 
-#: src/qml/Main.qml:1453
+#: src/qml/Main.qml:1454
 msgid "Save Note"
 msgstr ""
 
-#: src/qml/Main.qml:1461
+#: src/qml/Main.qml:1462
 msgid "e.g. Refactored auth module, wrote tests…"
 msgstr ""
 
-#: src/qml/Main.qml:1485
+#: src/qml/Main.qml:1486
 msgctxt "@action:button use a recent note"
 msgid "Use “%1”"
 msgstr ""
 
-#: src/qml/Main.qml:1581
+#: src/qml/Main.qml:1582
 msgid ""
 "Signed out on this computer, but Sugo Sync could not be reached. Disconnect "
 "this device on sugo.stream to free its place."
 msgstr ""
 
-#: src/qml/Main.qml:1607
+#: src/qml/Main.qml:1608
 msgid "Keep your recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1608
+#: src/qml/Main.qml:1609
 msgid ""
 "With this code a new device opens your synced timers when none of your other "
 "devices is at hand. If you lose all your devices and this code, the synced "
@@ -1267,85 +1267,85 @@ msgid ""
 "manager."
 msgstr ""
 
-#: src/qml/Main.qml:1609
+#: src/qml/Main.qml:1610
 msgid "Done"
 msgstr ""
 
-#: src/qml/Main.qml:1610
+#: src/qml/Main.qml:1611
 msgid "Later"
 msgstr ""
 
-#: src/qml/Main.qml:1614
+#: src/qml/Main.qml:1615
 msgid "Recovery code checked. Keep it somewhere safe."
 msgstr ""
 
-#: src/qml/Main.qml:1646 src/qml/pages/AppSettingsPage.qml:246
-#: src/qml/pages/AppSettingsPage.qml:281 src/qml/pages/AppSettingsPage.qml:1622
-#: src/qml/pages/AppSettingsPage.qml:1743
+#: src/qml/Main.qml:1647 src/qml/pages/AppSettingsPage.qml:280
+#: src/qml/pages/AppSettingsPage.qml:315 src/qml/pages/AppSettingsPage.qml:1700
+#: src/qml/pages/AppSettingsPage.qml:1799
 msgid "Recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1656
+#: src/qml/Main.qml:1657
 msgid "Copy recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1661 src/qml/pages/AppSettingsPage.qml:255
+#: src/qml/Main.qml:1662 src/qml/pages/AppSettingsPage.qml:289
 msgid "Recovery code copied to the clipboard."
 msgstr ""
 
-#: src/qml/Main.qml:1667
+#: src/qml/Main.qml:1668
 msgid "To check that you have kept it, type group %1 of %2."
 msgstr ""
 
-#: src/qml/Main.qml:1678
+#: src/qml/Main.qml:1679
 msgid "Group %1"
 msgstr ""
 
-#: src/qml/Main.qml:1680
+#: src/qml/Main.qml:1681
 msgid "Group %1 of the recovery code"
 msgstr ""
 
-#: src/qml/Main.qml:1707
+#: src/qml/Main.qml:1708
 msgid "Approve “%1”?"
 msgstr ""
 
-#: src/qml/Main.qml:1708
+#: src/qml/Main.qml:1709
 msgid ""
 "A new device wants to sync your timers. Approve it only if it is yours and "
 "shows the same code as here."
 msgstr ""
 
-#: src/qml/Main.qml:1709
+#: src/qml/Main.qml:1710
 msgid "Approve"
 msgstr ""
 
-#: src/qml/Main.qml:1710
+#: src/qml/Main.qml:1711
 msgid "Not Now"
 msgstr ""
 
-#: src/qml/Main.qml:1742 src/qml/Main.qml:1756
+#: src/qml/Main.qml:1743 src/qml/Main.qml:1757
 msgid "Verification code"
 msgstr ""
 
-#: src/qml/Main.qml:1764
+#: src/qml/Main.qml:1765
 msgid "Welcome Back"
 msgstr ""
 
-#: src/qml/Main.qml:1764
+#: src/qml/Main.qml:1765
 msgid "Screen Unlocked"
-msgstr ""
-
-#: src/qml/Main.qml:1766
-msgid ""
-"The timer was paused while the computer was asleep. Would you like to resume?"
 msgstr ""
 
 #: src/qml/Main.qml:1767
 msgid ""
+"The timer was paused while the computer was asleep. Would you like to resume?"
+msgstr ""
+
+#: src/qml/Main.qml:1768
+msgid ""
 "The timer was paused while your screen was locked. Would you like to resume?"
 msgstr ""
 
-#: src/qml/Main.qml:1769
+#: src/qml/Main.qml:1770
 msgid "Keep Paused"
 msgstr ""
 
@@ -1371,8 +1371,8 @@ msgid "OK"
 msgstr ""
 
 #: src/qml/components/ConfirmDialog.qml:16
-#: src/qml/pages/AppSettingsPage.qml:1222
-#: src/qml/pages/AppSettingsPage.qml:1590 src/qml/pages/PresetEditPage.qml:241
+#: src/qml/pages/AppSettingsPage.qml:1294
+#: src/qml/pages/AppSettingsPage.qml:1668 src/qml/pages/PresetEditPage.qml:241
 msgid "Cancel"
 msgstr ""
 
@@ -1515,7 +1515,7 @@ msgctxt "@action:inmenu"
 msgid "Sugo"
 msgstr ""
 
-#: src/qml/components/Sidebar.qml:167 src/qml/pages/AppSettingsPage.qml:1643
+#: src/qml/components/Sidebar.qml:167 src/qml/pages/AppSettingsPage.qml:1722
 #: src/qml/pages/PresetEditPage.qml:45 src/qml/pages/WelcomePage.qml:387
 msgid "Timers"
 msgstr ""
@@ -1572,7 +1572,7 @@ msgid "Minimize"
 msgstr ""
 
 #: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:419
+#: src/qml/pages/AppSettingsPage.qml:453
 msgid "Restore"
 msgstr ""
 
@@ -1581,7 +1581,7 @@ msgid "Maximize"
 msgstr ""
 
 #: src/qml/components/WindowButtons.qml:41
-#: src/qml/pages/AppSettingsPage.qml:249 src/qml/pages/AppSettingsPage.qml:2092
+#: src/qml/pages/AppSettingsPage.qml:283 src/qml/pages/AppSettingsPage.qml:2148
 msgid "Close"
 msgstr ""
 
@@ -1589,7 +1589,7 @@ msgstr ""
 msgid "Version %1"
 msgstr ""
 
-#: src/qml/pages/AboutPage.qml:129 src/qml/pages/AppSettingsPage.qml:779
+#: src/qml/pages/AboutPage.qml:129 src/qml/pages/AppSettingsPage.qml:851
 msgid "Updates"
 msgstr ""
 
@@ -1661,7 +1661,7 @@ msgstr ""
 msgid "Open Releases Page"
 msgstr ""
 
-#: src/qml/pages/AboutPage.qml:234 src/qml/pages/AppSettingsPage.qml:1887
+#: src/qml/pages/AboutPage.qml:234 src/qml/pages/AppSettingsPage.qml:1943
 msgid "Links"
 msgstr ""
 
@@ -1689,13 +1689,13 @@ msgstr ""
 msgid "General"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:19 src/qml/pages/AppSettingsPage.qml:921
+#: src/qml/pages/AppSettingsPage.qml:19 src/qml/pages/AppSettingsPage.qml:993
 msgid "Sounds"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:21 src/qml/pages/AppSettingsPage.qml:1119
-#: src/qml/pages/AppSettingsPage.qml:1354
-#: src/qml/pages/AppSettingsPage.qml:1363
+#: src/qml/pages/AppSettingsPage.qml:21 src/qml/pages/AppSettingsPage.qml:1191
+#: src/qml/pages/AppSettingsPage.qml:1426
+#: src/qml/pages/AppSettingsPage.qml:1435
 msgid "Calendar"
 msgstr ""
 
@@ -1707,1092 +1707,1106 @@ msgstr ""
 msgid "Advanced"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:182
+#: src/qml/pages/AppSettingsPage.qml:168
+msgid ""
+"Your browser opens sugo.stream, where you sign in and enter a code that Sugo "
+"shows here."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:170
+msgid ""
+"This device was disconnected on sugo.stream. Sign in again to keep syncing."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:172
+msgid ""
+"Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use "
+"the Keychain, then restart Sugo."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:173
+msgid ""
+"Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock "
+"one (for example KWallet or GNOME Keyring), then restart Sugo."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:175
+msgid ""
+"Sign in on sugo.stream in your browser and enter the code. Sugo goes on by "
+"itself once you have."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:177
+msgid ""
+"Your account already links as many devices as the plan allows. Disconnect "
+"one on sugo.stream to free a place: Sugo goes on by itself."
+msgstr ""
+
+#: src/qml/pages/AppSettingsPage.qml:216
 msgid "macOS"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:182
+#: src/qml/pages/AppSettingsPage.qml:216
 msgid "Linux"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:188
+#: src/qml/pages/AppSettingsPage.qml:222
 msgid "Waiting for approval"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:189
+#: src/qml/pages/AppSettingsPage.qml:223
 msgid "Last seen %1"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:190 src/qml/pages/AppSettingsPage.qml:1644
-#: src/qml/pages/AppSettingsPage.qml:1645
+#: src/qml/pages/AppSettingsPage.qml:224 src/qml/pages/AppSettingsPage.qml:1726
+#: src/qml/pages/AppSettingsPage.qml:1727
 msgid "Not synced yet"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:191
+#: src/qml/pages/AppSettingsPage.qml:225
 msgctxt "platform · last seen"
 msgid "%1 · %2"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:202
+#: src/qml/pages/AppSettingsPage.qml:236
 msgid "Sign out of Sugo Sync?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:203
+#: src/qml/pages/AppSettingsPage.qml:237
 msgid ""
 "This computer stops syncing and leaves your list of devices. Your timers "
 "stay on this computer."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:204
+#: src/qml/pages/AppSettingsPage.qml:238
 msgid "Sign Out"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:218
+#: src/qml/pages/AppSettingsPage.qml:252
 msgid "Disconnect “%1”?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:219
+#: src/qml/pages/AppSettingsPage.qml:253
 msgid ""
 "That device stops syncing and its place on your plan is free again. Its "
 "timers stay on it, and it can sign in again later."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:220 src/qml/pages/AppSettingsPage.qml:333
-#: src/qml/pages/AppSettingsPage.qml:1249
-#: src/qml/pages/AppSettingsPage.qml:1346
+#: src/qml/pages/AppSettingsPage.qml:254 src/qml/pages/AppSettingsPage.qml:367
+#: src/qml/pages/AppSettingsPage.qml:1321
+#: src/qml/pages/AppSettingsPage.qml:1418
 msgid "Disconnect"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:232
+#: src/qml/pages/AppSettingsPage.qml:266
 msgid "Create a new recovery code?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:233
+#: src/qml/pages/AppSettingsPage.qml:267
 msgid ""
 "The recovery code you have now stops working. Sugo shows you the new one, to "
 "keep in a safe place."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:234
+#: src/qml/pages/AppSettingsPage.qml:268
 msgid "Create New Code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:247
+#: src/qml/pages/AppSettingsPage.qml:281
 msgid ""
 "With this code a new device opens your timers when none of your other "
 "devices is at hand. Keep it somewhere safe, away from this computer."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:248 src/qml/pages/AppSettingsPage.qml:1577
-#: src/qml/pages/AppSettingsPage.qml:1578
+#: src/qml/pages/AppSettingsPage.qml:282 src/qml/pages/AppSettingsPage.qml:1655
+#: src/qml/pages/AppSettingsPage.qml:1656
 msgid "Copy"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:331
+#: src/qml/pages/AppSettingsPage.qml:365
 msgid "Disconnect the Calendar?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:332
+#: src/qml/pages/AppSettingsPage.qml:366
 msgid ""
 "Sugo forgets the password for this calendar service and stops sending "
 "events. You can sign in again at any time."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:358
+#: src/qml/pages/AppSettingsPage.qml:392
 msgid "Diagnostic report successfully exported."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:359
+#: src/qml/pages/AppSettingsPage.qml:393
 msgid "Failed to export diagnostic report."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:382
+#: src/qml/pages/AppSettingsPage.qml:416
 msgid "Clear session history?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:383
+#: src/qml/pages/AppSettingsPage.qml:417
 msgid ""
 "This permanently removes all recorded sessions and statistics. Presets and "
 "settings will remain."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:384
+#: src/qml/pages/AppSettingsPage.qml:418
 msgid "Clear History"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:394
+#: src/qml/pages/AppSettingsPage.qml:428
 msgid "Older than 3 months"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:395
+#: src/qml/pages/AppSettingsPage.qml:429
 msgid "Older than 6 months"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:396
+#: src/qml/pages/AppSettingsPage.qml:430
 msgid "Older than 1 year"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:397
+#: src/qml/pages/AppSettingsPage.qml:431
 msgid "All sessions"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:403
+#: src/qml/pages/AppSettingsPage.qml:437
 msgid "Remove old sessions?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:405
+#: src/qml/pages/AppSettingsPage.qml:439
 msgid ""
 "This permanently removes the sessions recorded more than 1 year ago. More "
 "recent sessions, presets and settings will remain."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:406
+#: src/qml/pages/AppSettingsPage.qml:440
 msgid ""
 "This permanently removes the sessions recorded more than %1 months ago. More "
 "recent sessions, presets and settings will remain."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:407
+#: src/qml/pages/AppSettingsPage.qml:441
 msgid "Remove Sessions"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:417
+#: src/qml/pages/AppSettingsPage.qml:451
 msgid "Restore this backup?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:418
+#: src/qml/pages/AppSettingsPage.qml:452
 msgid ""
 "Restoring replaces your current presets and session history with the "
 "contents of the selected backup."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:428
+#: src/qml/pages/AppSettingsPage.qml:462
 msgid "Reset all settings?"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:429
+#: src/qml/pages/AppSettingsPage.qml:463
 msgid ""
 "Every setting on this page goes back to its default. Your timers, session "
 "history, calendar account and the choice to start Sugo at login are kept."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:430
+#: src/qml/pages/AppSettingsPage.qml:464
 msgid "Reset Settings"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:435
+#: src/qml/pages/AppSettingsPage.qml:469
 msgid "Settings were reset to their defaults."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:731
+#: src/qml/pages/AppSettingsPage.qml:803
 msgid "Appearance"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:735 src/qml/pages/AppSettingsPage.qml:746
+#: src/qml/pages/AppSettingsPage.qml:807 src/qml/pages/AppSettingsPage.qml:818
 msgid "Color scheme"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:741
+#: src/qml/pages/AppSettingsPage.qml:813
 msgid "System default"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:742
+#: src/qml/pages/AppSettingsPage.qml:814
 msgid "Light"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:743
+#: src/qml/pages/AppSettingsPage.qml:815
 msgid "Dark"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:754
+#: src/qml/pages/AppSettingsPage.qml:826
 msgid "Startup"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:758
+#: src/qml/pages/AppSettingsPage.qml:830
 msgid "Start Sugo automatically when I log in"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:760
+#: src/qml/pages/AppSettingsPage.qml:832
 msgid ""
 "Starting at login cannot be set up from inside Sugo here. Add Sugo in System "
 "Settings → General → Login Items instead."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:761
+#: src/qml/pages/AppSettingsPage.qml:833
 msgid ""
 "Starting at login cannot be set up from inside this environment (for example "
 "a sandboxed package). Use your desktop's autostart settings instead."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:766
+#: src/qml/pages/AppSettingsPage.qml:838
 msgid "Start hidden in the menu bar"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:766
+#: src/qml/pages/AppSettingsPage.qml:838
 msgid "Start minimized to the system tray"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:767
+#: src/qml/pages/AppSettingsPage.qml:839
 msgid ""
 "When started at login, Sugo opens in the menu bar without showing its window."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:768
+#: src/qml/pages/AppSettingsPage.qml:840
 msgid ""
 "When started at login, Sugo opens in the tray without showing its window."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:783
+#: src/qml/pages/AppSettingsPage.qml:855
 msgid "Check for updates automatically"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:784
+#: src/qml/pages/AppSettingsPage.qml:856
 msgid ""
 "Sugo looks for a new version every few hours and tells you; it downloads it "
 "only when you click Install. Turned off, it only looks when you ask, in "
 "About."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:791
+#: src/qml/pages/AppSettingsPage.qml:863
 msgid "Menu bar"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:791
+#: src/qml/pages/AppSettingsPage.qml:863
 msgid "System tray"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:799
+#: src/qml/pages/AppSettingsPage.qml:871
 msgid "The menu bar icon is not available, so its options are turned off."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:800
+#: src/qml/pages/AppSettingsPage.qml:872
 msgid ""
 "No system tray was found on this desktop, so the tray options are not "
 "available and closing the window quits Sugo."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:804 src/qml/pages/WelcomePage.qml:636
+#: src/qml/pages/AppSettingsPage.qml:876 src/qml/pages/WelcomePage.qml:636
 msgid "Show an icon in the menu bar"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:804
+#: src/qml/pages/AppSettingsPage.qml:876
 msgid "Show an icon in the system tray"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:806
+#: src/qml/pages/AppSettingsPage.qml:878
 msgid ""
 "While a timer runs, the menu bar icon shows its progress. Click it to show "
 "the window, or to start, pause, stop or quit."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:807
+#: src/qml/pages/AppSettingsPage.qml:879
 msgid ""
 "While a timer runs, the tray icon shows its progress. Click it to show or "
 "hide the window; use its menu to start, pause, stop or quit."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:814
+#: src/qml/pages/AppSettingsPage.qml:886
 msgid "Keep running in the tray when the window is closed"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:819 src/qml/pages/AppSettingsPage.qml:831
+#: src/qml/pages/AppSettingsPage.qml:891 src/qml/pages/AppSettingsPage.qml:903
 msgid "Badge style"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:826
+#: src/qml/pages/AppSettingsPage.qml:898
 msgid "Border with minutes"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:827
+#: src/qml/pages/AppSettingsPage.qml:899
 msgid "Fill with minutes"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:828
+#: src/qml/pages/AppSettingsPage.qml:900
 msgid "Spiral (no numbers)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:901
+#: src/qml/pages/AppSettingsPage.qml:973
 msgid "Dock"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:905
+#: src/qml/pages/AppSettingsPage.qml:977
 msgid "Show the minutes left on the Dock icon"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:906
+#: src/qml/pages/AppSettingsPage.qml:978
 msgid "While a timer runs, a badge on the Dock icon shows the minutes left."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:910
+#: src/qml/pages/AppSettingsPage.qml:982
 msgid "Hide the Dock icon while the window is hidden"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:912
+#: src/qml/pages/AppSettingsPage.qml:984
 msgid ""
 "Sugo stays in the menu bar; the Dock icon comes back when the window is "
 "shown."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:913
+#: src/qml/pages/AppSettingsPage.qml:985
 msgid "Needs the menu bar icon, to bring the window back."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:925 src/qml/pages/AppSettingsPage.qml:942
+#: src/qml/pages/AppSettingsPage.qml:997 src/qml/pages/AppSettingsPage.qml:1014
 msgid "Phase sound"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:931
+#: src/qml/pages/AppSettingsPage.qml:1003
 msgid "Alarm Clock (Default)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:932 src/qml/pages/AppSettingsPage.qml:986
+#: src/qml/pages/AppSettingsPage.qml:1004
+#: src/qml/pages/AppSettingsPage.qml:1058
 msgid "Completion Chime"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:933
+#: src/qml/pages/AppSettingsPage.qml:1005
 msgid "Instant Message"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:934 src/qml/pages/AppSettingsPage.qml:984
+#: src/qml/pages/AppSettingsPage.qml:1006
+#: src/qml/pages/AppSettingsPage.qml:1056
 msgid "Information Sound"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:935 src/qml/pages/AppSettingsPage.qml:985
+#: src/qml/pages/AppSettingsPage.qml:1007
+#: src/qml/pages/AppSettingsPage.qml:1057
 msgid "Bell"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:936 src/qml/pages/AppSettingsPage.qml:990
+#: src/qml/pages/AppSettingsPage.qml:1008
+#: src/qml/pages/AppSettingsPage.qml:1062
 msgid "Success"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:937
+#: src/qml/pages/AppSettingsPage.qml:1009
 msgid "Login Chime"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:938 src/qml/pages/AppSettingsPage.qml:989
+#: src/qml/pages/AppSettingsPage.qml:1010
+#: src/qml/pages/AppSettingsPage.qml:1061
 msgid "Attention"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:939
+#: src/qml/pages/AppSettingsPage.qml:1011
 msgid "Ringing Phone"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:946 src/qml/pages/AppSettingsPage.qml:997
-#: src/qml/pages/AppSettingsPage.qml:1228
-#: src/qml/pages/AppSettingsPage.qml:1326
+#: src/qml/pages/AppSettingsPage.qml:1018
+#: src/qml/pages/AppSettingsPage.qml:1069
+#: src/qml/pages/AppSettingsPage.qml:1300
+#: src/qml/pages/AppSettingsPage.qml:1398
 msgid "Test"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:952 src/qml/pages/AppSettingsPage.qml:960
+#: src/qml/pages/AppSettingsPage.qml:1024
+#: src/qml/pages/AppSettingsPage.qml:1032
 msgid "Alert volume"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:969 src/qml/pages/AppSettingsPage.qml:1042
+#: src/qml/pages/AppSettingsPage.qml:1041
+#: src/qml/pages/AppSettingsPage.qml:1114
 #, javascript-format
 msgctxt "volume percentage"
 msgid "%1%"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:973
+#: src/qml/pages/AppSettingsPage.qml:1045
 msgid "Play a warning one minute before a phase ends"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:977 src/qml/pages/AppSettingsPage.qml:993
+#: src/qml/pages/AppSettingsPage.qml:1049
+#: src/qml/pages/AppSettingsPage.qml:1065
 msgid "Pre-alarm sound"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:987
+#: src/qml/pages/AppSettingsPage.qml:1059
 msgid "Alarm Clock"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:988
+#: src/qml/pages/AppSettingsPage.qml:1060
 msgid "Message"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1004
-#: src/qml/pages/AppSettingsPage.qml:1020
+#: src/qml/pages/AppSettingsPage.qml:1076
+#: src/qml/pages/AppSettingsPage.qml:1092
 msgid "Focus sound"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1005
+#: src/qml/pages/AppSettingsPage.qml:1077
 msgid "A background sound that plays during work sessions."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1011
+#: src/qml/pages/AppSettingsPage.qml:1083
 msgid "Off"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1012
+#: src/qml/pages/AppSettingsPage.qml:1084
 msgid "Clock tick"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1013
+#: src/qml/pages/AppSettingsPage.qml:1085
 msgid "Rain"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1014
+#: src/qml/pages/AppSettingsPage.qml:1086
 msgid "White noise"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1015
+#: src/qml/pages/AppSettingsPage.qml:1087
 msgid "Brown noise"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1016
+#: src/qml/pages/AppSettingsPage.qml:1088
 msgid "Pink noise"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1017
+#: src/qml/pages/AppSettingsPage.qml:1089
 msgid "Waves"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1025
-#: src/qml/pages/AppSettingsPage.qml:1033
+#: src/qml/pages/AppSettingsPage.qml:1097
+#: src/qml/pages/AppSettingsPage.qml:1105
 msgid "Focus sound volume"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1045
+#: src/qml/pages/AppSettingsPage.qml:1117
 msgid "Preview"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1054
+#: src/qml/pages/AppSettingsPage.qml:1126
 msgid "Screen"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1058
+#: src/qml/pages/AppSettingsPage.qml:1130
 msgid "Keep the screen awake during work sessions"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1062
+#: src/qml/pages/AppSettingsPage.qml:1134
 msgid "Pause timer when screen is locked"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1063
+#: src/qml/pages/AppSettingsPage.qml:1135
 msgid ""
 "Automatically pauses the active work phase when you lock your screen and "
 "prompts to resume when you unlock."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1074
+#: src/qml/pages/AppSettingsPage.qml:1146
 msgid "Focus while working"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1085 src/qml/pages/WelcomePage.qml:671
+#: src/qml/pages/AppSettingsPage.qml:1157 src/qml/pages/WelcomePage.qml:671
 msgid "Silence notifications with a Focus"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1091
+#: src/qml/pages/AppSettingsPage.qml:1163
 msgid "Install Shortcuts"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1101
+#: src/qml/pages/AppSettingsPage.qml:1173
 msgid "Streak and notes"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1105
+#: src/qml/pages/AppSettingsPage.qml:1177
 msgid "Protect daily streak over weekends"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1106
+#: src/qml/pages/AppSettingsPage.qml:1178
 msgid ""
 "When enabled, weekends without recorded sessions do not reset your daily "
 "streak on Monday."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1110
+#: src/qml/pages/AppSettingsPage.qml:1182
 msgid "Prompt for a task note when a work session finishes"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1111
+#: src/qml/pages/AppSettingsPage.qml:1183
 msgid ""
 "When a work session ends, Sugo asks what you worked on. Notes are saved to "
 "the session history."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1124
-#: src/qml/pages/AppSettingsPage.qml:1129
+#: src/qml/pages/AppSettingsPage.qml:1196
+#: src/qml/pages/AppSettingsPage.qml:1201
 msgid "Add an event to your calendar each time you finish a work session."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1125
+#: src/qml/pages/AppSettingsPage.qml:1197
 msgid ""
 "Sugo then sends the name of your timer, its category and the time of each "
 "finished work session to the calendar server you choose."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1147
-#: src/qml/pages/AppSettingsPage.qml:1157
+#: src/qml/pages/AppSettingsPage.qml:1219
+#: src/qml/pages/AppSettingsPage.qml:1229
 msgid "Calendar service"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1153
+#: src/qml/pages/AppSettingsPage.qml:1225
 msgid "Nextcloud"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1154
+#: src/qml/pages/AppSettingsPage.qml:1226
 msgid "Custom CalDAV"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1176
-#: src/qml/pages/AppSettingsPage.qml:1186
+#: src/qml/pages/AppSettingsPage.qml:1248
+#: src/qml/pages/AppSettingsPage.qml:1258
 msgid "Server address"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1213
+#: src/qml/pages/AppSettingsPage.qml:1285
 msgid "Log in"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1232
-#: src/qml/pages/AppSettingsPage.qml:1233
-#: src/qml/pages/AppSettingsPage.qml:1330
-#: src/qml/pages/AppSettingsPage.qml:1331
+#: src/qml/pages/AppSettingsPage.qml:1304
+#: src/qml/pages/AppSettingsPage.qml:1305
+#: src/qml/pages/AppSettingsPage.qml:1402
+#: src/qml/pages/AppSettingsPage.qml:1403
 msgid "Test connection"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1258
-#: src/qml/pages/AppSettingsPage.qml:1266
+#: src/qml/pages/AppSettingsPage.qml:1330
+#: src/qml/pages/AppSettingsPage.qml:1338
 msgid "Calendar address (CalDAV)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1259
+#: src/qml/pages/AppSettingsPage.qml:1331
 msgid ""
 "Use the CalDAV address of the calendar. A subscription link ending in .ics "
 "is read-only and cannot receive events."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1282
-#: src/qml/pages/AppSettingsPage.qml:1288
+#: src/qml/pages/AppSettingsPage.qml:1354
+#: src/qml/pages/AppSettingsPage.qml:1360
 msgid "Username"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1299
-#: src/qml/pages/AppSettingsPage.qml:1308
+#: src/qml/pages/AppSettingsPage.qml:1371
+#: src/qml/pages/AppSettingsPage.qml:1380
 msgid "Password"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1324
+#: src/qml/pages/AppSettingsPage.qml:1396
 msgid "Connection"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1412
-#: src/qml/pages/AppSettingsPage.qml:1413
+#: src/qml/pages/AppSettingsPage.qml:1484
+#: src/qml/pages/AppSettingsPage.qml:1485
 msgid "Find calendars"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1430
-#: src/qml/pages/AppSettingsPage.qml:1434
+#: src/qml/pages/AppSettingsPage.qml:1502
+#: src/qml/pages/AppSettingsPage.qml:1506
 msgid "Include the task note in the event description"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1431
+#: src/qml/pages/AppSettingsPage.qml:1503
 msgid "Notes are sent to your calendar server."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1467
+#: src/qml/pages/AppSettingsPage.qml:1539
 msgid ""
 "Enter the calendar address, your username and password to start sending "
 "events."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1469
+#: src/qml/pages/AppSettingsPage.qml:1541
 msgid "Log in to start sending events."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1470
+#: src/qml/pages/AppSettingsPage.qml:1542
 msgid "Enter your server address and log in to start sending events."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1480
+#: src/qml/pages/AppSettingsPage.qml:1552
 msgid "Last event sent: %1"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1482
+#: src/qml/pages/AppSettingsPage.qml:1554
 msgid "%1 event waiting to be sent"
 msgid_plural "%1 events waiting to be sent"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/qml/pages/AppSettingsPage.qml:1488
+#: src/qml/pages/AppSettingsPage.qml:1560
 msgctxt "last event sent · events waiting"
 msgid "%1 · %2"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1505
+#: src/qml/pages/AppSettingsPage.qml:1577
 msgid "Sugo Sync"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1512
+#: src/qml/pages/AppSettingsPage.qml:1584
 msgid "Your timers on all your computers"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1513
+#: src/qml/pages/AppSettingsPage.qml:1585
 msgid ""
 "Sugo Sync keeps your timers the same on every computer you sign in on. They "
 "are encrypted on this computer, so only your devices can read them. The free "
 "plan links 2 devices."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1517
-#: src/qml/pages/AppSettingsPage.qml:1525
+#: src/qml/pages/AppSettingsPage.qml:1589
+#: src/qml/pages/AppSettingsPage.qml:1597
 msgid "Device name"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1518
+#: src/qml/pages/AppSettingsPage.qml:1590
 msgid "How this computer appears in your list of devices."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1531
-#: src/qml/pages/AppSettingsPage.qml:1538
+#: src/qml/pages/AppSettingsPage.qml:1606
+#: src/qml/pages/AppSettingsPage.qml:1615
 msgid "Sign in"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1532
-msgid ""
-"Your browser opens sugo.stream, where you sign in and enter a code that Sugo "
-"shows here."
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1552
+#: src/qml/pages/AppSettingsPage.qml:1629
 msgid "Enter this code on sugo.stream"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1553
-msgid ""
-"Sign in on sugo.stream in your browser and enter the code. Sugo goes on by "
-"itself once you have."
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1557
+#: src/qml/pages/AppSettingsPage.qml:1635
 msgid "Your code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1567
+#: src/qml/pages/AppSettingsPage.qml:1645
 msgid "Open in browser"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1572
+#: src/qml/pages/AppSettingsPage.qml:1650
 msgid "The browser could not be opened. Go to sugo.stream and enter the code."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1577
-#: src/qml/pages/AppSettingsPage.qml:1578
-#: src/qml/pages/AppSettingsPage.qml:1994
-#: src/qml/pages/AppSettingsPage.qml:1995
+#: src/qml/pages/AppSettingsPage.qml:1655
+#: src/qml/pages/AppSettingsPage.qml:1656
+#: src/qml/pages/AppSettingsPage.qml:2050
+#: src/qml/pages/AppSettingsPage.qml:2051
 msgid "Copied"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1599
+#: src/qml/pages/AppSettingsPage.qml:1677
 msgid "Approve this computer on another device"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1601
-#: src/qml/pages/AppSettingsPage.qml:1603
+#: src/qml/pages/AppSettingsPage.qml:1679
+#: src/qml/pages/AppSettingsPage.qml:1681
 msgid ""
 "Open Sugo on a device that already syncs and approve this computer there. "
 "Check that it shows the same code as here."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1602
-#: src/qml/pages/AppSettingsPage.qml:1604
+#: src/qml/pages/AppSettingsPage.qml:1680
+#: src/qml/pages/AppSettingsPage.qml:1682
 msgid ""
 "Open Sugo on a device that already syncs and approve this computer there."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1608
+#: src/qml/pages/AppSettingsPage.qml:1686
 msgid "Check that your other device shows the same code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1613
-#: src/qml/pages/AppSettingsPage.qml:1628
+#: src/qml/pages/AppSettingsPage.qml:1691
+#: src/qml/pages/AppSettingsPage.qml:1706
 msgid "Use recovery code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1614
+#: src/qml/pages/AppSettingsPage.qml:1692
 msgid ""
 "No other device at hand? Enter the recovery code you saved when you first "
 "signed in."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1627
+#: src/qml/pages/AppSettingsPage.qml:1705
 msgid "Use"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1644
-#: src/qml/pages/AppSettingsPage.qml:1645
+#: src/qml/pages/AppSettingsPage.qml:1725
+#: src/qml/pages/AppSettingsPage.qml:1727
 msgid "Last synced %1"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1648
+#: src/qml/pages/AppSettingsPage.qml:1731
 msgid "Syncing"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1649
+#: src/qml/pages/AppSettingsPage.qml:1732
 msgid "Offline"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1649
+#: src/qml/pages/AppSettingsPage.qml:1732
 msgid "Not synced"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1650
+#: src/qml/pages/AppSettingsPage.qml:1733
 msgid "Up to date"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1659
-#: src/qml/pages/AppSettingsPage.qml:1660
+#: src/qml/pages/AppSettingsPage.qml:1742
+#: src/qml/pages/AppSettingsPage.qml:1743
 msgid "Sync now"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1684
-msgid ""
-"Sugo Sync needs the system keyring, to keep its keys safe. Allow Sugo to use "
-"the Keychain, then restart Sugo."
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1685
-msgid ""
-"Sugo Sync needs the system keyring, to keep its keys safe. Install or unlock "
-"one (for example KWallet or GNOME Keyring), then restart Sugo."
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1688
-msgid ""
-"Your account already links as many devices as the plan allows. Disconnect "
-"one on sugo.stream to free a place: Sugo goes on by itself."
-msgstr ""
-
-#: src/qml/pages/AppSettingsPage.qml:1700
+#: src/qml/pages/AppSettingsPage.qml:1756
 msgid "Devices"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1714
+#: src/qml/pages/AppSettingsPage.qml:1770
 msgid "This device"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1719
+#: src/qml/pages/AppSettingsPage.qml:1775
 msgid "Disconnect…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1721
+#: src/qml/pages/AppSettingsPage.qml:1777
 msgid "Disconnect %1"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1737
+#: src/qml/pages/AppSettingsPage.qml:1793
 msgid "Account"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1744
+#: src/qml/pages/AppSettingsPage.qml:1800
 msgid ""
 "With it, a new device opens your timers when none of your other devices is "
 "at hand. Without any device and without the code, the synced timers cannot "
 "be opened again."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1747
+#: src/qml/pages/AppSettingsPage.qml:1803
 msgid "Show"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1748
+#: src/qml/pages/AppSettingsPage.qml:1804
 msgid "Show recovery code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1755
+#: src/qml/pages/AppSettingsPage.qml:1811
 msgid "Create a new one…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1756
+#: src/qml/pages/AppSettingsPage.qml:1812
 msgid "Create a new recovery code"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1762
+#: src/qml/pages/AppSettingsPage.qml:1818
 msgid "Sign out"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1763
+#: src/qml/pages/AppSettingsPage.qml:1819
 msgid "This computer stops syncing. Your timers stay on it."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1766
+#: src/qml/pages/AppSettingsPage.qml:1822
 msgid "Sign out…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1777
+#: src/qml/pages/AppSettingsPage.qml:1833
 msgid "Coming to Sugo Sync"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1782
+#: src/qml/pages/AppSettingsPage.qml:1838
 msgid "Session history and statistics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1783
+#: src/qml/pages/AppSettingsPage.qml:1839
 msgid "Your finished sessions and their statistics, the same on every device."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1785
-#: src/qml/pages/AppSettingsPage.qml:1793
+#: src/qml/pages/AppSettingsPage.qml:1841
+#: src/qml/pages/AppSettingsPage.qml:1849
 msgid "Coming soon"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1790
+#: src/qml/pages/AppSettingsPage.qml:1846
 msgid "Task notes"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1791
+#: src/qml/pages/AppSettingsPage.qml:1847
 msgid "The notes you write after a work session, on every device."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1801
+#: src/qml/pages/AppSettingsPage.qml:1857
 msgid "Data management"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1805
+#: src/qml/pages/AppSettingsPage.qml:1861
 msgid "Database"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1815
+#: src/qml/pages/AppSettingsPage.qml:1871
 msgid "Backup and restore"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1818
-#: src/qml/pages/AppSettingsPage.qml:1820
+#: src/qml/pages/AppSettingsPage.qml:1874
+#: src/qml/pages/AppSettingsPage.qml:1876
 msgid ""
 "Save your timers and session history to a file, or bring them back from one."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1822
+#: src/qml/pages/AppSettingsPage.qml:1878
 msgid "Back up…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1827
+#: src/qml/pages/AppSettingsPage.qml:1883
 msgid "Restore…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1834
+#: src/qml/pages/AppSettingsPage.qml:1890
 msgid "Export history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1835
+#: src/qml/pages/AppSettingsPage.qml:1891
 msgid "Save all recorded sessions as a spreadsheet (CSV) or JSON file."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1837
+#: src/qml/pages/AppSettingsPage.qml:1893
 msgid "Export…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1844
+#: src/qml/pages/AppSettingsPage.qml:1900
 msgid "Session history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1845
+#: src/qml/pages/AppSettingsPage.qml:1901
 msgid "Remove recorded sessions and their statistics."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1852
+#: src/qml/pages/AppSettingsPage.qml:1908
 msgid "Sessions to remove"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1857
+#: src/qml/pages/AppSettingsPage.qml:1913
 msgid "Clear history…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1876
+#: src/qml/pages/AppSettingsPage.qml:1932
 msgid "Shortcuts and Automation"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1876
+#: src/qml/pages/AppSettingsPage.qml:1932
 msgid "Global Shortcuts and Automation"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1880
+#: src/qml/pages/AppSettingsPage.qml:1936
 msgid "Allow other programs to control the timer"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1882
+#: src/qml/pages/AppSettingsPage.qml:1938
 msgid ""
 "Scripts, the Shortcuts app and other programs can start, pause, skip and "
 "stop it by opening sugo:// links. Turn this off if you only use Sugo's own "
 "window and menu bar icon."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1883
+#: src/qml/pages/AppSettingsPage.qml:1939
 msgid ""
 "Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and "
 "stop it. Turn this off if you only use Sugo's own window and tray."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1887
+#: src/qml/pages/AppSettingsPage.qml:1943
 msgid "D-Bus commands"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1889
+#: src/qml/pages/AppSettingsPage.qml:1945
 msgid ""
 "Open a sugo:// link to control Sugo: in Terminal or a script with the "
 "command below, or in the Shortcuts app with the \"Open URLs\" action (give "
 "it a keyboard shortcut there). Available links: %1."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1891
+#: src/qml/pages/AppSettingsPage.qml:1947
 msgid ""
 "Sugo can be controlled through D-Bus at %1, for example with the command "
 "below. Available commands: %2."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1926
+#: src/qml/pages/AppSettingsPage.qml:1982
 msgid "Copy command"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1935
+#: src/qml/pages/AppSettingsPage.qml:1991
 msgid "Command copied to the clipboard."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1943
+#: src/qml/pages/AppSettingsPage.qml:1999
 msgid "Global shortcuts"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1944
+#: src/qml/pages/AppSettingsPage.qml:2000
 msgid "Assign keys to these commands in Plasma's System Settings."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1946
+#: src/qml/pages/AppSettingsPage.qml:2002
 msgid "Open Shortcut Settings"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1957
+#: src/qml/pages/AppSettingsPage.qml:2013
 msgid "Pre-release builds"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1961
-#: src/qml/pages/AppSettingsPage.qml:1973
+#: src/qml/pages/AppSettingsPage.qml:2017
+#: src/qml/pages/AppSettingsPage.qml:2029
 msgid "Update channel"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1963
+#: src/qml/pages/AppSettingsPage.qml:2019
 msgid "Every new build, as soon as it is made. May have bugs."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1965
+#: src/qml/pages/AppSettingsPage.qml:2021
 msgid ""
 "Tested releases. This nightly build stays until a newer release comes out."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1966
+#: src/qml/pages/AppSettingsPage.qml:2022
 msgid "Tested releases."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1969
+#: src/qml/pages/AppSettingsPage.qml:2025
 msgid "Stable"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1970
+#: src/qml/pages/AppSettingsPage.qml:2026
 msgid "Nightly"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1981
+#: src/qml/pages/AppSettingsPage.qml:2037
 msgid "Troubleshooting & Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1985
+#: src/qml/pages/AppSettingsPage.qml:2041
 msgid "Diagnostic report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1986
+#: src/qml/pages/AppSettingsPage.qml:2042
 msgid ""
 "Generate a redacted report with system information and recent logs to share "
 "when reporting an issue."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:1994
-#: src/qml/pages/AppSettingsPage.qml:1995
-#: src/qml/pages/AppSettingsPage.qml:2091
+#: src/qml/pages/AppSettingsPage.qml:2050
+#: src/qml/pages/AppSettingsPage.qml:2051
+#: src/qml/pages/AppSettingsPage.qml:2147
 msgid "Copy to Clipboard"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2003
+#: src/qml/pages/AppSettingsPage.qml:2059
 msgid "Export Diagnostics…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2008
+#: src/qml/pages/AppSettingsPage.qml:2064
 msgid "View Report…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2017
+#: src/qml/pages/AppSettingsPage.qml:2073
 msgid "Verbose logging"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2018
+#: src/qml/pages/AppSettingsPage.qml:2074
 msgid ""
 "Record Sugo's debug messages in the diagnostic report. Turn it on, reproduce "
 "the problem, then copy the report."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2022
+#: src/qml/pages/AppSettingsPage.qml:2078
 msgid "Welcome tour"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2023
+#: src/qml/pages/AppSettingsPage.qml:2079
 msgid "Go through the introduction to Sugo again."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2025
+#: src/qml/pages/AppSettingsPage.qml:2081
 msgid "Show the Welcome Tour"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2031
+#: src/qml/pages/AppSettingsPage.qml:2087
 msgid "Reset settings"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2032
+#: src/qml/pages/AppSettingsPage.qml:2088
 msgid ""
 "Put the settings back to what they were when you first started Sugo. Your "
 "timers, session history and calendar account are kept."
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2035
+#: src/qml/pages/AppSettingsPage.qml:2091
 msgid "Reset Settings…"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2046
+#: src/qml/pages/AppSettingsPage.qml:2102
 msgid "Back up Sugo database"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2049
-#: src/qml/pages/AppSettingsPage.qml:2068
+#: src/qml/pages/AppSettingsPage.qml:2105
+#: src/qml/pages/AppSettingsPage.qml:2124
 msgid "SQLite database (*.db)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2055
+#: src/qml/pages/AppSettingsPage.qml:2111
 msgid "Export session history"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2060
+#: src/qml/pages/AppSettingsPage.qml:2116
 msgid "CSV spreadsheet (*.csv)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2060
+#: src/qml/pages/AppSettingsPage.qml:2116
 msgid "JSON (*.json)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2066
+#: src/qml/pages/AppSettingsPage.qml:2122
 msgid "Choose a Sugo backup"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2074
+#: src/qml/pages/AppSettingsPage.qml:2130
 msgid "Export Diagnostics"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2077
+#: src/qml/pages/AppSettingsPage.qml:2133
 msgid "Text files (*.txt)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2077
+#: src/qml/pages/AppSettingsPage.qml:2133
 msgid "All files (*)"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2089
+#: src/qml/pages/AppSettingsPage.qml:2145
 msgid "Diagnostics Report"
 msgstr ""
 
-#: src/qml/pages/AppSettingsPage.qml:2090
+#: src/qml/pages/AppSettingsPage.qml:2146
 msgid "All personal details and usernames have been redacted."
 msgstr ""
 
