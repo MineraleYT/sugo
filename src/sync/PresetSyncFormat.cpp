@@ -25,8 +25,9 @@ const QString kIconName = QStringLiteral("iconName");
 
 qint64 timeValue(const QJsonValue &value)
 {
-    // JSON numbers are doubles: milliseconds since the epoch fit exactly (below 2^53).
-    return value.isDouble() ? std::max<qint64>(0, qint64(value.toDouble())) : 0;
+    // JSON numbers are doubles: milliseconds since the epoch fit exactly (below 2^53). Brought
+    // into that range before the conversion, which is undefined (and differs by CPU) outside it.
+    return value.isDouble() ? qint64(std::clamp(value.toDouble(), 0.0, 9007199254740992.0)) : 0;
 }
 
 int intValue(const QJsonValue &value, int low, int high, int fallback)

@@ -277,6 +277,17 @@ private Q_SLOTS:
         QCOMPARE(PresetSyncFormat::merge(theirs, mineAsSeenThere, kOther, kNow).result.presets.at(0).name, QStringLiteral("Theirs"));
     }
 
+    void timesOutOfRangeAreBroughtIntoIt()
+    {
+        QJsonObject p{{QStringLiteral("uuid"), QStringLiteral("a")}, {QStringLiteral("name"), QStringLiteral("A")},
+                      {QStringLiteral("updatedAt"), 1e300}, {QStringLiteral("createdAt"), -5.0}};
+        const QJsonObject root{{QStringLiteral("format"), 1}, {QStringLiteral("presets"), QJsonArray{p}}, {QStringLiteral("tombstones"), QJsonArray{}}};
+        const PresetSyncFormat::ParseResult parsed = PresetSyncFormat::fromJson(json(root));
+        QVERIFY(parsed.ok);
+        QCOMPARE(parsed.data.presets.at(0).updatedAt, qint64(9007199254740992LL));
+        QCOMPARE(parsed.data.presets.at(0).createdAt, qint64(0));
+    }
+
     void editAgainstDeletion()
     {
         const TimerPreset edited = preset(QStringLiteral("a"), QStringLiteral("Edited"), kNow);
