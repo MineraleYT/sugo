@@ -128,7 +128,7 @@ QtObject {
     /// The application icon in the welcome tour.
     readonly property int logoHero: 128
 
-    readonly property int controlHeight: 32
+    readonly property int controlHeight: 30
     readonly property int controlHeightLg: 40
     readonly property int navHeight: 34
     readonly property int sidebarWidth: 236
