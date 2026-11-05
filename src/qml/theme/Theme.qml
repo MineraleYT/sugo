@@ -208,6 +208,11 @@ QtObject {
     readonly property int chartHeightCompact: 90
     readonly property int chartBarMaxWidth: 34
     readonly property int breakdownBarHeight: 4
+    readonly property int breakdownBarWidth: 80
+    readonly property int breakdownValueWidth: 56
+    /// The lists of the statistics (where the time went, the notes): this many rows of this height.
+    readonly property int statsListRows: 5
+    readonly property int statsListRowHeight: 26
     /// The statistics fill the window up to this width, then stay centred.
     readonly property int statsMaxWidth: 1040
 

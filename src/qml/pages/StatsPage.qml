@@ -447,71 +447,86 @@ QQC2.Page {
                 }
             }
 
+            // Side by side, one under the other in a narrow window. Each lists a fixed number of
+            // rows, so the page does not move when a period has more or fewer entries.
             GridLayout {
                 Layout.fillWidth: true
-                columns: column.width >= Theme.contentMaxWidth * 0.8 ? 2 : 1
+                columns: page.compact ? 1 : 2
                 columnSpacing: Theme.spaceLg
                 rowSpacing: Theme.spaceLg
 
                 // Where the time went, by timer, category or task.
                 Panel {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 3
-                    Layout.alignment: Qt.AlignTop
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 6
                     title: i18n("Where the time went")
+                    headerHeight: Theme.controlHeightSm
                     headerExtra: Segmented {
                         model: page.breakdowns
                         current: page.breakdownId
                         onActivated: id => StatsModel.breakdownMode = page.breakdowns.find(b => b.id === id).value
                     }
 
-                    Text {
-                        visible: StatsModel.breakdown.length === 0
-                        text: i18n("Nothing recorded in this period.")
-                        color: Theme.muted
-                        font.pixelSize: Theme.fontBody
-                        Layout.topMargin: Theme.spaceXs
-                    }
+                    Item {
+                        id: breakdownList
+                        Layout.fillWidth: true
+                        implicitHeight: Theme.statsListRows * Theme.statsListRowHeight
+                        // The largest entry fills its bar; the others are measured against it.
+                        readonly property var entries: StatsModel.breakdown.slice(0, Theme.statsListRows)
+                        readonly property real largest: Math.max(1, entries.reduce((m, e) => Math.max(m, e.workSeconds), 0))
 
-                    Repeater {
-                        model: StatsModel.breakdown.slice(0, 8)
+                        Text {
+                            visible: breakdownList.entries.length === 0
+                            height: Theme.statsListRowHeight
+                            verticalAlignment: Text.AlignVCenter
+                            text: i18n("Nothing recorded in this period.")
+                            color: Theme.muted
+                            font.pixelSize: Theme.fontBody
+                        }
 
-                        RowLayout {
-                            id: entry
-                            required property var modelData
-                            Layout.fillWidth: true
-                            spacing: Theme.spaceMd
+                        Column {
+                            width: parent.width
 
-                            Text {
-                                text: entry.modelData.name
-                                color: Theme.foreground
-                                font.pixelSize: Theme.fontBody
-                                elide: Text.ElideRight
-                                Layout.preferredWidth: Theme.space4xl * 2.4
-                            }
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: Theme.spaceXs
-                                radius: height / 2
-                                color: Theme.track
-                                Rectangle {
-                                    width: parent.width * Math.min(1, entry.modelData.percentage / 100)
-                                    height: parent.height
-                                    radius: parent.radius
-                                    gradient: Gradient {
-                                        orientation: Gradient.Horizontal
-                                        GradientStop { position: 0; color: Theme.brandPeach }
-                                        GradientStop { position: 1; color: Theme.brand }
+                            Repeater {
+                                model: breakdownList.entries
+
+                                RowLayout {
+                                    id: entry
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Theme.statsListRowHeight
+                                    spacing: Theme.spaceMd + Theme.hairline * 2
+
+                                    Text {
+                                        text: entry.modelData.name
+                                        color: Theme.foreground
+                                        font.pixelSize: Theme.fontBody
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: Theme.breakdownBarWidth
+                                        implicitHeight: Theme.breakdownBarHeight
+                                        radius: height / 2
+                                        color: Theme.track
+                                        Rectangle {
+                                            width: parent.width * Math.min(1, entry.modelData.workSeconds / breakdownList.largest)
+                                            height: parent.height
+                                            radius: parent.radius
+                                            color: Theme.dim
+                                        }
+                                    }
+                                    Text {
+                                        text: entry.modelData.formattedDuration
+                                        color: Theme.muted
+                                        font.pixelSize: Theme.fontCaption
+                                        font.features: { "tnum": 1 }
+                                        horizontalAlignment: Text.AlignRight
+                                        Layout.preferredWidth: Theme.breakdownValueWidth
                                     }
                                 }
-                            }
-                            Text {
-                                text: entry.modelData.formattedDuration
-                                color: Theme.foreground
-                                font.pixelSize: Theme.fontCaption + 1
-                                font.features: { "tnum": 1 }
-                                horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: Theme.space4xl + Theme.spaceMd
                             }
                         }
                     }
@@ -520,8 +535,9 @@ QQC2.Page {
                 // Days in a row.
                 Panel {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 2
-                    Layout.alignment: Qt.AlignTop
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 5
+                    headerHeight: Theme.controlHeightSm
                     title: i18n("Streak")
 
                     RowLayout {
