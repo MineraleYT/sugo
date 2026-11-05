@@ -380,6 +380,44 @@ private Q_SLOTS:
         QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
     }
 
+    void retryKeepsReceivedTombstones()
+    {
+        PresetModel model;
+        PresetPersistence persistence(&model, repo.get());
+        persistence.setRetryIntervalForTesting(30);
+        const QString first = model.create({{QStringLiteral("name"), QStringLiteral("Study")}});
+        const QString second = model.create({{QStringLiteral("name"), QStringLiteral("Read")}});
+        QSqlQuery query(QSqlDatabase::database(db->connectionName()));
+        const QString refuse = QStringLiteral("CREATE TEMP TRIGGER refuse BEFORE INSERT ON preset_tombstone "
+                                              "BEGIN SELECT RAISE(ABORT, 'disk full'); END");
+
+        // A merge deletes a timer removed elsewhere, but the database refuses: the retry
+        // stores the deletion as it was received, not one made here now.
+        const auto mergeWithout = [&model](const QString &uuid) {
+            QList<TimerPreset> merged = model.presets();
+            merged.removeIf([&uuid](const TimerPreset &p) { return p.uuid == uuid; });
+            model.setPresets(merged, model.currentUuid());
+        };
+        const PresetTombstone firstGone{first, QDateTime::currentMSecsSinceEpoch() - 100000, QStringLiteral("dev_other")};
+        QVERIFY(query.exec(refuse));
+        mergeWithout(first);
+        QVERIFY(!persistence.save({firstGone}));
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+        QTRY_VERIFY(!persistence.isSaveFailing());
+        QCOMPARE(repo->tombstones(), QList<PresetTombstone>{firstGone});
+
+        // The same when the next change of the timers saves before the retry.
+        persistence.setRetryIntervalForTesting(60 * 60 * 1000);
+        const PresetTombstone secondGone{second, QDateTime::currentMSecsSinceEpoch() - 50000, QStringLiteral("dev_other")};
+        QVERIFY(query.exec(refuse));
+        mergeWithout(second);
+        QVERIFY(!persistence.save({secondGone}));
+        QVERIFY(query.exec(QStringLiteral("DROP TRIGGER refuse")));
+        model.update(PresetModel::DefaultUuid, {{QStringLiteral("workSeconds"), 30 * 60}});
+        QVERIFY(!persistence.isSaveFailing());
+        QCOMPARE(repo->tombstones(), (QList<PresetTombstone>{firstGone, secondGone}));
+    }
+
     void deletedPresetsStayDeletedAndSelectionFallsBack()
     {
         QString uuid;

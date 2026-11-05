@@ -33,7 +33,8 @@ public:
      * Stores the model's timers now, with the selection: what a merge from another computer
      * calls after PresetModel::setPresets(), which does not announce itself. `received` are
      * deletions made on other computers (PresetRepository::saveAll()). False if the database
-     * refused; then it is tried again later, as for any change.
+     * refused; then it is tried again later, as for any change, and the retry (or the next
+     * save) still stores `received` as they came, until one succeeds.
      */
     bool save(const QList<PresetTombstone> &received = {});
 
@@ -50,5 +51,7 @@ private:
     PresetModel *m_model;
     PresetRepository *m_repository;
     bool m_saveFailing = false;
+    /// Deletions received with a save that failed, kept until a save stores them.
+    QList<PresetTombstone> m_pendingReceived;
     QTimer m_retryTimer;
 };
