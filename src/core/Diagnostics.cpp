@@ -273,11 +273,14 @@ QString Diagnostics::redact(const QString &text)
         replaceWord(result, pattern, QStringLiteral("<account>"));
     }
 
-    // 1. Redact the home directory path (and its resolved form, if it is a symlink)
+    // 1. Redact the home directory path (and its resolved form, if it is a symlink), only where
+    // the path ends: /home/alice next to the home /home/al does not become "~ice".
     const QString home = QDir::homePath();
     for (const QString &path : {home, QDir(home).canonicalPath()}) {
         if (!path.isEmpty() && path != QLatin1String("/")) {
-            result.replace(path, QStringLiteral("~"));
+            const QRegularExpression pathRegex(
+                QStringLiteral(R"(%1(?![\p{L}\p{N}_.-]))").arg(QRegularExpression::escape(path)));
+            result.replace(pathRegex, QStringLiteral("~"));
         }
     }
 
