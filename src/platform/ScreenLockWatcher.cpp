@@ -6,6 +6,8 @@
 
 #ifdef Q_OS_MACOS
 #include "MacSessionEvents.h"
+#else
+#include <QDBusServiceWatcher>
 #endif
 
 #include <QLoggingCategory>
@@ -72,20 +74,53 @@ ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, const QDBusConn
                       kInterface,
                       kSignal,
                       this,
-                      SLOT(onActiveChanged(bool)));
+                      SLOT(onFreedesktopActiveChanged(bool)));
         m_bus.connect(kInterface,
                       QStringLiteral("/ScreenSaver"),
                       kInterface,
                       kSignal,
                       this,
-                      SLOT(onActiveChanged(bool)));
+                      SLOT(onFreedesktopActiveChanged(bool)));
         m_bus.connect(kGnomeInterface,
                       QStringLiteral("/org/gnome/ScreenSaver"),
                       kGnomeInterface,
                       kSignal,
                       this,
-                      SLOT(onActiveChanged(bool)));
+                      SLOT(onGnomeActiveChanged(bool)));
+
+        // A locker that crashes or restarts while the screen is locked never sends its unlock.
+        auto *lockers = new QDBusServiceWatcher(kInterface, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
+        lockers->addWatchedService(kGnomeInterface);
+        connect(lockers, &QDBusServiceWatcher::serviceOwnerChanged, this, [this](const QString &name, const QString &oldOwner, const QString &) {
+            if (!oldOwner.isEmpty()) {
+                onLockerGone(name);
+            }
+        });
     }
+}
+
+void ScreenLockWatcher::onFreedesktopActiveChanged(bool active)
+{
+    setScreenLocked(active, kInterface);
+}
+
+void ScreenLockWatcher::onGnomeActiveChanged(bool active)
+{
+    setScreenLocked(active, kGnomeInterface);
+}
+
+void ScreenLockWatcher::onLockerGone(const QString &name)
+{
+    // Only the owner that reported the lock: on GNOME, gsd-screensaver-proxy owning
+    // org.freedesktop.ScreenSaver can restart without touching gnome-shell's lock.
+    if (!m_screenLocked || name != m_lockSource) {
+        return;
+    }
+    // Taken as an unlock: the lock screen is most likely gone with its owner. If the timer was
+    // paused by the lock, the user is told as on an unlock and decides whether to resume; nothing
+    // is paused here. A locker that comes back still locked sends a new lock, which then counts.
+    qCDebug(lcScreenLock) << "The screen locker left the bus while locked:" << name;
+    setScreenLocked(false, QString());
 }
 #endif
 
@@ -157,10 +192,20 @@ void ScreenLockWatcher::onPrepareForSleep(bool start)
 
 void ScreenLockWatcher::onActiveChanged(bool active)
 {
+    setScreenLocked(active, QString());
+}
+
+void ScreenLockWatcher::setScreenLocked(bool active, const QString &source)
+{
     if (active == m_screenLocked) {
         return; // the same change, reported again on another object path or name
     }
     m_screenLocked = active;
+#ifndef Q_OS_MACOS
+    m_lockSource = active ? source : QString();
+#else
+    Q_UNUSED(source)
+#endif
     qCDebug(lcScreenLock) << "Screen lock state changed:" << active;
 
     if (active) {
