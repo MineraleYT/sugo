@@ -124,10 +124,23 @@ struct Version {
     const QString &author() const { return deleted ? tombstone.deletedBy : preset.updatedBy; }
 };
 
-/// True when `a` is newer than `b`. Authors compare as device ids, empty standing for `self`.
-bool newer(const Version &a, const Version &b, const QString &self)
+/// `time`, or `nowMs` if it is more than MaxTimeAheadMs ahead of it.
+qint64 plausibleTime(qint64 time, qint64 nowMs)
 {
-    if (a.time() != b.time()) {
+    return time > nowMs + MaxTimeAheadMs ? nowMs : time;
+}
+
+/// True when `a` is newer than `b`. Authors compare as device ids, empty standing for `self`.
+bool newer(const Version &a, const Version &b, const QString &self, qint64 nowMs)
+{
+    const qint64 timeA = plausibleTime(a.time(), nowMs);
+    const qint64 timeB = plausibleTime(b.time(), nowMs);
+    if (timeA != timeB) {
+        return timeA > timeB;
+    }
+    // Both far ahead: still in their own order (a change made here after one taken in before
+    // this check is one millisecond later).
+    if (timeA != a.time() && timeB != b.time() && a.time() != b.time()) {
         return a.time() > b.time();
     }
     // The built-in timer at the same time, as it comes on one side and changed on the other: both
@@ -171,7 +184,8 @@ Data normalized(const Data &side, const QString &self, qint64 nowMs)
         out.presets.append(p);
     }
     for (PresetTombstone t : side.tombstones) {
-        if (t.uuid.isEmpty() || t.uuid == PresetModel::DefaultUuid || t.deletedAt < nowMs - TombstoneLifetimeMs) {
+        if (t.uuid.isEmpty() || t.uuid == PresetModel::DefaultUuid
+            || plausibleTime(t.deletedAt, nowMs) < nowMs - TombstoneLifetimeMs) {
             continue;
         }
         if (t.deletedBy == self) {
@@ -182,7 +196,7 @@ Data normalized(const Data &side, const QString &self, qint64 nowMs)
     return out;
 }
 
-QHash<QString, Version> versions(const Data &side, const QString &self)
+QHash<QString, Version> versions(const Data &side, const QString &self, qint64 nowMs)
 {
     QHash<QString, Version> map;
     for (const TimerPreset &p : side.presets) {
@@ -195,7 +209,7 @@ QHash<QString, Version> versions(const Data &side, const QString &self)
         v.deleted = true;
         v.tombstone = t;
         const auto it = map.constFind(t.uuid);
-        if (it == map.constEnd() || newer(v, *it, self)) {
+        if (it == map.constEnd() || newer(v, *it, self, nowMs)) {
             map.insert(t.uuid, v);
         }
     }
@@ -309,15 +323,20 @@ MergeResult merge(const Data &localSide, const Data &remoteSide, const QString &
 {
     const Data local = normalized(localSide, deviceId, nowMs);
     const Data remote = normalized(remoteSide, deviceId, nowMs);
-    const QHash<QString, Version> mine = versions(local, deviceId);
-    const QHash<QString, Version> theirs = versions(remote, deviceId);
+    const QHash<QString, Version> mine = versions(local, deviceId, nowMs);
+    const QHash<QString, Version> theirs = versions(remote, deviceId, nowMs);
 
     QHash<QString, Version> winners = mine;
     for (auto it = theirs.cbegin(); it != theirs.cend(); ++it) {
         const auto own = winners.constFind(it.key());
-        if (own == winners.constEnd() || newer(*it, *own, deviceId)) {
+        if (own == winners.constEnd() || newer(*it, *own, deviceId, nowMs)) {
             winners.insert(it.key(), *it);
         }
+    }
+    // A far-future time goes out as now: on both sides it then loses to any later change.
+    for (Version &winner : winners) {
+        winner.preset.updatedAt = plausibleTime(winner.preset.updatedAt, nowMs);
+        winner.tombstone.deletedAt = plausibleTime(winner.tombstone.deletedAt, nowMs);
     }
 
     MergeResult merged;
