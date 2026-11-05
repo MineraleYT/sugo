@@ -19,11 +19,13 @@ Rectangle {
     /// Only the logo, the name and the window buttons (the welcome tour).
     property bool bare: false
     property bool maximized: false
-    /// A narrow window: the name is hidden, the tabs are tighter.
+    /// A narrow window: the name is hidden, the tabs are tighter, the update button is an icon.
     readonly property bool compact: width < Theme.compactBreakpoint
 
     signal tabRequested(string name)
     signal searchRequested()
+    /// "Restart to update": an update has been installed and waits for the restart.
+    signal restartRequested()
     // The window has no system title bar: this bar moves it and carries its buttons.
     signal moveRequested()
     signal toggleMaximizeRequested()
@@ -142,7 +144,7 @@ Rectangle {
         }
     }
 
-    // --- Right: search, the window buttons ---------------------------------------
+    // --- Right: the update, search, the window buttons ---------------------------------------
 
     RowLayout {
         id: rightGroup
@@ -152,6 +154,31 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.hairline
         spacing: Theme.spaceXs
+
+        // The update of the AppImage or the macOS app, one step at a time: found, downloading,
+        // installed. As wide as its longest text, so it does not change size from one to the next.
+        SButton {
+            id: updateButton
+            objectName: "titleBarUpdate"
+            readonly property bool found: UpdateChecker.installable
+            readonly property bool downloading: UpdateChecker.status === UpdateChecker.Downloading
+            readonly property bool installed: UpdateChecker.status === UpdateChecker.ReadyToRestart
+            visible: !bar.bare && (found || downloading || installed)
+            enabled: !downloading
+            kind: "ghost"
+            iconOnly: bar.compact
+            implicitHeight: Theme.iconButton
+            Layout.alignment: Qt.AlignVCenter
+            iconName: installed ? "refresh" : "download"
+            text: installed ? i18n("Restart to update")
+                  : downloading ? i18n("Downloading update… %1%", Math.round(UpdateChecker.progress * 100))
+                  : i18n("Install update")
+            labels: [i18n("Install update"), i18n("Downloading update… %1%", 100), i18n("Restart to update")]
+            Accessible.description: !installed ? i18n("Sugo %1 is available.", UpdateChecker.latestVersion)
+                                    : DesktopStyle.macos ? i18n("Sugo %1 is ready; it replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                    : i18n("Sugo %1 is installed; it starts after the restart.", UpdateChecker.latestVersion)
+            onClicked: installed ? bar.restartRequested() : UpdateChecker.installUpdate()
+        }
 
         // Pages, timers and commands; the one shortcut the interface shows is in its tooltip.
         SButton {
