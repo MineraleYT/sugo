@@ -378,7 +378,18 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
             return failed(versionQuery.lastError());
         }
         const int version = versionQuery.value(0).toInt();
-        return version >= 1 && version <= kSugo100SchemaVersion ? Ownership::Ours : Ownership::Foreign;
+        if (version < 1 || version > kSugo100SchemaVersion) {
+            return Ownership::Foreign;
+        }
+        // And it has 1.0.0's tables: another program's file that happens to carry the id is not
+        // converted (and then left failing on every start), it is moved aside.
+        QSqlQuery tables(db);
+        if (!tables.exec(QStringLiteral("SELECT count(*) FROM sqlite_master WHERE type = 'table' "
+                                        "AND name IN ('meta', 'preset', 'preset_option', 'session')"))
+            || !tables.next()) {
+            return failed(tables.lastError());
+        }
+        return tables.value(0).toInt() == 4 ? Ownership::Ours : Ownership::Foreign;
     }
     return Ownership::Foreign;
 }
@@ -430,12 +441,9 @@ int Database::schemaVersion() const
 
 bool Database::convertSugo100File(QSqlDatabase &db)
 {
-    // One transaction: the new id must never sit on top of 1.0.0's numbering, where version 2
-    // means "session.note added" rather than "ready for Sugo Sync".
-    if (!db.transaction()) {
-        m_error = db.lastError().text();
-        return false;
-    }
+    // Runs in migrate()'s transaction, with the migrations after it: the new id never sits on
+    // top of 1.0.0's numbering (where version 2 means "session.note added", not "ready for Sugo
+    // Sync"), and a file the migrations cannot bring up to date keeps 1.0.0's id and version.
     const int version = pragmaInt(db, QStringLiteral("user_version"));
     bool ok = version >= 1 && version <= kSugo100SchemaVersion;
     if (!ok) {
@@ -445,46 +453,51 @@ bool Database::convertSugo100File(QSqlDatabase &db)
     if (ok && version < 2) {
         ok = run(db, QStringLiteral("ALTER TABLE session ADD COLUMN note TEXT NOT NULL DEFAULT ''"), &m_error);
     }
-    ok = ok && run(db, QStringLiteral("PRAGMA user_version = 1"), &m_error)
+    return ok && run(db, QStringLiteral("PRAGMA user_version = 1"), &m_error)
         && run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error);
-    if (!ok) {
-        db.rollback();
-        return false;
-    }
-    if (!db.commit()) {
-        m_error = db.lastError().text();
-        return false;
-    }
-    return true;
 }
 
 bool Database::migrate(QSqlDatabase &db)
 {
-    // A file of Sugo 1.0.0 (ownership() accepted it): renumber it first. One without tables or
-    // version is simply stamped below, like any new file.
-    if (pragmaInt(db, QStringLiteral("application_id")) == kSugo100ApplicationId && schemaVersion() > 0
-        && !convertSugo100File(db)) {
-        return false;
+    // A file of Sugo 1.0.0 (ownership() accepted it): renumbered first, and brought up to date in
+    // the same transaction, all or nothing. One without tables or version is simply stamped
+    // below, like any new file.
+    const bool sugo100 = pragmaInt(db, QStringLiteral("application_id")) == kSugo100ApplicationId && schemaVersion() > 0;
+    if (sugo100) {
+        if (!db.transaction()) {
+            m_error = db.lastError().text();
+            return false;
+        }
+        if (!convertSugo100File(db)) {
+            db.rollback();
+            return false;
+        }
     }
+    const auto fail = [&db, sugo100]() {
+        if (sugo100) {
+            db.rollback();
+        }
+        return false;
+    };
 
     const int current = schemaVersion();
     if (current < 0) {
         m_error = QStringLiteral("Cannot read the schema version");
-        return false;
+        return fail();
     }
     if (current > latestSchemaVersion()) {
         m_error = QStringLiteral("The database was created by a newer version of Sugo (schema %1)").arg(current);
-        return false;
+        return fail();
     }
 
     // Stamp before the first table exists, so a file Sugo began to fill always reads as ours.
     if (pragmaInt(db, QStringLiteral("application_id")) != kApplicationId
         && !run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error)) {
-        return false;
+        return fail();
     }
 
     for (int version = current; version < latestSchemaVersion(); ++version) {
-        if (!db.transaction()) {
+        if (!sugo100 && !db.transaction()) {
             m_error = db.lastError().text();
             return false;
         }
@@ -502,10 +515,15 @@ bool Database::migrate(QSqlDatabase &db)
             db.rollback();
             return false;
         }
-        if (!db.commit()) {
+        if (!sugo100 && !db.commit()) {
             m_error = db.lastError().text();
             return false;
         }
+    }
+    if (sugo100 && !db.commit()) {
+        m_error = db.lastError().text();
+        db.rollback();
+        return false;
     }
     return true;
 }

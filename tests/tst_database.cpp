@@ -322,6 +322,52 @@ private Q_SLOTS:
         }
     }
 
+    void anotherProgramsFileWithThe100IdIsMovedAside()
+    {
+        // The id alone does not make a file Sugo 1.0.0's: it also needs 1.0.0's tables.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        createForeignDatabase(path, QStringLiteral("CREATE TABLE notes (text TEXT)"), 2, kSugo100ApplicationId);
+
+        Database db(path);
+        QVERIFY2(db.open(), qPrintable(db.lastError()));
+        QVERIFY(!db.movedAsidePath().isEmpty());
+        QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
+        QCOMPARE(foreignNotes(db.movedAsidePath()), QStringLiteral("precious"));
+        QCOMPARE(sqliteHeaderApplicationId(db.movedAsidePath()), qint64(kSugo100ApplicationId));
+    }
+
+    void sugo100FileThatCannotBeUpgradedKeepsItsStamp()
+    {
+        // Named like 1.0.0's tables, but not them: migration 2 fails on it. The conversion and the
+        // migrations are one transaction, so the file is left as it was, 1.0.0's id and version
+        // included, rather than re-stamped as a current file that fails on every start.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        createForeignDatabase(path,
+                              QStringLiteral("CREATE TABLE meta (key TEXT); CREATE TABLE preset (id INTEGER); "
+                                             "CREATE TABLE preset_option (x); CREATE TABLE session (note TEXT); "
+                                             "CREATE TABLE notes (text TEXT)"),
+                              2, kSugo100ApplicationId);
+        for (int run = 0; run < 2; ++run) {
+            Database db(path);
+            QVERIFY(!db.open());
+            QVERIFY(db.movedAsidePath().isEmpty());
+        }
+        const QString name = QStringLiteral("check-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        {
+            QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+            raw.setDatabaseName(path);
+            QVERIFY(raw.open());
+            QCOMPARE(scalar(name, QStringLiteral("PRAGMA application_id")).toInt(), kSugo100ApplicationId);
+            QCOMPARE(scalar(name, QStringLiteral("PRAGMA user_version")).toInt(), 2);
+            QCOMPARE(scalar(name, QStringLiteral("SELECT count(*) FROM pragma_table_info('preset') WHERE name = 'updated_at'")).toInt(), 0);
+            raw.close();
+        }
+        QSqlDatabase::removeDatabase(name);
+        QCOMPARE(foreignNotes(path), QStringLiteral("precious"));
+    }
+
     void databaseFromNewerVersionIsRefusedAndUntouched()
     {
         QTemporaryDir dir;
