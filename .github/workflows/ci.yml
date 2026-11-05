@@ -198,11 +198,12 @@ jobs:
   # Native arm64 build and tests with Qt from qt.io and extra-cmake-modules from source, at the
   # versions packaging/macos/build.sh pins. Not blocking yet: a failure here does not fail CI
   # (nor stop the nightly build) while the port settles.
+  # On GitHub's xcode-27 image (macOS 27, in preview), the system the port is tried on.
   build-and-test-macos:
     name: Build and test on macOS
     needs: changes
     if: needs.changes.outputs.macos == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     continue-on-error: true
     env:
       CCACHE_VERSION: 4.14.2
