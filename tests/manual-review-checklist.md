@@ -91,7 +91,7 @@ Run the sync server locally (`sugo-sync/worker`: `npm run db:migrate:local`, `np
 - [ ] Start a timer: the Focus tab shows the time left in the colour of the phase (the accent for work, the break colour for breaks), and no tab moves when it starts, ticks or stops; in a narrow window the time takes the place of the word "Focus". Hovering the tab tells the phase and the time.
 - [ ] Double-click a tab or the search button: the window is neither maximised nor restored. A double-click on an empty part of the title bar maximises and restores it; dragging it moves the window.
 - [ ] With an update found (AppImage, or the macOS app): "Install update" appears left of search, then "Downloading update… n%", then "Restart to update", without changing width and without moving the tabs in a wide window; in a narrow window it is an icon whose tooltip has the text.
-- [ ] macOS: the traffic lights sit at the left of the title bar, clear of the logo, and dragging the bar moves the window.
+- [ ] macOS: the traffic lights sit at the left of the title bar, clear of the logo and on the same middle line as the logo, the tabs and search; dragging the bar moves the window and double-clicking it zooms.
 - [ ] On a timer's page and in Settings, Tab into a number field (e.g. "Work") and press Shift+Tab: the focus goes back to the control before it and is not kept in the field.
 - [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.
 - [ ] macOS: minimise the window (Cmd+M), then choose Window › Sugo in the menu bar: the window comes out of the Dock, maximised (zoomed) again if it was.

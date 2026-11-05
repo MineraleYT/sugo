@@ -8,8 +8,8 @@ import io.github.mineraleyt.sugo
  * The bar at the top of the window: the logo and the name at the left, the three tabs (Focus,
  * Statistics, Settings) in the middle of the window, search and the desktop's window buttons at
  * the right. The window has no system title bar on Linux: this bar moves it (drag) and maximises
- * it (double click). On macOS the system's transparent title bar lies over it, with the traffic
- * lights at its left.
+ * it (double click). On macOS the system's transparent title bar lies over it, as tall as it,
+ * with the traffic lights at its left.
  */
 Rectangle {
     id: bar
@@ -37,7 +37,10 @@ Rectangle {
                                         : current === "stats" ? "stats"
                                         : current === "settings" || current === "preset" || current === "about" ? "settings" : ""
 
-    implicitHeight: Math.max(Theme.titleBarHeight, DesktopStyle.nativeChrome ? bar.SafeArea.margins.top : 0)
+    // On macOS the bar is as tall as the system's title bar (a compact toolbar's, MacApp.mm), so
+    // its middle is that of the traffic lights.
+    implicitHeight: DesktopStyle.nativeChrome && bar.SafeArea.margins.top > 0
+                    ? bar.SafeArea.margins.top : Theme.titleBarHeight
     color: Theme.background
 
     Rectangle {
