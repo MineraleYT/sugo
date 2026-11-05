@@ -954,12 +954,17 @@ QQC2.ApplicationWindow {
                     numberField.commit();
                     return numberField.value;
                 };
+                // "abc7" is typed over a value other than the minimum, so keeping it is told from
+                // falling to the minimum; the field ends at the value it had.
+                const workBefore = workField ? workField.value : NaN;
                 const typedShort = shortField ? typedValue(shortField, "-5") : NaN;
                 const typedWork = workField ? typedValue(workField, "-5") : NaN;
+                const restoredWork = workField ? typedValue(workField, String(workBefore)) : NaN;
                 const typedText = workField ? typedValue(workField, "abc7") : NaN;
-                if (typedShort !== shortField.from || typedWork !== workField.from || typedText !== workField.from) {
+                if (!workField || workBefore === workField.from || typedShort !== shortField.from
+                        || typedWork !== workField.from || restoredWork !== workBefore || typedText !== workBefore) {
                     fail(64, "A number typed with a sign, or text that is no number, was misread: \"-5\" gave " + typedShort + " and "
-                         + typedWork + ", \"abc7\" gave " + typedText);
+                         + typedWork + ", \"abc7\" over " + restoredWork + " gave " + typedText);
                     return true;
                 }
                 // The longest set: its preview lays out on the next tick.
