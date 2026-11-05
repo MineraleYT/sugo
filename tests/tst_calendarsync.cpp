@@ -1254,32 +1254,32 @@ private Q_SLOTS:
     {
         QTest::addColumn<int>("http");
         QTest::addColumn<QByteArray>("header");
-        QTest::addColumn<int>("atLeastMs");
-        QTest::addColumn<int>("atMostMs");
-        QTest::newRow("429, 15 minutes") << 429 << QByteArray("900") << 900 * 1000 << 900 * 1000;
-        QTest::newRow("503, 2 minutes") << 503 << QByteArray("120") << 120 * 1000 << 120 * 1000;
+        QTest::addColumn<int>("expectedMs");
+        QTest::newRow("429, 15 minutes") << 429 << QByteArray("900") << 900 * 1000;
+        QTest::newRow("503, 2 minutes") << 503 << QByteArray("120") << 120 * 1000;
         // At most an hour, as Sugo Sync: more would overflow the timer's milliseconds.
-        QTest::newRow("huge") << 429 << QByteArray("2500000") << 3600 * 1000 << 3600 * 1000;
+        QTest::newRow("huge") << 429 << QByteArray("2500000") << 3600 * 1000;
         // Shorter than the backoff, or unreadable: the backoff's own delay.
-        QTest::newRow("shorter") << 429 << QByteArray("0") << 1 << 1000;
-        QTest::newRow("http date") << 503 << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 1 << 1000;
+        QTest::newRow("shorter") << 429 << QByteArray("30") << 60 * 1000;
+        QTest::newRow("http date") << 503 << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 60 * 1000;
     }
     void retryAfterIsHonoured()
     {
         // A server asking for a longer pause (429, 503) is not asked again sooner.
         QFETCH(int, http);
         QFETCH(QByteArray, header);
-        QFETCH(int, atLeastMs);
-        QFETCH(int, atMostMs);
+        QFETCH(int, expectedMs);
+        // A backoff of a minute: no retry can go out while the test looks (40 ms could, on a slow
+        // machine), and Retry-After shorter than it is told apart from the backoff.
+        m_sync->setRetryDelaysForTesting({60 * 1000});
         configureCustom();
         m_server->defaultPut = http;
         m_server->putRetryAfter = header;
         m_sync->enqueueWorkSession(record());
-        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
         QTRY_VERIFY(m_sync->retryIntervalForTesting() > 0);
+        QCOMPARE(m_sync->status(), CalendarSync::Failed);
         QCOMPARE(m_server->count("PUT"), 1);
-        const int interval = m_sync->retryIntervalForTesting();
-        QVERIFY2(interval >= atLeastMs && interval <= atMostMs, QByteArray::number(interval).constData());
+        QCOMPARE(m_sync->retryIntervalForTesting(), expectedMs);
         QCOMPARE(m_sync->pendingCount(), 1);
     }
 
