@@ -454,7 +454,8 @@ private Q_SLOTS:
         QTRY_VERIFY(a.names().contains(QStringLiteral("From elsewhere")));
         QTest::qWait(20 * kUnitMs); // longer than the push delay
         QCOMPARE(puts(), before);
-        QCOMPARE(a.sync->state(), SyncController::Idle);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle); // (a periodic pull may be running)
+        QCOMPARE(puts(), before);
         QCOMPARE(a.repo->loadAll().size(), a.model->count()); // applied and stored
     }
 
@@ -613,8 +614,9 @@ private Q_SLOTS:
         QVERIFY(!remoteNames(a).contains(QStringLiteral("Edited later")));
         QTRY_COMPARE(a.sync->state(), SyncController::Idle);
         a.sync->syncNow();
-        QTest::qWait(20 * kUnitMs);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle); // the download is done
         QVERIFY(a.names().contains(QStringLiteral("Original")));
+        QVERIFY(!a.names().contains(QStringLiteral("Edited later")));
     }
 
     void twoDevices()
