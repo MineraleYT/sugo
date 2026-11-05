@@ -889,16 +889,15 @@ QQC2.Page {
                 visible: page.current > 0
                 onClicked: page.go(page.current - 1)
             }
-            // Next, and Start on the last step: always in the same place and of the same width, so
-            // that neither it nor Back moves from one step to the next.
+            // Next, and Done on the last step (whose composer starts the timer): always in the same
+            // place and of the same width, so that neither it nor Back moves from one step to the next.
             SButton {
                 id: primaryButton
                 objectName: "welcomePrimaryButton"
                 readonly property bool last: page.current === page.count - 1
-                Layout.preferredWidth: Math.max(nextSize.implicitWidth, startSize.implicitWidth)
+                Layout.preferredWidth: Math.max(nextSize.implicitWidth, doneSize.implicitWidth)
                 kind: "primary"
-                iconName: last ? "play" : ""
-                text: last ? startSize.text : nextSize.text
+                text: last ? doneSize.text : nextSize.text
                 onClicked: page.advance()
             }
             // Not shown (layouts skip hidden items): they only measure the two labels.
@@ -909,11 +908,10 @@ QQC2.Page {
                 text: i18n("Next")
             }
             SButton {
-                id: startSize
+                id: doneSize
                 visible: false
                 kind: "primary"
-                iconName: "play"
-                text: i18n("Start")
+                text: i18n("Done")
             }
         }
     }
