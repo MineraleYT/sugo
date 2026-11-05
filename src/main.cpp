@@ -39,6 +39,7 @@
 #include "SilenceController.h"
 #ifdef Q_OS_MACOS
 #include "DockController.h"
+#include "UpdateInstaller.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
 #include "ShortcutsFocusInhibitor.h"
@@ -198,6 +199,11 @@ int main(int argc, char *argv[])
     parser.addOption(backgroundOption);
     parser.process(app);
     const bool background = parser.isSet(backgroundOption);
+
+#ifdef Q_OS_MACOS
+    // An update cut off halfway left this copy at "Sugo.app.old": it is put back once Sugo quits.
+    MacBundleInstaller::restoreInterruptedUpdate(QCoreApplication::applicationDirPath(), QCoreApplication::applicationPid());
+#endif
 
     // Closing the window must not end the program: the tray (or the close handler in QML) decides.
     app.setQuitOnLastWindowClosed(false);

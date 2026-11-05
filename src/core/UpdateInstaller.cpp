@@ -3,6 +3,7 @@
 
 #include "Localization.h"
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -337,6 +338,11 @@ void MacBundleInstaller::cancel()
     removeLeftovers();
 }
 
+bool MacBundleInstaller::rename(const QString &from, const QString &to) const
+{
+    return m_tools.rename ? m_tools.rename(from, to) : QDir().rename(from, to);
+}
+
 bool MacBundleInstaller::finish(bool launch, qint64 pid)
 {
     const QString fresh = newBundlePath();
@@ -346,23 +352,74 @@ bool MacBundleInstaller::finish(bool launch, qint64 pid)
     // The running bundle steps aside, the new one takes its place; if that fails, the old one
     // comes back. A running program keeps its files open whatever their bundle is called.
     const QString backup = m_bundle + QStringLiteral(".old");
+    if (!QFileInfo(m_bundle).isDir()) {
+        // Moved or removed while running: a "<bundle>.old" may then be the only copy of Sugo.
+        qWarning().noquote() << "Cannot install the update:" << m_bundle << "is not there any more; the update stays at" << fresh;
+        return false;
+    }
     if (QFileInfo::exists(backup) && !QDir(backup).removeRecursively()) {
+        qWarning().noquote() << "Cannot install the update: cannot remove" << backup;
         return false;
     }
-    QDir folder;
-    if (!folder.rename(m_bundle, backup)) {
+    if (!rename(m_bundle, backup)) {
+        qWarning().noquote() << "Cannot install the update: cannot move" << m_bundle << "to" << backup;
         return false;
     }
-    if (!folder.rename(fresh, m_bundle)) {
-        folder.rename(backup, m_bundle);
+    const qint64 waitFor = m_tools.waitPid > 0 ? m_tools.waitPid : pid;
+    if (!rename(fresh, m_bundle)) {
+        if (rename(backup, m_bundle)) {
+            qWarning().noquote() << "Cannot install the update: cannot move" << fresh << "to" << m_bundle
+                                 << "; the installed version was kept";
+        } else {
+            // No Sugo.app any more: say where it is, it is the only copy left; and try once more
+            // when this process has ended.
+            qCritical().noquote() << "Cannot install the update, nor put the installed version back: Sugo is now"
+                                  << backup << "(rename it to" << m_bundle << "), the update" << fresh;
+            restoreWhenEnded(backup, m_bundle, waitFor);
+        }
         return false;
     }
     // The old bundle goes, and the new one starts, once this process has ended (a second Sugo
     // would hand itself over to this one).
-    const qint64 waitFor = m_tools.waitPid > 0 ? m_tools.waitPid : pid;
     const QString script = launch ? QStringLiteral("while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; rm -rf \"$2\"; exec \"$3\" -n \"$0\"")
                                   : QStringLiteral("while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; rm -rf \"$2\"");
     const bool started = QProcess::startDetached(QStringLiteral("/bin/sh"),
                                                  {QStringLiteral("-c"), script, m_bundle, QString::number(waitFor), backup, m_tools.open});
     return launch && started;
+}
+
+bool MacBundleInstaller::restoreInterruptedUpdate(const QString &executableDir, qint64 pid)
+{
+    if (executableDir.isEmpty()) {
+        return false;
+    }
+    const QDir macos(QDir::cleanPath(executableDir));
+    if (macos.dirName() != QLatin1String("MacOS")) {
+        return false;
+    }
+    const QString backup = QDir::cleanPath(macos.absolutePath() + QStringLiteral("/../.."));
+    if (!backup.endsWith(QLatin1String(".app.old"))
+        || bundleIdentifier(backup + QStringLiteral("/Contents/Info.plist")) != QLatin1String(kBundleIdentifier)) {
+        return false;
+    }
+    const QString bundle = backup.chopped(4);
+    const QFileInfo target(bundle);
+    if (target.exists() || target.isSymLink()) {
+        // The swap went through (finish() removes the backup when the old version has quit), or
+        // something else is there: either way not ours to replace.
+        return false;
+    }
+    qWarning().noquote() << QStringLiteral("Sugo runs from %1, left there by an update that did not finish; it goes back to %2 when Sugo quits")
+                                .arg(backup, bundle);
+    return restoreWhenEnded(backup, bundle, pid);
+}
+
+bool MacBundleInstaller::restoreWhenEnded(const QString &backup, const QString &bundle, qint64 pid)
+{
+    // Checked again then: the bundle may have come back meanwhile, and mv would put the backup in it.
+    return QProcess::startDetached(QStringLiteral("/bin/sh"),
+                                   {QStringLiteral("-c"),
+                                    QStringLiteral("while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; "
+                                                   "[ -e \"$2\" ] || [ -L \"$2\" ] || mv \"$0\" \"$2\""),
+                                    backup, QString::number(pid), bundle});
 }
