@@ -1820,6 +1820,38 @@ QQC2.Page {
                 }
             }
 
+            // Linked: whether the timers are up to date, and Sync now, under the title of the tab.
+            RowLayout {
+                visible: page.category === "sync" && page.syncLinked
+                Layout.fillWidth: true
+                spacing: Theme.spaceMd
+                StatusLine {
+                    objectName: "syncStatusText"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: implicitWidth
+                    labels: [i18n("Syncing"), i18n("Offline"), i18n("Not synced"), i18n("Up to date")]
+                    text: page.syncSyncing ? i18n("Syncing")
+                        : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
+                        : i18n("Up to date")
+                    iconName: page.syncSyncing ? "refresh" : page.syncError ? "warning" : "check"
+                    iconColor: page.syncError ? (page.syncErrorKind === SyncController.Network || page.syncErrorKind === SyncController.RateLimited
+                                                 ? Theme.warning : Theme.danger)
+                             : Theme.muted
+                    spinning: page.syncSyncing
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                SButton {
+                    objectName: "syncNowButton"
+                    labels: [i18n("Sync now"), i18n("Syncing…")]
+                    text: page.syncSyncing ? i18n("Syncing…") : i18n("Sync now")
+                    iconName: "refresh"
+                    enabled: !page.syncSyncing
+                    onClicked: SyncController.syncNow()
+                }
+            }
+
             // Sugo Sync: signing in, approval by another device, then the status of the timers.
             SettingsCard {
                 id: syncCard
@@ -1831,6 +1863,7 @@ QQC2.Page {
                 // --- Signed out -------------------------------------------------------------
                 SettingRow {
                     first: true
+                    emphasized: true
                     visible: page.syncOff
                     title: i18n("Your timers on all your computers")
                     description: i18n("Sugo Sync keeps your timers the same on every computer you sign in on. They are encrypted on this computer, so only your devices can read them. The free plan links 2 devices.")
@@ -1987,26 +2020,6 @@ QQC2.Page {
                                : i18n("Not synced yet")
                     descriptionVariants: [i18n("Last synced %1", page.syncLastSync), i18n("Not synced yet")]
                                          .concat(SyncController ? SyncController.errorTexts : [])
-                    StatusPill {
-                        objectName: "syncStatusPill"
-                        labels: [i18n("Syncing"), i18n("Offline"), i18n("Not synced"), i18n("Up to date")]
-                        text: page.syncSyncing ? i18n("Syncing")
-                            : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
-                            : i18n("Up to date")
-                        dotColor: page.syncSyncing ? Theme.brand
-                                : page.syncError ? (page.syncErrorKind === SyncController.Network || page.syncErrorKind === SyncController.RateLimited
-                                                    ? Theme.warning : Theme.danger)
-                                : Theme.positive
-                        pulsing: page.syncSyncing
-                    }
-                    SButton {
-                        objectName: "syncNowButton"
-                        labels: [i18n("Sync now"), i18n("Syncing…")]
-                        text: page.syncSyncing ? i18n("Syncing…") : i18n("Sync now")
-                        iconName: "refresh"
-                        enabled: !page.syncSyncing
-                        onClicked: SyncController.syncNow()
-                    }
                 }
             }
 
@@ -2026,12 +2039,9 @@ QQC2.Page {
                         required property int index
                         first: index === 0
                         title: modelData.name
-                        description: page.syncDeviceDetails(modelData)
-                        StatusPill {
-                            visible: deviceRow.modelData.current
-                            text: i18n("This device")
-                            dotColor: Theme.positive
-                        }
+                        description: modelData.current
+                                     ? i18nc("this device · platform · last seen", "%1 · %2", i18n("This device"), page.syncDeviceDetails(modelData))
+                                     : page.syncDeviceDetails(modelData)
                         // A device waiting for this one: the approval again, also after "Not Now"
                         // (one that has never shown up yet has no code to compare).
                         SButton {
@@ -2111,17 +2121,19 @@ QQC2.Page {
                     first: true
                     title: i18n("Session history and statistics")
                     description: i18n("Your finished sessions and their statistics, the same on every device.")
-                    StatusPill {
+                    Text {
                         text: i18n("Coming soon")
-                        dotColor: Theme.subtle
+                        color: Theme.subtle
+                        font.pixelSize: Theme.fontCaption
                     }
                 }
                 SettingRow {
                     title: i18n("Task notes")
                     description: i18n("The notes you write after a work session, on every device.")
-                    StatusPill {
+                    Text {
                         text: i18n("Coming soon")
-                        dotColor: Theme.subtle
+                        color: Theme.subtle
+                        font.pixelSize: Theme.fontCaption
                     }
                 }
             }
