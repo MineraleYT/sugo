@@ -379,7 +379,13 @@
     "welcome/3": {
       "common": [
         "button: Back",
-        "button: Start"
+        "button: Done",
+        "button: Pomodoro",
+        "button: Silence notifications while working",
+        "button: Skip",
+        "button: Start",
+        "button: Start automatically",
+        "button: Stop"
       ]
     },
     "search": {

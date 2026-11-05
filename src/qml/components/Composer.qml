@@ -38,6 +38,9 @@ Rectangle {
     readonly property bool silenceWhileWorking: PresetModel.option(PresetModel.currentUuid, "silenceWhileWorking") === true
     readonly property var autoStartLabels: [i18n("Manual"), i18n("Breaks only"), i18n("All phases")]
 
+    /// Start, Pause or Resume was pressed, after the timer was told (the welcome tour ends there).
+    signal startPressed()
+
     implicitWidth: Theme.composerWidth
     implicitHeight: controls.implicitHeight + Theme.composerPadding * 2
     radius: Theme.radiusXl
@@ -196,7 +199,10 @@ Rectangle {
             QQC2.ToolTip.visible: hovered
             QQC2.ToolTip.text: text
             QQC2.ToolTip.delay: Theme.toolTipDelay
-            onClicked: TimerEngine.toggle()
+            onClicked: {
+                TimerEngine.toggle();
+                composer.startPressed();
+            }
 
             background: Rectangle {
                 radius: width / 2

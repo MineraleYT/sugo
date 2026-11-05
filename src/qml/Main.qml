@@ -319,6 +319,8 @@ QQC2.ApplicationWindow {
         property bool paletteRan: false
         property real wideWidth: 0
         property real welcomePanelY: 0
+        // Ticks spent waiting for the welcome tour's last step to come in.
+        property int welcomeWaits: 0
         // The stage at which the timer page's track check began (0: not yet).
         property int trackCheckStage: 0
         property bool longSetChecked: false
@@ -544,7 +546,8 @@ QQC2.ApplicationWindow {
         }
 
         // Welcome: the tray icon's colours, the Focus row, the step dots; then a message on the
-        // setup step must not move the step (stage 1 → 2, a tick apart so the layout settles).
+        // setup step must not move the step (stage 1 → 2, a tick apart so the layout settles); then
+        // the composer of the last step (stage 3 on, checkWelcomeComposer).
         function checkWelcome(page: var): bool {
             if (stage === 1) {
                 ++stage;
@@ -565,8 +568,15 @@ QQC2.ApplicationWindow {
                 page.autostartError = "";
                 if (Math.abs(y - welcomePanelY) > 0.5) {
                     fail(47, "A message on the welcome tour's setup step moved the step: y " + welcomePanelY + " → " + y);
+                    return true;
                 }
-                return true;
+                // On to the last step for its composer.
+                page.current = page.count - 1;
+                ++stage;
+                return false;
+            }
+            if (stage >= 3) {
+                return checkWelcomeComposer(page);
             }
             // The tray icon's picture uses the colours the real icon is painted with.
             const dial = findItem(page, item => item.objectName === "trayDialPreview");
@@ -604,6 +614,43 @@ QQC2.ApplicationWindow {
             page.current = 2;
             stage = 1;
             return false;
+        }
+
+        // Welcome, last step: the focus page's composer is there, its timer menu opens 4 px above
+        // its button and inside the window, and its Start starts the timer and ends the tour.
+        function checkWelcomeComposer(page: var): bool {
+            const composer = findItem(page, item => item.objectName === "composer");
+            if (stage === 3) {
+                // Until the step has come in.
+                if (!composer || !composer.visible || composer.opacity < 1) {
+                    if (++welcomeWaits > 30) {
+                        fail(65, "The welcome tour's last step shows no composer");
+                        return true;
+                    }
+                    return false;
+                }
+                composer.timerButton.clicked();
+                ++stage;
+                return false; // laid out on the next tick
+            }
+            const menu = composer.timerMenu;
+            const top = composer.timerButton.mapToItem(null, menu.x, menu.y).y;
+            if (!menu.visible || Math.abs(menu.y + menu.height + Theme.menuOffset) > 1 || Math.abs(menu.x) > 1
+                    || top < Theme.menuEdgeMargin - 1) {
+                fail(65, "The timer menu of the welcome tour is not above its button, 4 px away, left-aligned and in the window: x "
+                     + menu.x + ", bottom " + (menu.y + menu.height) + ", top in the window " + top);
+                return true;
+            }
+            menu.close();
+            AppSettings.firstRunCompleted = false;
+            findItem(composer, item => item.objectName === "composerStart").clicked();
+            const started = TimerEngine.active;
+            TimerEngine.stop();
+            if (!started || !AppSettings.firstRunCompleted || root.currentDestination !== "timer") {
+                fail(65, "Start in the welcome tour's composer did not start the timer and end the tour: running " + started
+                     + ", first run completed " + AppSettings.firstRunCompleted + ", page " + root.currentDestination);
+            }
+            return true;
         }
 
         // Timer page: the picker's text, Stop/Skip confirmation, the note of a hidden window.
