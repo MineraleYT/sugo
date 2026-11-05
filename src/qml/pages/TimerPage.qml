@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Shapes
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
@@ -9,8 +8,6 @@ import io.github.mineraleyt.sugo
 QQC2.Page {
     id: page
 
-    /// The top bar shows "Focus / <timer>".
-    readonly property string section: i18n("Focus")
     title: PresetModel.currentName
     background: null
 
@@ -98,7 +95,7 @@ QQC2.Page {
 
     readonly property color phaseColor: isIdle ? Theme.muted
                                        : TimerEngine.paused ? Theme.warning
-                                       : isWorkPhase ? Theme.brand : Theme.breakColor
+                                       : isWorkPhase ? Theme.accent : Theme.breakAccent
 
     function pad(n: int): string {
         return String(n).padStart(2, "0");
@@ -108,107 +105,57 @@ QQC2.Page {
                                                     : pad(Math.floor(TimerEngine.remainingSeconds / 60))
     readonly property string secondsText: pad(TimerEngine.remainingSeconds % 60)
 
-    readonly property real clockSize: Math.max(Theme.space4xl * 1.3, Math.min(page.width * 0.17, page.height * 0.2, Theme.space4xl * 2.6))
+    /// A narrow window: the smaller clock.
+    readonly property bool compact: page.width < Theme.compactBreakpoint
+    // A short window still has room for the clock, the track and the controls.
+    readonly property real clockSize: Math.min(compact ? Theme.clockSizeCompact : Theme.clockSize, page.height / 4)
     readonly property real trackWidth: Math.min(page.width - Theme.space3xl * 2, Theme.contentMaxWidth * 0.62)
-
-    // A soft glow of the phase colour behind the clock, only while time is running: a circle
-    // whose colour fades to nothing at its edge, stretched into a wide ellipse.
-    Shape {
-        id: glow
-        readonly property color tint: page.isWorkPhase ? Theme.brand : Theme.breakColor
-        readonly property real diameter: page.clockSize * 4.4
-        anchors.centerIn: clockColumn
-        anchors.verticalCenterOffset: -page.clockSize * 0.3
-        width: diameter
-        height: diameter
-        transform: Scale {
-            origin.x: glow.width / 2
-            origin.y: glow.height / 2
-            xScale: 1.5
-            yScale: 0.9
-        }
-        opacity: page.running ? (Theme.dark ? 1 : 0.6) : 0
-        visible: opacity > 0
-        preferredRendererType: Shape.CurveRenderer
-        Behavior on opacity { NumberAnimation { duration: Theme.durationLong * 3; easing.type: Easing.InOutQuad } }
-
-        ShapePath {
-            strokeColor: "transparent"
-            fillGradient: RadialGradient {
-                centerX: glow.diameter / 2
-                centerY: glow.diameter / 2
-                centerRadius: glow.diameter / 2
-                focalX: centerX
-                focalY: centerY
-                GradientStop { position: 0; color: Theme.alpha(glow.tint, 0.16) }
-                GradientStop { position: 0.4; color: Theme.alpha(glow.tint, 0.08) }
-                GradientStop { position: 0.75; color: Theme.alpha(glow.tint, 0.02) }
-                GradientStop { position: 1; color: Theme.alpha(glow.tint, 0) }
-            }
-            PathAngleArc {
-                centerX: glow.diameter / 2
-                centerY: glow.diameter / 2
-                radiusX: glow.diameter / 2
-                radiusY: glow.diameter / 2
-                startAngle: 0
-                sweepAngle: 360
-            }
-        }
-    }
 
     ColumnLayout {
         id: clockColumn
         anchors.centerIn: parent
         anchors.verticalCenterOffset: -Theme.spaceXl
         width: Math.min(implicitWidth, page.width - Theme.space2xl * 2)
-        spacing: Theme.space2xl
+        spacing: Theme.spaceXl
 
-        // The phase, in its colour.
-        Rectangle {
+        // The phase in its colour, with a dot that pulses while the time runs.
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            implicitWidth: phaseRow.implicitWidth + Theme.spaceLg * 2
-            implicitHeight: phaseRow.implicitHeight + Theme.spaceSm * 2
-            radius: height / 2
-            color: Theme.alpha(page.phaseColor, page.isIdle ? 0.08 : 0.1)
-            border.width: Theme.hairline
-            border.color: Theme.alpha(page.phaseColor, page.isIdle ? 0.25 : 0.3)
-            Behavior on color { ColorAnimation { duration: Theme.durationLong } }
+            // As wide as its text, centred (a layout in a layout would fill the column).
+            Layout.fillWidth: false
+            Layout.maximumWidth: page.trackWidth
+            spacing: Theme.spaceSm + Theme.hairline
             Accessible.role: Accessible.StaticText
             Accessible.name: page.phaseText
 
-            RowLayout {
-                id: phaseRow
-                anchors.centerIn: parent
-                spacing: Theme.spaceMd
-                Rectangle {
-                    implicitWidth: Theme.spaceSm
-                    implicitHeight: Theme.spaceSm
-                    radius: width / 2
-                    color: page.phaseColor
-                    SequentialAnimation on opacity {
-                        running: page.running
-                        loops: Animation.Infinite
-                        alwaysRunToEnd: true
-                        NumberAnimation { to: 0.3; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: 1; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
-                    }
+            Rectangle {
+                visible: !page.isIdle
+                implicitWidth: Theme.phaseDot
+                implicitHeight: Theme.phaseDot
+                radius: width / 2
+                color: page.phaseColor
+                SequentialAnimation on opacity {
+                    running: page.running
+                    loops: Animation.Infinite
+                    alwaysRunToEnd: true
+                    NumberAnimation { to: 0.3; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
                 }
-                Text {
-                    // A long category is cut: the pill is never wider than the track below.
-                    Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.spaceLg * 2 - Theme.spaceSm - phaseRow.spacing)
-                    elide: Text.ElideRight
-                    text: page.phaseText
-                    color: page.isIdle ? Theme.muted : Qt.lighter(page.phaseColor, Theme.dark ? 1.3 : 0.8)
-                    font.pixelSize: Theme.fontBody
-                    font.weight: Font.Medium
-                }
+            }
+            Text {
+                // A long category is cut: the line is never wider than the track below.
+                Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.phaseDot - parent.spacing)
+                elide: Text.ElideRight
+                text: page.phaseText
+                color: page.phaseColor
+                font.pixelSize: Theme.fontBody
+                font.weight: Font.Medium
             }
         }
 
         // The time left: minutes, a quiet colon, seconds.
         Row {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: -Theme.spaceMd
             Accessible.role: Accessible.StaticText
             // In words, unit by unit ("1 hour 5 minutes 3 seconds left"), not the clock's "1:05".
             Accessible.name: {
@@ -222,7 +169,7 @@ QQC2.Page {
                 parts.push(i18np("%1 second", "%1 seconds", total % 60));
                 return i18nc("time left, e.g. 5 minutes 3 seconds", "%1 left", parts.join(" "));
             }
-            opacity: TimerEngine.paused ? 0.55 : 1
+            opacity: TimerEngine.paused ? 0.5 : 1
             Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
 
             Text {
@@ -230,23 +177,23 @@ QQC2.Page {
                 color: Theme.foreground
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                font.letterSpacing: -page.clockSize * 0.04
+                font.letterSpacing: -page.clockSize * 0.045
                 font.features: { "tnum": 1 }
             }
             Text {
                 text: ":"
-                color: Theme.alpha(Theme.muted, 0.6)
+                color: Theme.subtle
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                leftPadding: page.clockSize * 0.02
-                rightPadding: page.clockSize * 0.04
+                leftPadding: page.clockSize * 0.03
+                rightPadding: page.clockSize * 0.03
             }
             Text {
                 text: page.secondsText
                 color: Theme.foreground
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                font.letterSpacing: -page.clockSize * 0.04
+                font.letterSpacing: -page.clockSize * 0.045
                 font.features: { "tnum": 1 }
             }
         }
