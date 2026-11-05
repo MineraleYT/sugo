@@ -240,6 +240,14 @@ public:
     Q_INVOKABLE void playSoundPreview(const QString &soundName, int volume = -1);
     /// The fade level (0..1) of an alert sound at a position; the duration is 0 while unknown.
     static double alertFadeGain(qint64 positionMs, qint64 durationMs);
+    /// How long an alert's Qt Multimedia player may live: a little more than the sound
+    /// (kAlertPlayerGraceMs), or kAlertPlayerUnknownDurationMs while the duration is unknown (0).
+    /// A backend that never reports the end nor an error then does not keep it until quit.
+    static qint64 alertPlayerLifetimeMs(qint64 durationMs);
+    static constexpr qint64 kAlertPlayerGraceMs = 2000;
+    static constexpr qint64 kAlertPlayerUnknownDurationMs = 60 * 1000;
+    /// Tests: every alert player lives at most `ms` (0: alertPlayerLifetimeMs() again).
+    static void setAlertPlayerLifetimeForTesting(int ms);
     /// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume: where Qt
     /// Multimedia cannot. A player that fails to start or exits with an error right away gives way
     /// to the next for this sound; it is not tried again in this session if it failed to start, or
