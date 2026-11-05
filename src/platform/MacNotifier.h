@@ -23,7 +23,9 @@ class QSystemTrayIcon;
  * The permission is asked for once, at construction. Before each notification the current
  * setting is read again (the user may change it in System Settings at any time): while
  * notifications are not allowed, or when the Notification Center refuses one, they go to
- * `fallback`, a message from the menu bar icon.
+ * `fallback`, a message from the menu bar icon. While the question is unanswered, notifications
+ * wait for its answer (asked again only if no question is outstanding), a newer one of a
+ * context replacing the earlier one (MacPendingNotifications).
  *
  * Only for an application bundle: UNUserNotificationCenter needs a bundle identifier (see
  * isSupported()).

@@ -3,9 +3,7 @@
 
 #include "MacNotificationMapping.h"
 
-#include <QHash>
 #include <QLoggingCategory>
-#include <QPointer>
 #include <QSet>
 
 #import <Foundation/Foundation.h>
@@ -37,14 +35,12 @@ struct MacNotifier::Private {
     NSMutableSet<UNNotificationCategory *> *categories = nil;
     QSet<QString> categoryIds;
 
-    /// Notifications waiting for the permission to be read, by ticket.
-    struct Pending {
-        QPointer<QObject> context;
-        Notification notification;
-    };
-    QHash<quint64, Pending> pending;
-    quint64 nextTicket = 1;
+    /// Notifications waiting for the permission to be read or answered.
+    MacPendingNotifications pending;
 
+    /// Asks the system's question (pending.beginQuestion() said to): its answer delivers every
+    /// notification that waited for it.
+    void askForPermission();
     void deliver(quint64 ticket, bool allowed);
     void post(QObject *context, const Notification &notification);
 };
@@ -176,17 +172,35 @@ MacNotifier::MacNotifier(std::unique_ptr<Notifier> fallback, QObject *parent)
             }
         });
     }];
+    d->pending.beginQuestion();
+    d->askForPermission();
+}
+
+void MacNotifier::Private::askForPermission()
+{
+    const std::shared_ptr<Shared> sharedState = shared;
     // No sound: Sugo plays its own. The first call shows the system's question; later ones
     // return what the user chose.
-    [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert
-                          completionHandler:^(BOOL granted, NSError *error) {
-                              if (error) {
-                                  qCWarning(lcMacNotifier) << "Cannot ask for notifications:"
-                                                           << QString::fromNSString(error.localizedDescription);
-                              } else if (!granted) {
-                                  qCInfo(lcMacNotifier) << "Notifications are not allowed; using the menu bar icon";
+    [[UNUserNotificationCenter currentNotificationCenter]
+        requestAuthorizationWithOptions:UNAuthorizationOptionAlert
+                      completionHandler:^(BOOL granted, NSError *error) {
+                          if (error) {
+                              qCWarning(lcMacNotifier) << "Cannot ask for notifications:"
+                                                       << QString::fromNSString(error.localizedDescription);
+                          } else if (!granted) {
+                              qCInfo(lcMacNotifier) << "Notifications are not allowed; using the menu bar icon";
+                          }
+                          dispatch_async(dispatch_get_main_queue(), ^{
+                              MacNotifier::Private *notifier = sharedState->notifier;
+                              if (!notifier) {
+                                  return;
                               }
-                          }];
+                              const QList<quint64> answered = notifier->pending.endQuestion();
+                              for (const quint64 ticket : answered) {
+                                  notifier->deliver(ticket, granted);
+                              }
+                          });
+                      }];
 }
 
 MacNotifier::~MacNotifier()
@@ -215,8 +229,8 @@ MacNotifier::~MacNotifier()
 
 void MacNotifier::notify(QObject *context, const Notification &notification)
 {
-    const quint64 ticket = d->nextTicket++;
-    d->pending.insert(ticket, {context, notification});
+    // Replaces the earlier ones of `context` still waiting here, as it would on screen.
+    const quint64 ticket = d->pending.add(context, notification);
     const std::shared_ptr<Shared> shared = d->shared;
     // Read every time: the user may allow or forbid notifications in System Settings at any time.
     [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
@@ -229,16 +243,12 @@ void MacNotifier::notify(QObject *context, const Notification &notification)
             if (status == UNAuthorizationStatusAuthorized || status == UNAuthorizationStatusProvisional) {
                 notifier->deliver(ticket, true);
             } else if (status == UNAuthorizationStatusNotDetermined) {
-                // The question at start-up has not been answered yet: ask (again) and wait.
-                [[UNUserNotificationCenter currentNotificationCenter]
-                    requestAuthorizationWithOptions:UNAuthorizationOptionAlert
-                                  completionHandler:^(BOOL granted, NSError *) {
-                                      dispatch_async(dispatch_get_main_queue(), ^{
-                                          if (shared->notifier) {
-                                              shared->notifier->deliver(ticket, granted);
-                                          }
-                                      });
-                                  }];
+                // The question has not been answered yet: wait for the answer, asking again only
+                // if no question is outstanding (the one at start-up may have been dismissed).
+                notifier->pending.waitForAnswer(ticket);
+                if (notifier->pending.beginQuestion()) {
+                    notifier->askForPermission();
+                }
             } else {
                 notifier->deliver(ticket, false);
             }
@@ -248,14 +258,14 @@ void MacNotifier::notify(QObject *context, const Notification &notification)
 
 void MacNotifier::Private::deliver(quint64 ticket, bool allowed)
 {
-    const Pending item = pending.take(ticket);
-    if (!item.context) {
-        return;
+    const std::optional<MacPendingNotifications::Item> item = pending.take(ticket);
+    if (!item) {
+        return; // replaced by a newer one of its context, or its context is gone
     }
     if (allowed) {
-        post(item.context, item.notification);
+        post(item->context, item->notification);
     } else if (fallback) {
-        fallback->notify(item.context, item.notification);
+        fallback->notify(item->context, item->notification);
     }
 }
 

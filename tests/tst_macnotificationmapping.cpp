@@ -206,6 +206,90 @@ private Q_SLOTS:
         QVERIFY(!registry.contains(id));
         QVERIFY(!registry.takeUnshown(QStringLiteral("someone-else")).has_value());
     }
+
+    void aWaitingNotificationIsReplacedByTheNextOfItsContext()
+    {
+        MacPendingNotifications pending;
+        QObject phases;
+        QObject other;
+        Notifier::Notification first = withActions({}, false);
+        first.text = QStringLiteral("first");
+        Notifier::Notification second = withActions({}, false);
+        second.text = QStringLiteral("second");
+
+        const quint64 a = pending.add(&phases, first);
+        const quint64 b = pending.add(&other, first);
+        const quint64 c = pending.add(&phases, second);
+        QVERIFY(a != c);
+        QCOMPARE(pending.size(), 2);
+
+        // The replaced one is gone: it would have been replaced on screen anyway.
+        QVERIFY(!pending.take(a).has_value());
+        const std::optional<MacPendingNotifications::Item> latest = pending.take(c);
+        QVERIFY(latest.has_value());
+        QCOMPARE(latest->context, &phases);
+        QCOMPARE(latest->notification.text, QStringLiteral("second"));
+        QVERIFY(!pending.take(c).has_value()); // taken once
+        QVERIFY(pending.take(b).has_value());
+        QCOMPARE(pending.size(), 0);
+    }
+
+    void aWaitingNotificationWithoutItsContextIsDropped()
+    {
+        MacPendingNotifications pending;
+        auto *context = new QObject;
+        const quint64 ticket = pending.add(context, withActions({}, false));
+        delete context;
+        QVERIFY(!pending.take(ticket).has_value());
+        QCOMPARE(pending.size(), 0);
+
+        // And it does not linger until then: the next notification clears it out.
+        auto *gone = new QObject;
+        pending.add(gone, withActions({}, false));
+        delete gone;
+        QObject alive;
+        pending.add(&alive, withActions({}, false));
+        QCOMPARE(pending.size(), 1);
+    }
+
+    void thePermissionIsAskedForOnceWhileUnanswered()
+    {
+        MacPendingNotifications pending;
+        QObject phases;
+        QObject sync;
+
+        // The question at start-up is outstanding: notifications only wait for its answer.
+        QVERIFY(pending.beginQuestion());
+        const quint64 work = pending.add(&phases, withActions({}, false));
+        pending.waitForAnswer(work);
+        QVERIFY(!pending.beginQuestion());
+        const quint64 approve = pending.add(&sync, withActions({}, false));
+        pending.waitForAnswer(approve);
+        QVERIFY(!pending.beginQuestion());
+        const quint64 breakOver = pending.add(&phases, withActions({}, false));
+        pending.waitForAnswer(breakOver);
+        QVERIFY(!pending.beginQuestion());
+
+        // Answered: every notification that waited, oldest first; the replaced one is already gone.
+        const QList<quint64> answered = pending.endQuestion();
+        QCOMPARE(answered, (QList<quint64>{approve, breakOver}));
+        QVERIFY(pending.take(approve).has_value());
+        QVERIFY(pending.take(breakOver).has_value());
+        QVERIFY(pending.endQuestion().isEmpty());
+
+        // A later notification that still finds the question unanswered asks again.
+        QVERIFY(pending.beginQuestion());
+    }
+
+    void anAnswerWithoutAQuestionHandsOverNothing()
+    {
+        MacPendingNotifications pending;
+        QObject context;
+        const quint64 ticket = pending.add(&context, withActions({}, false));
+        QVERIFY(pending.endQuestion().isEmpty());
+        // Not waiting for an answer: still there for whoever reads the setting.
+        QVERIFY(pending.take(ticket).has_value());
+    }
 };
 
 QTEST_MAIN(MacNotificationMappingTest)

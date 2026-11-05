@@ -92,3 +92,51 @@ private:
     QHash<QString, Entry> m_entries;
     QStringList m_order; ///< Request identifiers, oldest first.
 };
+
+/**
+ * The notifications waiting for MacNotifier to learn whether it may show them (the setting is
+ * read before each one, and asked for while the user has not answered the question yet), by
+ * ticket.
+ *
+ * A notification replaces the earlier waiting ones of its context, as it would replace them on
+ * screen, so a question left unanswered for a while does not let them pile up and arrive all at
+ * once when it is answered. While a question is outstanding, notifications that find the
+ * permission undecided wait for its answer instead of asking again.
+ */
+class MacPendingNotifications
+{
+public:
+    struct Item {
+        QObject *context = nullptr;
+        Notifier::Notification notification;
+    };
+
+    /// Keeps `notification` until take(), dropping the earlier ones of `context` (and those whose
+    /// context no longer exists). Returns its ticket.
+    quint64 add(QObject *context, const Notifier::Notification &notification);
+    /// Forgets the ticket and returns its notification, unless it was replaced, already taken,
+    /// or its context no longer exists.
+    std::optional<Item> take(quint64 ticket);
+
+    /// The question for the permission is to be asked: true if none is outstanding (and it
+    /// now is), false if the one already asked has not been answered yet.
+    bool beginQuestion();
+    /// `ticket` waits for the answer to the outstanding question.
+    void waitForAnswer(quint64 ticket);
+    /// The question was answered: no longer outstanding. Returns the tickets that waited for it
+    /// and are still there, oldest first.
+    QList<quint64> endQuestion();
+
+    int size() const { return int(m_entries.size()); }
+
+private:
+    struct Entry {
+        QPointer<QObject> context;
+        Notifier::Notification notification;
+    };
+
+    QHash<quint64, Entry> m_entries;
+    QList<quint64> m_waiting; ///< For the answer, oldest first.
+    quint64 m_nextTicket = 1;
+    bool m_asking = false;
+};
