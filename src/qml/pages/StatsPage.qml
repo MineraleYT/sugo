@@ -4,8 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// How much was done: the period's total and how it compares, one chart, where the time went,
-/// and the streak.
+/// How much was done: the period's figures (the total and how it compares, sessions, breaks,
+/// the streak), one chart, where the time went, and the task notes.
 QQC2.Page {
     id: page
 
@@ -532,79 +532,82 @@ QQC2.Page {
                     }
                 }
 
-                // Days in a row.
+                // The task notes of the period, newest first: when, and what.
                 Panel {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.preferredWidth: 5
                     headerHeight: Theme.controlHeightSm
-                    title: i18n("Streak")
+                    title: i18n("Notes")
 
-                    RowLayout {
-                        spacing: Theme.spaceSm
-                        Text {
-                            text: StatsModel.currentStreak
-                            color: Theme.foreground
-                            font.pixelSize: Theme.fontDisplay + Theme.spaceSm
-                            font.weight: Font.Medium
+                    Item {
+                        id: notesList
+                        objectName: "notesList"
+                        Layout.fillWidth: true
+                        implicitHeight: Theme.statsListRows * Theme.statsListRowHeight
+                        readonly property var notes: StatsModel.notes.slice(0, Theme.statsListRows)
+                        // The column of times and days is as wide as its longest label.
+                        readonly property real labelWidth: Math.ceil(labelMetrics.advanceWidth)
+
+                        TextMetrics {
+                            id: labelMetrics
+                            font.pixelSize: Theme.fontBody
+                            font.features: { "tnum": 1 }
+                            text: notesList.notes.reduce((longest, n) => n.label.length > longest.length ? n.label : longest, "")
                         }
+
                         Text {
-                            Layout.alignment: Qt.AlignBaseline
-                            text: i18np("day", "days", StatsModel.currentStreak)
+                            visible: notesList.notes.length === 0
+                            height: Theme.statsListRowHeight
+                            verticalAlignment: Text.AlignVCenter
+                            text: i18n("No notes in this period.")
                             color: Theme.muted
                             font.pixelSize: Theme.fontBody
                         }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                        Text {
-                            Layout.alignment: Qt.AlignBaseline
-                            text: i18n("Best %1", StatsModel.bestStreak)
-                            color: Theme.subtle
-                            font.pixelSize: Theme.fontCaption
-                        }
-                    }
 
-                    // The days of the period with focus time, as a calendar: one column per weekday.
-                    Grid {
-                        id: calendar
-                        visible: StatsModel.period === StatsModel.Period.Week || StatsModel.period === StatsModel.Period.Month
-                        columns: 7
-                        spacing: Theme.spaceXs
-                        // Empty cells before the first day, so each column is one weekday.
-                        readonly property int lead: StatsModel.days.length > 0
-                            ? (StatsModel.days[0].weekday - Qt.locale().firstDayOfWeek + 7) % 7 : 0
+                        Column {
+                            width: parent.width
 
-                        Repeater {
-                            model: calendar.lead
-                            Item {
-                                width: Theme.spaceLg + Theme.spaceXs
-                                height: width
-                            }
-                        }
-                        Repeater {
-                            model: StatsModel.days
-                            Rectangle {
-                                required property var modelData
-                                width: Theme.spaceLg + Theme.spaceXs
-                                height: width
-                                radius: Theme.radiusSm - 1
-                                color: modelData.workSeconds > 0 ? Theme.brand : Theme.track
-                                opacity: modelData.workSeconds > 0 ? Math.min(1, 0.45 + modelData.workSeconds / 7200) : 1
-                                border.width: modelData.isToday ? Theme.hairline : 0
-                                border.color: Theme.foreground
-                                Accessible.role: Accessible.StaticText
-                                Accessible.name: modelData.tooltip
-                                HoverHandler {
-                                    id: dayHover
+                            Repeater {
+                                model: notesList.notes
+
+                                RowLayout {
+                                    id: noteRow
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Theme.statsListRowHeight
+                                    spacing: Theme.spaceMd + Theme.hairline * 2
+                                    Accessible.role: Accessible.StaticText
+                                    Accessible.name: modelData.note
+                                    Accessible.description: modelData.when
+
+                                    HoverHandler {
+                                        id: noteHover
+                                    }
+                                    QQC2.ToolTip.visible: noteHover.hovered
+                                    QQC2.ToolTip.text: modelData.when + "\n" + modelData.note
+                                    QQC2.ToolTip.delay: Theme.toolTipDelay
+
+                                    Text {
+                                        text: noteRow.modelData.label
+                                        color: Theme.subtle
+                                        font.pixelSize: Theme.fontBody
+                                        font.features: { "tnum": 1 }
+                                        Layout.preferredWidth: notesList.labelWidth
+                                    }
+                                    Text {
+                                        text: noteRow.modelData.note
+                                        color: Theme.dim
+                                        font.pixelSize: Theme.fontBody
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
                                 }
-                                QQC2.ToolTip.visible: dayHover.hovered
-                                QQC2.ToolTip.text: modelData.tooltip
-                                QQC2.ToolTip.delay: Theme.durationShort
                             }
                         }
                     }
-
                 }
             }
         }
