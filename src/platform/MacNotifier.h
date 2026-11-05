@@ -18,7 +18,8 @@ class QSystemTrayIcon;
  *
  * The permission is asked for once, at construction. Before each notification the current
  * setting is read again (the user may change it in System Settings at any time): while
- * notifications are not allowed, they go to `fallback`, a message from the menu bar icon.
+ * notifications are not allowed, or when the Notification Center refuses one, they go to
+ * `fallback`, a message from the menu bar icon.
  *
  * Only for an application bundle: UNUserNotificationCenter needs a bundle identifier (see
  * isSupported()).
