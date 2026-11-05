@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "SyncApi.h"
 
+#include "RetryAfter.h"
 #include "SyncSecrets.h"
 #include "UrlPolicy.h"
 
@@ -21,9 +22,6 @@ namespace
 constexpr int kTransferTimeoutMs = 30000;
 /// An access token is renewed when it has less than this left.
 constexpr qint64 kAccessMarginMs = 60 * 1000;
-/// The longest Retry-After kept, in seconds, as SyncAccount's longest wait: more would overflow the
-/// retry timers' milliseconds and make the retry fire at once.
-constexpr int kMaxRetryAfter = 3600;
 
 QString appVersion()
 {
@@ -517,7 +515,7 @@ void SyncApi::send(const Request &request, const QString &accessToken, Callback 
                          : SyncError::fromResponse(r.http, r.body, r.http == 0 ? reply->errorString() : QString());
         if (!r.error.ok()) {
             // An HTTP date (or anything unreadable) gives 0: the caller's own delay.
-            r.error.retryAfter = std::clamp(reply->rawHeader("Retry-After").trimmed().toInt(), 0, kMaxRetryAfter);
+            r.error.retryAfter = RetryAfter::seconds(reply->rawHeader("Retry-After"));
             r.json = r.error.extra;
         } else if (expectJson && !r.body.isEmpty()) {
             const QJsonDocument doc = QJsonDocument::fromJson(r.body);
