@@ -104,6 +104,10 @@ jobs:
     needs: [changes, image]
     if: needs.changes.outputs.linux == 'true'
     runs-on: ubuntu-24.04
+    # Reading the image: under an organization a new package is private.
+    permissions:
+      contents: read
+      packages: read
     container:
       image: ${{ needs.image.outputs.image }}
       credentials:
@@ -162,6 +166,10 @@ jobs:
     needs: [changes, image]
     if: needs.changes.outputs.clang == 'true'
     runs-on: ubuntu-24.04
+    # Reading the image: under an organization a new package is private.
+    permissions:
+      contents: read
+      packages: read
     container:
       image: ${{ needs.image.outputs.image }}
       credentials:
