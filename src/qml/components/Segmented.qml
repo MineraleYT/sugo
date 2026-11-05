@@ -23,9 +23,12 @@ Rectangle {
         return null;
     }
 
-    implicitWidth: row.implicitWidth + Theme.hairline * 6
-    implicitHeight: Theme.controlHeight + Theme.hairline * 2
-    radius: Theme.radiusMd
+    // A 1 px frame, 2 px around the choices and between them.
+    readonly property real inset: Theme.hairline * 3
+
+    implicitWidth: row.implicitWidth + inset * 2
+    implicitHeight: Theme.controlHeightSm
+    radius: Theme.radius
     color: "transparent"
     border.width: Theme.hairline
     border.color: Theme.border
@@ -43,9 +46,9 @@ Rectangle {
                 id: choice
                 required property var modelData
                 readonly property bool on: segmented.current === modelData.id
-                implicitHeight: Theme.controlHeight - Theme.hairline * 4
-                leftPadding: Theme.spaceLg
-                rightPadding: Theme.spaceLg
+                implicitHeight: segmented.implicitHeight - segmented.inset * 2
+                leftPadding: Theme.spaceMd + Theme.hairline * 2
+                rightPadding: leftPadding
                 hoverEnabled: true
                 focusPolicy: Qt.TabFocus
                 text: modelData.text
@@ -53,16 +56,16 @@ Rectangle {
                 Accessible.checked: on
                 onClicked: segmented.activated(modelData.id)
                 background: Rectangle {
-                    radius: Theme.radius
+                    radius: Theme.radiusSm
                     color: choice.on ? Theme.selected : (choice.hovered ? Theme.hover : "transparent")
-                    border.width: choice.on || choice.visualFocus ? Theme.hairline : 0
-                    border.color: choice.visualFocus ? Theme.focusRing : Theme.borderStrong
+                    border.width: choice.visualFocus ? Theme.hairline : 0
+                    border.color: Theme.focusRing
                 }
                 contentItem: Text {
                     text: choice.text
-                    color: choice.on ? Theme.foreground : Theme.muted
-                    font.pixelSize: Theme.fontBody
-                    font.weight: choice.on ? Font.Medium : Font.Normal
+                    color: choice.on || choice.hovered ? Theme.foreground : Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                    font.weight: Font.Medium
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
