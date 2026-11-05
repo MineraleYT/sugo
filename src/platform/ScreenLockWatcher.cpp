@@ -314,6 +314,16 @@ void ScreenLockWatcher::attach(TimerEngine *engine, AppSettings *settings)
             m_phaseEnding = false;
         });
 #endif
+        // A break that ends while the screen is locked (it was not paused) can start Work by
+        // itself: that Work is paused as if the lock came now, and the unlock asks as usual.
+        // The engine has already started it when phaseFinished goes out.
+        connect(m_engine, &TimerEngine::phaseFinished, this, [this]() {
+            if (m_screenLocked && m_settings && m_settings->autoPauseOnScreenLock()
+                && m_engine->state() == TimerEngine::State::Working) {
+                qCDebug(lcScreenLock) << "Pausing the work that started by itself: the screen is locked";
+                pauseForScreenLock();
+            }
+        });
         connect(m_engine, &TimerEngine::stateChanged, this, [this]() {
             if (m_engine && m_engine->state() != TimerEngine::State::Paused) {
                 if (m_pausedByScreenLock) {
@@ -375,6 +385,13 @@ void ScreenLockWatcher::onPrepareForSleep(bool start)
     }
 }
 
+void ScreenLockWatcher::pauseForScreenLock()
+{
+    m_pausedByScreenLock = true;
+    Q_EMIT pausedByScreenLockChanged();
+    m_engine->pause();
+}
+
 void ScreenLockWatcher::onActiveChanged(bool active)
 {
     setScreenLocked(active, QString());
@@ -395,13 +412,12 @@ void ScreenLockWatcher::setScreenLocked(bool active, const QString &source)
 
     if (active) {
         if (m_settings && m_settings->autoPauseOnScreenLock() && m_engine) {
-            // A work phase already due ends first; only a Work still running is paused.
+            // A work phase already due ends first; only a Work still running is paused. A due
+            // break that starts Work by itself has its Work paused already (phaseFinished).
             m_engine->refresh();
             if (m_engine->state() == TimerEngine::State::Working) {
                 qCDebug(lcScreenLock) << "Auto-pausing active timer due to screen lock";
-                m_pausedByScreenLock = true;
-                Q_EMIT pausedByScreenLockChanged();
-                m_engine->pause();
+                pauseForScreenLock();
             }
         }
     } else {
