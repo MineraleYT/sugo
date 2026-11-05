@@ -24,7 +24,7 @@ const QString kUser = QStringLiteral("usr_test");
 const QByteArray kPlain = QByteArrayLiteral(R"({"format":1,"presets":[],"tombstones":[]})");
 const QByteArray kBlob = QByteArray::fromHex(
     "5355474f01404142434445464748494a4b4c4d4e4f50515253545556578a2e159b299d952ed92846ffd4deef304122061d"
-    "277ec7b1e69881632f377ebc6f52750e0957c4204c7b7fb66455b1258a2a3f9c6f8d32d794");
+    "277ec7b1e69881632f377ebc6f52750e0957c4204c07044c96ac6feaab660768fc15eaa2ab");
 
 const QByteArray kSecretA = range(1, 32);
 const QByteArray kSecretB = range(33, 32);
@@ -108,6 +108,8 @@ private Q_SLOTS:
         using Error = SyncCrypto::OpenedBlob::Error;
         QCOMPARE(SyncCrypto::decryptBlob(secret(kKey), QStringLiteral("usr_other"), kBlob).error, Error::Unreadable);
         QCOMPARE(SyncCrypto::decryptBlob(secret(kKey), kUser, kBlob, QStringLiteral("sessions")).error, Error::Unreadable);
+        // The same bytes split another way between user and kind are another blob.
+        QCOMPARE(SyncCrypto::decryptBlob(secret(kKey), kUser + QLatin1Char('p'), kBlob, QStringLiteral("resets")).error, Error::Unreadable);
         QVERIFY(SyncCrypto::decryptBlob(secret(kKey), kUser, kBlob).plaintext == kPlain);
     }
 

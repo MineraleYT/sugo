@@ -126,7 +126,7 @@ Uguale su Linux e macOS, nessuno schema URL da registrare, funziona anche su un 
 
 ```
 "SUGO" | versione formato (1 byte) | nonce (24 byte) | XChaCha20-Poly1305(JSON)
-dati associati (AD) = user_id + "presets" + versione formato
+dati associati (AD) = user_id + 0x00 + "presets" + 0x00 + versione formato
 ```
 
 L'AD impedisce di scambiare un blob con quello di un altro utente o di un altro tipo.
