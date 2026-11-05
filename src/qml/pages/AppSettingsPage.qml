@@ -537,7 +537,7 @@ QQC2.Page {
     component SmallText: Text {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        font.pixelSize: Theme.fontCaption + 1
+        font.pixelSize: Theme.fontCaption
         color: Theme.muted
     }
 
@@ -591,7 +591,8 @@ QQC2.Page {
         }
     }
 
-    /// A titled group of setting rows, shown when its category is chosen.
+    /// A titled group of setting rows, shown when its category is chosen: a small heading over a
+    /// card of rows.
     component SettingsCard: ColumnLayout {
         id: card
         property string title
@@ -603,19 +604,21 @@ QQC2.Page {
 
         visible: card.available && page.category === card.category
         Layout.fillWidth: true
-        spacing: Theme.spaceMd
+        Layout.topMargin: card.title.length > 0 ? Theme.spaceLg : 0
+        spacing: Theme.spaceSm
 
         Text {
+            visible: card.title.length > 0
             text: card.title
-            color: Theme.foreground
-            font.pixelSize: Theme.fontSection
-            font.weight: Font.DemiBold
+            color: Theme.muted
+            font.pixelSize: Theme.fontCaption
+            font.weight: Font.Medium
             Layout.fillWidth: true
             elide: Text.ElideRight
         }
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: rowsColumn.implicitHeight + Theme.spaceXs * 2
+            implicitHeight: rowsColumn.implicitHeight
             radius: Theme.radiusLg
             color: Theme.card
             border.width: Theme.hairline
@@ -626,19 +629,22 @@ QQC2.Page {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: Theme.spaceXl
-                anchors.topMargin: Theme.spaceXs
+                anchors.leftMargin: Theme.settingsRowPaddingX
+                anchors.rightMargin: Theme.settingsRowPaddingX
                 spacing: 0
             }
         }
     }
 
-    /// One setting: title and description on the left, controls on the right (stacked when narrow).
-    component SettingRow: ColumnLayout {
+    /// One setting: title and description on the left, controls on the right, or under the text
+    /// when they would leave it too little room.
+    component SettingRow: Item {
         id: row
         property string title
         property string description
         property bool first: false
+        /// The title as a heading (the first row of a card that explains the others).
+        property bool emphasized: false
         /// Every text `description` can show, when it changes with a state: the row keeps the
         /// height of the tallest, so nothing moves when the description changes.
         property var descriptionVariants: []
@@ -646,23 +652,29 @@ QQC2.Page {
         /// (smoke checks: both follow the text at once, while the layout catches up later).
         readonly property real descriptionHeight: descriptionText.implicitHeight
         readonly property real descriptionRoom: descriptionText.reservedHeight
+        /// The controls sit beside the text (else under it).
+        readonly property bool sideBySide: controlBox.children.length > 0
+            && width - controlBox.implicitWidth - grid.columnSpacing >= Theme.settingsRowTextMinWidth
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
-        spacing: 0
+        implicitHeight: Math.max(Theme.settingsRowMinHeight, grid.implicitHeight + Theme.settingsRowPaddingY * 2)
 
+        // The line above the row, across the whole card.
         Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: Theme.hairline
-            color: Theme.border
             visible: !row.first
+            x: -Theme.settingsRowPaddingX
+            width: row.width + Theme.settingsRowPaddingX * 2
+            height: Theme.hairline
+            color: Theme.border
         }
 
         GridLayout {
-            Layout.fillWidth: true
-            Layout.topMargin: Theme.spaceLg
-            Layout.bottomMargin: Theme.spaceLg
-            columns: page.wide ? 2 : 1
+            id: grid
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            columns: row.sideBySide ? 2 : 1
             columnSpacing: Theme.spaceXl
             rowSpacing: Theme.spaceMd
 
@@ -676,7 +688,7 @@ QQC2.Page {
                 // gaps, all counted, or the tallest text would push the row taller.
                 Layout.minimumHeight: row.descriptionVariants.length > 0
                                       ? titleText.implicitHeight + descriptionText.reservedHeight + spacing * 3 : 0
-                spacing: Theme.hairline * 2
+                spacing: Theme.hairline
                 opacity: row.enabled ? 1 : 0.5
                 Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
                 Text {
@@ -685,8 +697,8 @@ QQC2.Page {
                     visible: text.length > 0
                     text: row.title
                     color: Theme.foreground
-                    font.pixelSize: Theme.fontBody + 1
-                    font.weight: Font.Medium
+                    font.pixelSize: row.emphasized ? Theme.fontTitle : Theme.fontBody
+                    font.weight: row.emphasized ? Font.DemiBold : Font.Normal
                     wrapMode: Text.WordWrap
                 }
                 SmallText {
@@ -725,27 +737,33 @@ QQC2.Page {
                 id: controlBox
                 // A row of text only leaves the text the whole width.
                 visible: children.length > 0
-                Layout.alignment: page.wide ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
+                Layout.alignment: row.sideBySide ? (Qt.AlignRight | Qt.AlignVCenter) : Qt.AlignLeft
+                // Under the text, a field takes the row's width.
+                Layout.fillWidth: !row.sideBySide
                 spacing: Theme.spaceSm
             }
         }
     }
 
+    // The page's padding: less in a narrow window.
+    readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
+    readonly property real paddingY: narrow ? Theme.settingsBodyPaddingCompactY : Theme.settingsBodyPaddingY
+
     Flickable {
         id: flickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: content.implicitHeight + Theme.space2xl * 2
+        contentHeight: content.implicitHeight + page.paddingY * 2 + Theme.spaceMd
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
 
         ColumnLayout {
             id: content
-            x: (flickable.width - width) / 2
-            y: Theme.space2xl
-            width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.space2xl
+            x: page.paddingX
+            y: page.paddingY
+            width: Math.max(0, flickable.width - page.paddingX * 2)
+            spacing: Theme.spaceSm
 
             // A narrow window has no room for the list of the categories beside the page: they
             // are chosen here instead.
@@ -761,6 +779,24 @@ QQC2.Page {
                 onActivated: {
                     applicationWindow().openSettings(currentValue);
                     currentIndex = Qt.binding(() => page.categoryIndex());
+                }
+            }
+
+            // The category's title; in a narrow window the drop-down list above says it.
+            RowLayout {
+                id: categoryHeader
+                visible: !page.narrow
+                Layout.fillWidth: true
+                Layout.bottomMargin: Theme.spaceXs
+                spacing: Theme.spaceMd
+                Text {
+                    Layout.fillWidth: true
+                    text: page.categories[page.categoryIndex()].text
+                    color: Theme.foreground
+                    font.pixelSize: Theme.fontSettingsTitle
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Accessible.role: Accessible.Heading
                 }
             }
 
@@ -1530,7 +1566,7 @@ QQC2.Page {
                     }
                     FontMetrics {
                         id: calendarFooterMetrics
-                        font.pixelSize: Theme.fontCaption + 1
+                        font.pixelSize: Theme.fontCaption
                     }
                 }
             }
