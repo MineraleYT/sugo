@@ -373,6 +373,48 @@ QQC2.ApplicationWindow {
                 fail(29, "The volume slider no longer follows the setting after a drag: " + slider.value);
                 return;
             }
+            // The accent colour's menu opens under its button, 4 px away, right edges together,
+            // with every colour; choosing one sets the setting and moves the check.
+            const accentButton = findItem(page, item => item.objectName === "accentColorButton");
+            if (!accentButton || !accentButton.visible) {
+                fail(62, "The Accent color button is missing from General");
+                return;
+            }
+            const accentMenu = accentButton.menu;
+            const accentBefore = AppSettings.accentColor;
+            accentMenu.open();
+            const accentEntries = [];
+            findItem(accentMenu.contentItem, item => {
+                if (item.objectName.startsWith("accentEntry-")) {
+                    accentEntries.push(item);
+                }
+                return false;
+            });
+            const accentGap = accentMenu.y - accentButton.height;
+            const accentRightEdges = accentMenu.x + accentMenu.width - accentButton.width;
+            // The colour after the current one (the ids in quotes would read as colours to the checks).
+            const accentTarget = AppSettings.accentColors[(AppSettings.accentColors.indexOf(accentBefore) + 1) % AppSettings.accentColors.length];
+            const accentEntry = accentEntries.find(item => item.objectName === "accentEntry-" + accentTarget);
+            const accentOld = accentEntries.find(item => item.objectName === "accentEntry-" + accentBefore);
+            if (accentMenu.objectName !== "accentColorMenu" || !accentMenu.visible || accentMenu.openedSide !== "bottom"
+                    || Math.abs(accentGap - Theme.menuOffset) > 0.5 || Math.abs(accentRightEdges) > 1
+                    || accentEntries.length !== AppSettings.accentColors.length || accentEntries.length !== 10
+                    || !accentEntry || !accentOld || !accentOld.checked) {
+                fail(62, "The Accent color menu is not 4 px under its button with its right edge on the button's and ten colours: gap "
+                     + accentGap + ", right edges " + accentRightEdges + ", side " + accentMenu.openedSide
+                     + ", " + accentEntries.length + " entries");
+                accentMenu.close();
+                return;
+            }
+            accentEntry.clicked();
+            const accentChosen = AppSettings.accentColor === accentTarget && accentEntry.checked && !accentOld.checked
+                                 && !accentMenu.opened;
+            AppSettings.accentColor = accentBefore;
+            if (!accentChosen) {
+                fail(62, "Choosing \"" + accentTarget + "\" in the Accent color menu did not set it, move the check or close the menu: "
+                     + AppSettings.accentColor);
+                return;
+            }
             // The Focus card (shortcuts that silence notifications) exists on macOS only, and
             // openSettings() shows the category it is in.
             const focusCard = findItem(page, item => item.objectName === "focusModeCard");
@@ -473,20 +515,20 @@ QQC2.ApplicationWindow {
                     return false;
                 }
             }
-            // The status pill is as wide with every text it takes, so "Sync now" beside it stays
-            // put. Its width follows its texts at once, so it is read right after each one.
-            const pill = findItem(page, item => item.objectName === "syncStatusPill");
-            if (!pill || pill.labels.length < 2) {
-                fail(61, "The Sync tab's status pill, or the texts it can show, is missing");
+            // The status line is as wide with every text it takes, so nothing beside it moves.
+            // Its width follows its texts at once, so it is read right after each one.
+            const status = findItem(page, item => item.objectName === "syncStatusText");
+            if (!status || status.labels.length < 2) {
+                fail(61, "The Sync tab's status line, or the texts it can show, is missing");
                 return false;
             }
-            const pillWidths = [];
-            for (const label of pill.labels) {
-                pill.text = label;
-                pillWidths.push(pill.implicitWidth);
+            const statusWidths = [];
+            for (const label of status.labels) {
+                status.text = label;
+                statusWidths.push(status.implicitWidth);
             }
-            if (pillWidths.some(width => width !== pillWidths[0])) {
-                fail(61, "The Sync tab's status pill changes width with its text: " + pillWidths.join(", "));
+            if (statusWidths.some(width => width !== statusWidths[0])) {
+                fail(61, "The Sync tab's status line changes width with its text: " + statusWidths.join(", "));
                 return false;
             }
             // Signing out asks first.
@@ -956,13 +998,17 @@ QQC2.ApplicationWindow {
                     done = checkTimer(root.pageStack.get(0));
                 } else if (appSmokePage === "inventory") {
                     done = featureInventory.step();
+                } else if (appSmokePage === "about" && (root.currentDestination !== "settings" || currentPage.category !== "about")) {
+                    fail(20, "\"about\" did not open the About category of the settings: " + root.currentDestination
+                         + " " + currentPage.category);
+                    return;
                 }
                 if (done && running) {
                     stop();
                     Qt.exit(0);
                 }
             } else if (attempts >= 50) {
-                const targetFile = root.destinations[appSmokePage === "presets" ? "preset" : appSmokePage];
+                const targetFile = root.destinations[({ presets: "preset", about: "settings" })[appSmokePage] ?? appSmokePage];
                 const component = targetFile ? root.pageComponents[targetFile] : null;
                 console.error("Page", appSmokePage, "did not load within five seconds:",
                               "component=", component ? component.status : "missing",
@@ -1023,16 +1069,6 @@ QQC2.ApplicationWindow {
         pages.forEach(page => page && page.destroy());
     }
 
-    /// The back button: a sub-page with unsaved changes asks first.
-    function goBack(): void {
-        const top = stack.currentItem;
-        if (top && typeof top.requestClose === "function") {
-            top.requestClose();
-        } else {
-            popPage();
-        }
-    }
-
     // --- Navigation ----------------------------------------------------------
 
     readonly property var destinations: ({
@@ -1040,18 +1076,22 @@ QQC2.ApplicationWindow {
         preset: "PresetEditPage.qml",
         stats: "StatsPage.qml",
         settings: "AppSettingsPage.qml",
-        about: "AboutPage.qml",
         welcome: "WelcomePage.qml"
     })
 
-    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings", "about" or "welcome".
+    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings" or "welcome".
     property string currentDestination: "timer"
     /// The timer whose page is open ("" for a new one).
     property string openTimerUuid: ""
     readonly property bool isWelcomeActive: currentDestination === "welcome"
 
     /// Shows a destination; "preset" with the timer's `uuid`. `reload` builds the page afresh.
+    /// "about" (the tray, the menu bar, Ctrl+4) is the About category of the settings.
     function navigate(name: string, uuid: var, reload: var): void {
+        if (name === "about") {
+            openSettings("about");
+            return;
+        }
         const target = uuid ?? "";
         // A page with unsaved changes (a timer's page) asks before it is left. A number still
         // being typed counts, even one that did not change the value yet ("0", out of range).
@@ -1078,11 +1118,39 @@ QQC2.ApplicationWindow {
         navigate(name);
     }
 
+    /// The categories of the settings, in the order of their list (SettingsNav) and of the
+    /// drop-down list that takes its place in a narrow window.
+    readonly property var settingsCategories: [
+        { id: "general", text: i18n("General") },
+        { id: "timers", text: i18n("Timers") },
+        { id: "sounds", text: i18n("Sounds") },
+        { id: "focus", text: i18n("Focus") },
+        { id: "calendar", text: i18n("Calendar") },
+        { id: "sync", text: i18n("Sync") },
+        { id: "advanced", text: i18n("Advanced") },
+        { id: "about", text: i18n("About") }
+    ]
+    /// The list of the categories is shown at the left of the settings and of a timer's page,
+    /// when the window is wide enough for it.
+    readonly property bool settingsNavShown: (currentDestination === "settings" || currentDestination === "preset")
+                                             && width >= Theme.settingsNavBreakpoint
+    /// The list, for the inventory (FeatureInventory), which lists its entries with the page's.
+    readonly property Item settingsNavItem: settingsNav
+
     /// The settings category the settings page opens on next ("" for its default).
     property string pendingSettingsCategory: ""
 
     /// Opens the settings on one category, e.g. "focus".
     function openSettings(category: string): void {
+        // A page with unsaved changes asks first, and then comes back here for the category.
+        const shown = pageStack.currentItem;
+        if (shown && typeof shown.commitFields === "function") {
+            shown.commitFields();
+        }
+        if (shown && shown.modified === true && shown.leaving !== true && typeof shown.requestClose === "function") {
+            shown.requestClose(() => root.openSettings(category));
+            return;
+        }
         pendingSettingsCategory = category;
         navigate("settings");
         // Already open: navigate() kept the page, so tell it here.
@@ -1321,83 +1389,101 @@ QQC2.ApplicationWindow {
             onCloseRequested: root.close()
         }
 
-        Item {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            spacing: 0
 
-            QQC2.StackView {
-                id: stack
-                anchors.fill: parent
-                clip: true
-                pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
-                }
-                pushExit: Transition {}
-                popEnter: Transition {}
-                popExit: Transition {}
-                replaceEnter: Transition {}
-                replaceExit: Transition {}
+            // The settings' categories, beside the settings and a timer's page (one of the timers).
+            SettingsNav {
+                id: settingsNav
+                objectName: "settingsNav"
+                visible: root.settingsNavShown
+                Layout.fillHeight: true
+                categories: root.settingsCategories
+                current: root.currentDestination === "preset" ? "timers"
+                         : stack.currentItem && stack.currentItem.category !== undefined ? stack.currentItem.category : ""
+                onActivated: id => root.openSettings(id)
             }
 
-            // Shown on every page: nothing recorded now will survive a restart, or the last
-            // changes are still waiting to be stored, or (until dismissed) the database found
-            // at startup was damaged or not Sugo's and a new one was started. Laid over the
-            // top of the page, so the page does not move when it comes or goes.
-            Rectangle {
-                id: dataWarning
-                objectName: "dataWarning"
-                readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
-                property bool movedAsideDismissed: false
-                readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
-                readonly property bool shown: storageFailing || movedAside
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: Theme.spaceMd
-                height: dataBanner.implicitHeight
-                z: 1
-                // The banner's fill is see-through: the page must not show under it.
-                color: Theme.background
-                radius: Theme.radius
-                opacity: shown ? 1 : 0
-                visible: opacity > 0
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durationShort }
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+
+                QQC2.StackView {
+                    id: stack
+                    anchors.fill: parent
+                    clip: true
+                    pushEnter: Transition {
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                    }
+                    pushExit: Transition {}
+                    popEnter: Transition {}
+                    popExit: Transition {}
+                    replaceEnter: Transition {}
+                    replaceExit: Transition {}
                 }
 
-                MessageSlot {
-                    id: dataBanner
-                    anchors.fill: parent
-                    shown: dataWarning.shown
-                    lines: 3
-                    tone: "warning"
-                    text: {
-                        if (DataManager === null) {
-                            return "";
-                        }
-                        if (DataManager.usingTemporaryDatabase === true) {
-                            return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
-                        }
-                        if (DataManager.saveFailing === true) {
-                            return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
-                        }
-                        return DataManager.movedAsideDatabaseWasCorrupt
-                            ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
-                            : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
+                // Shown on every page: nothing recorded now will survive a restart, or the last
+                // changes are still waiting to be stored, or (until dismissed) the database found
+                // at startup was damaged or not Sugo's and a new one was started. Laid over the
+                // top of the page, so the page does not move when it comes or goes.
+                Rectangle {
+                    id: dataWarning
+                    objectName: "dataWarning"
+                    readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                    property bool movedAsideDismissed: false
+                    readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
+                    readonly property bool shown: storageFailing || movedAside
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.spaceMd
+                    height: dataBanner.implicitHeight
+                    z: 1
+                    // The banner's fill is see-through: the page must not show under it.
+                    color: Theme.background
+                    radius: Theme.radius
+                    opacity: shown ? 1 : 0
+                    visible: opacity > 0
+                    Behavior on opacity {
+                        NumberAnimation { duration: Theme.durationShort }
                     }
-                    SButton {
-                        kind: "ghost"
-                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
-                        visible: dataWarning.movedAside && !dataWarning.storageFailing
-                        onClicked: DataManager.openDatabaseFolder()
-                    }
-                    SButton {
-                        kind: "ghost"
-                        iconOnly: true
-                        iconName: "close"
-                        text: i18n("Dismiss")
-                        visible: dataWarning.movedAside && !dataWarning.storageFailing
-                        onClicked: dataWarning.movedAsideDismissed = true
+
+                    MessageSlot {
+                        id: dataBanner
+                        anchors.fill: parent
+                        shown: dataWarning.shown
+                        lines: 3
+                        tone: "warning"
+                        text: {
+                            if (DataManager === null) {
+                                return "";
+                            }
+                            if (DataManager.usingTemporaryDatabase === true) {
+                                return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
+                            }
+                            if (DataManager.saveFailing === true) {
+                                return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
+                            }
+                            return DataManager.movedAsideDatabaseWasCorrupt
+                                ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
+                                : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
+                        }
+                        SButton {
+                            kind: "ghost"
+                            text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: DataManager.openDatabaseFolder()
+                        }
+                        SButton {
+                            kind: "ghost"
+                            iconOnly: true
+                            iconName: "close"
+                            text: i18n("Dismiss")
+                            visible: dataWarning.movedAside && !dataWarning.storageFailing
+                            onClicked: dataWarning.movedAsideDismissed = true
+                        }
                     }
                 }
             }
@@ -1454,8 +1540,14 @@ QQC2.ApplicationWindow {
                 currentDestination = appSmokePage === "inventory" ? "timer" : appSmokePage;
             } else if (appStatsSmokeTest) {
                 currentDestination = "stats";
-            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets")) {
+            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets"
+                                                     || startPageName === "about")) {
                 currentDestination = startPageName;
+            }
+            // "about": the About category of the settings.
+            if (currentDestination === "about") {
+                currentDestination = "settings";
+                pendingSettingsCategory = "about";
             }
             // "presets" (smoke test, development): the page of the timer in use.
             if (currentDestination === "presets") {

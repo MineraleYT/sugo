@@ -115,7 +115,7 @@ def read_tests(path):
 
 
 # The screenshots' start pages (SUGO_START_PAGE) and the inventory's screens.
-SCREEN_OF_PAGE = {"presets": "timer-page"}
+SCREEN_OF_PAGE = {"presets": "timer-page", "about": "settings/about"}
 
 
 def report(manifest_path, directory, pages):

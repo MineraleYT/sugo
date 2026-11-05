@@ -162,7 +162,7 @@ CI runs only what a change can affect: its first job, Changes, reads the changed
 
 ### Linux and macOS parity
 
-`tst_platform_parity` makes sure Sugo offers the same on both systems. It starts the program in the smoke mode `inventory` (`src/qml/components/FeatureInventory.qml`), which opens every screen (the focus page, a timer's page, a new timer, statistics, about, each settings category, each step of the welcome tour, the search) and lists what the user can use there: rows, switches (by the setting they change), buttons, choices, fields, sliders and the search's commands. `tests/check_platform_parity.py` compares the list with `tests/platform-parity.json`:
+`tst_platform_parity` makes sure Sugo offers the same on both systems. It starts the program in the smoke mode `inventory` (`src/qml/components/FeatureInventory.qml`), which opens every screen (the focus page, a timer's page, a new timer, statistics, each settings category from General to About, each step of the welcome tour, the search) and lists what the user can use there: rows, switches (by the setting they change), buttons, choices, fields, sliders and the search's commands. `tests/check_platform_parity.py` compares the list with `tests/platform-parity.json`:
 
 - `common`: on both systems; one missing here fails the test.
 - `linux` / `macos`: on that system only, each with the reason (the Dock, the Focus shortcuts, keeping running in the tray...). Anything else found on one system only fails the test.
@@ -185,7 +185,7 @@ It takes the same screenshots of every screen on both and writes `/tmp/sugo-comp
 
 | Variable | Effect |
 |---|---|
-| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `about`, `welcome`; or on a part of one: `settings/<category>` (`general`, `sounds`, `focus`, `calendar`, `advanced`), `welcome/<step>` (0-3) |
+| `SUGO_START_PAGE` | Opens on another page: `presets` (the timer in use), `stats`, `settings`, `welcome`; or on a part of one: `settings/<category>` (`general`, `timers`, `sounds`, `focus`, `calendar`, `sync`, `advanced`, `about`; `about` alone is `settings/about`), `welcome/<step>` (0-3) |
 | `SUGO_SMOKE_PAGE`, `SUGO_STATS_SMOKE_TEST=1` | Smoke runs (`tests/smoke_app.sh`): check a page, then quit |
 | `SUGO_SMOKE_PAGE=inventory`, `SUGO_INVENTORY=file.json` | Writes what every screen offers to the file, then quits ([parity](#linux-and-macos-parity)) |
 | `SUGO_SCREENSHOT=file.png` | Saves a picture of the window after `SUGO_SCREENSHOT_DELAY` ms (1500 by default), then quits |

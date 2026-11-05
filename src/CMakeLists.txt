@@ -17,14 +17,12 @@ qt6_add_qml_module(sugo_core
         qml/pages/StatsPage.qml
         qml/pages/PresetEditPage.qml
         qml/pages/AppSettingsPage.qml
-        qml/pages/AboutPage.qml
         qml/pages/WelcomePage.qml
         qml/components/ProgressRing.qml
         qml/theme/Theme.qml
         qml/components/LineIcon.qml
         qml/components/Kbd.qml
         qml/components/SButton.qml
-        qml/components/StatusPill.qml
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
         qml/components/TrayBadge.qml
@@ -50,6 +48,9 @@ qt6_add_qml_module(sugo_core
         qml/components/SMenuHeader.qml
         qml/components/SMenuItem.qml
         qml/components/SMenuSeparator.qml
+        qml/components/SettingsNav.qml
+        qml/components/AccentButton.qml
+        qml/components/StatusLine.qml
         qml/components/BrandGlow.qml
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml

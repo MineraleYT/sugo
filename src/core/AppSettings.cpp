@@ -526,6 +526,19 @@ QStringList AppSettings::accentColors()
     return ids;
 }
 
+QString AppSettings::accentColorName(const QString &id)
+{
+    // In the order of accentColors().
+    const QStringList names{
+        i18nc("accent colour", "Red"),  i18nc("accent colour", "Orange"), i18nc("accent colour", "Yellow"),
+        i18nc("accent colour", "Lime"), i18nc("accent colour", "Green"),  i18nc("accent colour", "Teal"),
+        i18nc("accent colour", "Cyan"), i18nc("accent colour", "Blue"),   i18nc("accent colour", "Violet"),
+        i18nc("accent colour", "Pink"),
+    };
+    const qsizetype at = accentColors().indexOf(id);
+    return at >= 0 && at < names.size() ? names.at(at) : id;
+}
+
 void AppSettings::setUpdateChannel(const QString &channel)
 {
     const QString valid = channel == QLatin1String("nightly") ? channel : QStringLiteral("stable");

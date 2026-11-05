@@ -71,11 +71,21 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Discard",
         "button: Duplicate",
+        "button: Focus",
+        "button: General",
         "button: Icon",
         "button: Reset to Defaults",
+        "button: Save",
+        "button: Sounds",
         "button: Start",
+        "button: Sync",
         "button: The default timer cannot be deleted",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -83,8 +93,11 @@
         "field: Name",
         "field: Short break",
         "field: Work",
+        "row: Category",
+        "row: Icon",
         "row: Long break",
         "row: Long break after",
+        "row: Name",
         "row: Play a sound when a phase ends",
         "row: Short break",
         "row: Show a notification when a phase ends",
@@ -102,9 +115,17 @@
         "button: 25 minutes",
         "button: 45 minutes",
         "button: 50 minutes",
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
         "button: Cancel",
         "button: Create Timer",
+        "button: Focus",
+        "button: General",
         "button: Icon",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers",
         "choice: Start automatically",
         "field: Category",
         "field: Long break",
@@ -112,8 +133,11 @@
         "field: Name",
         "field: Short break",
         "field: Work",
+        "row: Category",
+        "row: Icon",
         "row: Long break",
         "row: Long break after",
+        "row: Name",
         "row: Play a sound when a phase ends",
         "row: Short break",
         "row: Show a notification when a phase ends",
@@ -138,23 +162,20 @@
         "button: Year"
       ]
     },
-    "about": {
-      "common": [
-        "button: Check for Updates",
-        "button: Project website",
-        "button: Report a bug"
-      ]
-    },
     "settings/general": {
       "common": [
+        "button: About",
+        "button: Accent color",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "choice: Badge style",
         "choice: Color scheme",
+        "row: Accent color",
         "row: Badge style",
         "row: Color scheme",
         "row: Show an icon in the system tray",
@@ -179,8 +200,23 @@
         "setting: autoCheckUpdates"
       ]
     },
+    "settings/timers": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Focus",
+        "button: General",
+        "button: New timer",
+        "button: Pomodoro",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
+      ]
+    },
     "settings/sounds": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -189,6 +225,7 @@
         "button: Sounds",
         "button: Sync",
         "button: Test",
+        "button: Timers",
         "choice: Focus sound",
         "choice: Phase sound",
         "choice: Pre-alarm sound",
@@ -205,12 +242,14 @@
     },
     "settings/focus": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
         "button: General",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "row: Keep the screen awake during work sessions",
         "row: Pause timer when screen is locked",
         "row: Prompt for a task note when a work session finishes",
@@ -227,6 +266,7 @@
     },
     "settings/calendar": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -234,6 +274,7 @@
         "button: Log in",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "choice: Calendar service",
         "field: Server address",
         "row: Add an event to your calendar each time you finish a work session.",
@@ -246,6 +287,7 @@
     },
     "settings/sync": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -253,6 +295,7 @@
         "button: Sign in",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "field: Device name",
         "row: Device name",
         "row: Session history and statistics",
@@ -263,6 +306,7 @@
     },
     "settings/advanced": {
       "common": [
+        "button: About",
         "button: Advanced",
         "button: Back up…",
         "button: Calendar",
@@ -279,6 +323,7 @@
         "button: Show the Welcome Tour",
         "button: Sounds",
         "button: Sync",
+        "button: Timers",
         "button: View Report…",
         "choice: Sessions to remove",
         "row: Allow other programs to control the timer",
@@ -298,6 +343,21 @@
         "button: Nightly",
         "button: Stable",
         "row: Update channel"
+      ]
+    },
+    "settings/about": {
+      "common": [
+        "button: About",
+        "button: Advanced",
+        "button: Calendar",
+        "button: Check for Updates",
+        "button: Focus",
+        "button: General",
+        "button: Project website",
+        "button: Report a bug",
+        "button: Sounds",
+        "button: Sync",
+        "button: Timers"
       ]
     },
     "welcome/0": {

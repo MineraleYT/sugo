@@ -223,6 +223,13 @@ QtObject {
     readonly property int settingsNavBreakpoint: 640
     readonly property int settingsBodyPaddingX: 26
     readonly property int settingsBodyPaddingY: 20
+    /// The page's padding in a narrow window.
+    readonly property int settingsBodyPaddingCompactX: 16
+    readonly property int settingsBodyPaddingCompactY: 14
+    /// The title of a category, at the top of its page.
+    readonly property int fontSettingsTitle: 15
+    /// A row puts its controls under its text when the text would have less room than this.
+    readonly property int settingsRowTextMinWidth: 150
     readonly property int settingsRowMinHeight: 46
     readonly property int settingsRowPaddingX: 14
     readonly property int settingsRowPaddingY: 10

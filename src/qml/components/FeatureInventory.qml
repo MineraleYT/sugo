@@ -15,7 +15,7 @@ import io.github.mineraleyt.sugo
 QtObject {
     id: inventory
 
-    /// Main.qml's window: navigate(), pageStack, paletteCommands().
+    /// Main.qml's window: navigate(), pageStack, settingsNavItem, paletteCommands().
     property var app: null
 
     property var screens: []
@@ -28,14 +28,10 @@ QtObject {
             { name: "timer", open: () => app.navigate("timer") },
             { name: "timer-page", open: () => app.navigate("preset", PresetModel.currentUuid) },
             { name: "new-timer", open: () => app.navigate("preset", "") },
-            { name: "stats", open: () => app.navigate("stats") },
-            { name: "about", open: () => app.navigate("about") }
+            { name: "stats", open: () => app.navigate("stats") }
         ];
-        for (const category of ["general", "sounds", "focus", "calendar", "sync", "advanced"]) {
-            list.push({ name: "settings/" + category, open: () => {
-                app.navigate("settings");
-                app.pageStack.currentItem.category = category;
-            } });
+        for (const category of app.settingsCategories.map(entry => entry.id)) {
+            list.push({ name: "settings/" + category, open: () => app.openSettings(category) });
         }
         for (let step = 0; step < 4; ++step) {
             list.push({ name: "welcome/" + step, open: () => {
@@ -144,7 +140,13 @@ QtObject {
         }
         const entries = [];
         const screen = screens[index];
-        collect(screen.root ? screen.root() : app.pageStack.currentItem, entries);
+        if (screen.root) {
+            collect(screen.root(), entries);
+        } else {
+            // The list of the settings' categories is beside the page, not in it.
+            collect(app.settingsNavItem, entries);
+            collect(app.pageStack.currentItem, entries);
+        }
         entries.sort();
         collected[screen.name] = entries;
         if (screen.close) {
