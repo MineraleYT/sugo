@@ -87,8 +87,9 @@ QQC2.ApplicationWindow {
     // is set once in Component.onCompleted: a binding would hide the window again whenever the
     // tray or start-minimized settings change later.
 
-    /// Set from C++ (main.cpp) when macOS asks the application to quit (Cmd+Q from the Dock,
-    /// logging out): the window then lets itself close.
+    /// Set from C++ (main.cpp, MacApplicationEvents) when macOS quits the application: Sugo's own
+    /// quit, logging out or shutting down. The window then lets itself close. The Dock's Quit
+    /// with a phase active does not set it: it is turned into requestQuit().
     property bool platformQuitting: false
 
     // The close button hides the window when the program is meant to live in the tray, and
@@ -120,8 +121,8 @@ QQC2.ApplicationWindow {
             return;
         }
         if (TimerEngine.active) {
-            // Asked with the window closed or in the Dock (Cmd+Q, Sugo › Quit Sugo on macOS,
-            // where closing only hides the window): the question must be seen.
+            // Asked with the window closed or minimised (on macOS, where closing only hides the
+            // window: Cmd+Q, Sugo › Quit Sugo, Quit in the Dock menu): the question must be seen.
             if (!root.visible || root.visibility === Window.Minimized) {
                 root.bringToFront();
             }

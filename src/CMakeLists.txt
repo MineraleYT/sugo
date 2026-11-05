@@ -87,6 +87,8 @@ target_sources(sugo_core PRIVATE
     core/Diagnostics.h
     core/Diagnostics.cpp
     core/UrlPolicy.h
+    core/QuitPolicy.h
+    core/QuitPolicy.cpp
     core/CalendarSync.h
     core/CalendarSync.cpp
     platform/NotificationInhibitor.h

@@ -34,6 +34,20 @@ void macSetDockIconHidden(bool hidden)
     }
 }
 
+QuitPolicy::Origin macCurrentQuitOrigin()
+{
+    NSAppleEventDescriptor *event = [[NSAppleEventManager sharedAppleEventManager] currentAppleEvent];
+    if (!event || event.eventClass != kCoreEventClass || event.eventID != kAEQuitApplication) {
+        return QuitPolicy::Origin::Application;
+    }
+    // The login window gives the reason as an attribute; look at the parameters as well.
+    NSAppleEventDescriptor *reason = [event attributeDescriptorForKeyword:kAEQuitReason];
+    if (!reason) {
+        reason = [event paramDescriptorForKeyword:kAEQuitReason];
+    }
+    return reason && reason.typeCodeValue != 0 ? QuitPolicy::Origin::SessionEnding : QuitPolicy::Origin::External;
+}
+
 void macHideWindowTitle(QWindow *window)
 {
     if (!window || QGuiApplication::platformName() != QLatin1String("cocoa")) {
