@@ -273,6 +273,8 @@ private:
     void showNextApproval();
     void notifyApproval();
     void dropApproval(const QString &id);
+    /// Drops the devices the device list no longer shows waiting (approved elsewhere, gone).
+    void dropGoneApprovals();
 
     Settings::Ptr m_settings;
     std::unique_ptr<SecretStore> m_ownedStore;

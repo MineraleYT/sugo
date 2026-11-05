@@ -165,7 +165,10 @@ void SyncController::connectAccount()
         Q_EMIT message(i18n("This device was disconnected. Sign in again."));
     });
 
-    connect(a, &SyncAccount::devicesChanged, this, &SyncController::devicesChanged);
+    connect(a, &SyncAccount::devicesChanged, this, [this]() {
+        dropGoneApprovals();
+        Q_EMIT devicesChanged();
+    });
     connect(a, &SyncAccount::verificationCodeChanged, this, [this]() {
         Q_EMIT verificationCodeChanged();
         updateState();
@@ -990,6 +993,21 @@ void SyncController::dropApproval(const QString &id)
     const bool wasFirst = !m_approvals.isEmpty() && m_approvals.first().value(QStringLiteral("id")).toString() == id;
     m_approvals.removeIf([&id](const QVariantMap &m) { return m.value(QStringLiteral("id")).toString() == id; });
     if (wasFirst) {
+        showNextApproval();
+    }
+}
+
+void SyncController::dropGoneApprovals()
+{
+    const QList<SyncAccount::Device> devices = m_account->devices();
+    const auto gone = [&devices](const QVariantMap &approval) {
+        const QString id = approval.value(QStringLiteral("id")).toString();
+        return std::none_of(devices.cbegin(), devices.cend(),
+                            [&id](const SyncAccount::Device &d) { return d.id == id && d.pending && !d.current; });
+    };
+    const bool firstGone = !m_approvals.isEmpty() && gone(m_approvals.constFirst());
+    m_approvals.removeIf(gone);
+    if (firstGone) {
         showNextApproval();
     }
 }

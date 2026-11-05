@@ -1586,6 +1586,16 @@ QQC2.ApplicationWindow {
         function onApprovalRequested() {
             root.showSyncApproval();
         }
+        // The device asked about no longer waits (approved elsewhere, disconnected, signed out
+        // here): the question goes away unanswered.
+        function onPendingApprovalChanged() {
+            const asked = syncApprovalDialog.device.id || "";
+            const pending = SyncController.pendingApproval;
+            if (syncApprovalDialog.visible && asked.length > 0 && (!pending || pending.id !== asked)) {
+                syncApprovalDialog.withdrawn = true;
+                syncApprovalDialog.close();
+            }
+        }
         function onRecoveryCodeToConfirm(code) {
             syncRecoveryDialog.show(code);
         }
@@ -1699,6 +1709,7 @@ QQC2.ApplicationWindow {
         }
         syncApprovalDialog.device = device;
         syncApprovalDialog.approved = false;
+        syncApprovalDialog.withdrawn = false;
         syncApprovalDialog.open();
     }
 
@@ -1710,6 +1721,8 @@ QQC2.ApplicationWindow {
         closePolicy: QQC2.Popup.CloseOnEscape
         property var device: ({})
         property bool approved: false
+        /// The device stopped waiting while asked: closed without an answer.
+        property bool withdrawn: false
         title: i18n("Approve “%1”?", device.name || "")
         text: i18n("A new device wants to sync your timers. Approve it only if it is yours and shows the same code as here.")
         confirmText: i18n("Approve")
@@ -1720,7 +1733,7 @@ QQC2.ApplicationWindow {
         }
         // Approve, Not Now or Escape: answered once it has closed, then the next device, if any.
         onClosed: {
-            const id = device.id || "";
+            const id = withdrawn ? "" : (device.id || "");
             device = ({});
             if (SyncController && id.length > 0) {
                 if (approved) {

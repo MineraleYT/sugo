@@ -692,6 +692,32 @@ private Q_SLOTS:
         QCOMPARE(a.sync->pendingApproval().value(QStringLiteral("verificationCode")).toString(), b.sync->verificationCode());
     }
 
+    void approvalGoesAwayWithTheDevice()
+    {
+        Device a(*server);
+        Device b(*server);
+        signInFirst(a);
+        b.sync->signIn(QStringLiteral("B"));
+        QTRY_VERIFY(!b.sync->userCode().isEmpty());
+        QVERIFY(server->approve(b.sync->userCode(), kUser).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.sync->verificationCode().isEmpty());
+
+        QSignalSpy asked(a.sync.get(), &SyncController::approvalRequested);
+        a.sync->syncNow();
+        QVERIFY(asked.wait(5000));
+        QCOMPARE(a.sync->pendingApproval().value(QStringLiteral("id")).toString(), b.account()->deviceId());
+
+        // B gives up and signs out: once the list no longer shows it, nobody is asked about it.
+        QSignalSpy signedOut(b.sync.get(), &SyncController::signedOut);
+        b.sync->signOut();
+        QVERIFY(signedOut.wait(5000));
+        QSignalSpy changed(a.sync.get(), &SyncController::pendingApprovalChanged);
+        a.sync->refreshDevices();
+        QTRY_VERIFY(a.sync->pendingApproval().isEmpty());
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(asked.size(), 1);
+    }
+
     void approvalIsNotifiedOnlyWhileTheWindowIsHidden()
     {
         server->deviceLimit = 3;
