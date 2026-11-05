@@ -109,7 +109,35 @@ QQC2.Page {
     readonly property bool compact: page.width < Theme.compactBreakpoint
     // A short window still has room for the clock, the track and the controls.
     readonly property real clockSize: Math.min(compact ? Theme.clockSizeCompact : Theme.clockSize, page.height / 4)
-    readonly property real trackWidth: Math.min(page.width - Theme.space3xl * 2, Theme.contentMaxWidth * 0.62)
+    readonly property real trackWidth: Math.max(0, Math.min(Theme.cycleTrackWidth, page.width - Theme.space2xl * 2))
+
+    /// The round of the set the timer is in (the work phase, or the work before this break).
+    readonly property int round: {
+        let works = 0;
+        for (let i = 0; i <= currentSegment && i < segments.length; ++i) {
+            if (segments[i].work) {
+                ++works;
+            }
+        }
+        return Math.max(1, works);
+    }
+    /// How long a whole set lasts, as the timer's page says it.
+    readonly property string setDuration: {
+        const total = Math.round(segments.reduce((sum, s) => sum + s.seconds, 0) / 60);
+        return total >= 60 ? i18nc("hours and minutes", "%1h %2m", Math.floor(total / 60), total % 60)
+                           : i18nc("minutes", "%1 min", total);
+    }
+    /// Left under the track: the set when idle ("4 rounds · 2h 10m"), the round while it runs.
+    /// Without a long break there are no rounds to count: the phase's name.
+    readonly property string roundText: {
+        const cycles = TimerEngine.cyclesBeforeLong;
+        if (cycles <= 0) {
+            return segments[currentSegment] ? segments[currentSegment].label : "";
+        }
+        return isIdle && TimerEngine.completedCycles === 0 && isWorkPhase
+            ? i18ncp("the rounds of work in a set, the duration of the set", "%1 round · %2", "%1 rounds · %2", cycles, setDuration)
+            : i18nc("the round of work in a set", "Round %1 of %2", round, cycles);
+    }
 
     ColumnLayout {
         id: clockColumn
@@ -202,20 +230,21 @@ QQC2.Page {
         ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: page.trackWidth
-            spacing: Theme.spaceSm
+            Layout.topMargin: Theme.spaceSm
+            spacing: Theme.spaceMd
 
             Item {
                 id: track
                 objectName: "cycleTrack"
                 Layout.fillWidth: true
-                implicitHeight: Theme.spaceSm
+                implicitHeight: Theme.cycleTrackHeight
                 // A long set (up to 99 work phases) still fits: the gaps take at most half the
                 // track, the segments' minimum width shrinks to their share of the rest, and the
                 // track clips what rounding leaves over.
                 clip: true
                 readonly property int count: page.segments.length
                 readonly property real total: page.segments.reduce((sum, s) => sum + s.seconds, 0)
-                readonly property real gap: count > 1 ? Math.min(Theme.spaceXs, width / 2 / (count - 1)) : 0
+                readonly property real gap: count > 1 ? Math.min(Theme.cycleTrackGap, width / 2 / (count - 1)) : 0
                 readonly property real available: Math.max(0, width - gap * (count - 1))
                 readonly property real minSegment: Math.min(Theme.spaceSm, available / Math.max(1, count))
                 // Each segment as long as its phase, at least minSegment; when those minimums would
@@ -252,17 +281,16 @@ QQC2.Page {
                             color: Theme.track
                             clip: true
 
+                            // Work in the accent colour, breaks in the break colour; dimmed while paused.
                             Rectangle {
                                 height: parent.height
                                 radius: parent.radius
                                 width: segment.done ? parent.width
                                      : segment.current && !page.isIdle ? parent.width * TimerEngine.progress : 0
                                 Behavior on width { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop { position: 0; color: segment.modelData.work ? Theme.brandPeach : Theme.breakLight }
-                                    GradientStop { position: 1; color: segment.modelData.work ? Theme.brand : Theme.breakColor }
-                                }
+                                color: segment.modelData.work ? Theme.accent : Theme.breakAccent
+                                opacity: TimerEngine.paused ? 0.5 : 1
+                                Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
                             }
                         }
                     }
@@ -271,13 +299,14 @@ QQC2.Page {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: Theme.spaceLg
                 Text {
-                    text: page.segments[page.currentSegment] ? page.segments[page.currentSegment].label : ""
+                    objectName: "cycleRoundText"
+                    Layout.fillWidth: true
+                    text: page.roundText
+                    elide: Text.ElideRight
                     color: Theme.muted
                     font.pixelSize: Theme.fontCaption
-                }
-                Item {
-                    Layout.fillWidth: true
                 }
                 Text {
                     readonly property var next: page.segments[(page.currentSegment + 1) % page.segments.length]
