@@ -180,6 +180,12 @@ if(APPLE)
         set(SUGO_BUNDLE_VERSION "${PROJECT_VERSION}")
     endif()
     set(SUGO_BUNDLE_EXECUTABLE Sugo)
+    # <true/> or <false/> for the key SugoInstallsUpdates (MacBundleInstaller::installsUpdates()).
+    if(SUGO_INSTALLS_UPDATES)
+        set(SUGO_BUNDLE_INSTALLS_UPDATES true)
+    else()
+        set(SUGO_BUNDLE_INSTALLS_UPDATES false)
+    endif()
     configure_file("${PROJECT_SOURCE_DIR}/packaging/macos/Info.plist.in" "${CMAKE_CURRENT_BINARY_DIR}/Info.plist" @ONLY)
 endif()
 

@@ -2,7 +2,7 @@
   "_comment": [
     "What every screen of Sugo offers on Linux and on macOS (tests/check_platform_parity.py, ctest tst_platform_parity).",
     "Entries come from the smoke run SUGO_SMOKE_PAGE=inventory (src/qml/components/FeatureInventory.qml), with Linux's wording.",
-    "common: on both platforms. linux / macos: on that platform only, with the reason. updateInstall: only in builds that install updates (AppImage, Sugo.app).",
+    "common: on both platforms. linux / macos: on that platform only, with the reason. updateInstall: only in builds that install updates (AppImage, the disk image's Sugo.app).",
     "macosNames: macOS wording of an entry, mapped to the Linux one.",
     "A new control on one platform only must be added here with its reason; one on both goes in common."
   ],

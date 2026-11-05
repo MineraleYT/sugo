@@ -90,17 +90,20 @@ struct LocalRelease {
     }
 };
 
-QByteArray infoPlist(const QString &identifier)
+/// An Info.plist like the disk image's (installsUpdates) or a build from source's.
+QByteArray infoPlist(const QString &identifier, bool installsUpdates = true)
 {
     return QStringLiteral(
                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
                "<plist version=\"1.0\">\n<dict>\n"
-               "\t<key>CFBundleDocumentTypes</key>\n\t<array><dict><key>CFBundleIdentifier</key><string>not.this.one</string></dict></array>\n"
+               "\t<key>CFBundleDocumentTypes</key>\n\t<array><dict><key>CFBundleIdentifier</key><string>not.this.one</string>"
+               "<key>SugoInstallsUpdates</key><true/></dict></array>\n"
                "\t<key>CFBundleExecutable</key>\n\t<string>Sugo</string>\n"
                "\t<key>CFBundleIdentifier</key>\n\t<string>%1</string>\n"
+               "\t<key>SugoInstallsUpdates</key>\n\t<%2/>\n"
                "</dict>\n</plist>\n")
-        .arg(identifier)
+        .arg(identifier, installsUpdates ? QStringLiteral("true") : QStringLiteral("false"))
         .toUtf8();
 }
 
@@ -651,6 +654,35 @@ private Q_SLOTS:
         writeFile(plist, QByteArrayLiteral("bplist00 binary"));
         QVERIFY(MacBundleInstaller::bundleIdentifier(plist).isEmpty());
         QVERIFY(MacBundleInstaller::bundleIdentifier(dir.filePath(QStringLiteral("missing.plist"))).isEmpty());
+    }
+
+    void installsUpdatesIsReadFromTheTopLevelDict()
+    {
+        QTemporaryDir dir;
+        const QString plist = dir.filePath(QStringLiteral("Info.plist"));
+        writeFile(plist, infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), true));
+        QVERIFY(MacBundleInstaller::installsUpdates(plist));
+        // Only the top-level key counts (the nested one says true in both).
+        writeFile(plist, infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), false));
+        QVERIFY(!MacBundleInstaller::installsUpdates(plist));
+        writeFile(plist, QByteArrayLiteral("<plist><dict><key>SugoInstallsUpdates</key><string>true</string></dict></plist>"));
+        QVERIFY(!MacBundleInstaller::installsUpdates(plist));
+        writeFile(plist, QByteArrayLiteral("<plist><dict><key>CFBundleIdentifier</key><string>io.github.mineraleyt.sugo</string></dict></plist>"));
+        QVERIFY(!MacBundleInstaller::installsUpdates(plist)); // an app from before the key
+        QVERIFY(!MacBundleInstaller::installsUpdates(dir.filePath(QStringLiteral("missing.plist"))));
+    }
+
+    void macBundleBuiltFromSourceOnlyReports()
+    {
+        // build/bin/Sugo.app: "Install update" would replace the build being worked on with the release.
+        LocalMacRelease release;
+        writeFile(release.bundle + QStringLiteral("/Contents/Info.plist"), infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), false));
+        UpdateChecker checker;
+        release.setUp(checker);
+        QVERIFY(!checker.canInstall());
+        checker.setChannel(QStringLiteral("nightly"));
+        QCOMPARE(checker.channel(), QStringLiteral("stable"));
+        QVERIFY(!MacBundleInstaller(release.bundle, release.standIns()).canInstall());
     }
 
     void macBundleInstallsAndFollowsNightly()

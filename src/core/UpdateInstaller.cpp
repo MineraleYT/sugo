@@ -90,7 +90,10 @@ bool MacBundleInstaller::canInstall() const
         return false;
     }
     const QFileInfo bundle(m_bundle);
-    return bundle.isDir() && QFileInfo(bundle.absolutePath()).isWritable();
+    // Only the disk image's app replaces itself (packaging/macos/build.sh): one built from source
+    // only reports a new version, as on Linux, rather than swap the code being worked on for a release.
+    return bundle.isDir() && QFileInfo(bundle.absolutePath()).isWritable()
+        && installsUpdates(m_bundle + QStringLiteral("/Contents/Info.plist"));
 }
 
 QString MacBundleInstaller::downloadPath() const
@@ -100,32 +103,55 @@ QString MacBundleInstaller::downloadPath() const
     return bundle.absolutePath() + QStringLiteral("/.") + bundle.fileName() + QStringLiteral(".update.dmg");
 }
 
-QString MacBundleInstaller::bundleIdentifier(const QString &infoPlist)
+namespace
+{
+/// The value of `key` in the top-level dict of an XML Info.plist: the name of its element
+/// ("string", "true"...) and, for a string, its text. Empty when the file or the key is not there.
+struct PlistValue {
+    QString type;
+    QString text;
+};
+
+PlistValue topLevelValue(const QString &infoPlist, QLatin1String key)
 {
     QFile file(infoPlist);
     if (!file.open(QIODevice::ReadOnly)) {
-        return QString();
+        return {};
     }
     QXmlStreamReader xml(&file);
     int dictDepth = 0;
-    bool identifierNext = false;
+    bool valueNext = false;
     while (!xml.atEnd()) {
         const QXmlStreamReader::TokenType token = xml.readNext();
         if (token == QXmlStreamReader::StartElement) {
             const auto name = xml.name();
             if (name == QLatin1String("dict")) {
                 ++dictDepth;
-                identifierNext = false;
+                valueNext = false;
             } else if (dictDepth == 1 && name == QLatin1String("key")) {
-                identifierNext = xml.readElementText() == QLatin1String("CFBundleIdentifier");
-            } else if (identifierNext) {
-                return name == QLatin1String("string") ? xml.readElementText().trimmed() : QString();
+                valueNext = xml.readElementText() == key;
+            } else if (valueNext) {
+                const bool isString = name == QLatin1String("string");
+                const QString type = name.toString();
+                return {type, isString ? xml.readElementText() : QString()};
             }
         } else if (token == QXmlStreamReader::EndElement && xml.name() == QLatin1String("dict")) {
             --dictDepth;
         }
     }
-    return QString();
+    return {};
+}
+} // namespace
+
+QString MacBundleInstaller::bundleIdentifier(const QString &infoPlist)
+{
+    const PlistValue value = topLevelValue(infoPlist, QLatin1String("CFBundleIdentifier"));
+    return value.type == QLatin1String("string") ? value.text.trimmed() : QString();
+}
+
+bool MacBundleInstaller::installsUpdates(const QString &infoPlist)
+{
+    return topLevelValue(infoPlist, QLatin1String("SugoInstallsUpdates")).type == QLatin1String("true");
 }
 
 void MacBundleInstaller::run(const QString &program, const QStringList &arguments, int timeoutMs, Then then)

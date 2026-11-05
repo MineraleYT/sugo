@@ -55,6 +55,11 @@
          default: the user can still choose banners in System Settings. -->
     <key>NSUserNotificationAlertStyle</key>
     <string>alert</string>
+    <!-- Whether this bundle replaces itself with a new release (MacBundleInstaller): true only in
+         the disk image's build (packaging/macos/build.sh, -DSUGO_INSTALLS_UPDATES=ON). A build
+         from source only reports new versions. -->
+    <key>SugoInstallsUpdates</key>
+    <@SUGO_BUNDLE_INSTALLS_UPDATES@/>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Sugo contributors. GPL-3.0-or-later.</string>
 </dict>
