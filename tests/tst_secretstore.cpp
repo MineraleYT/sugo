@@ -27,11 +27,13 @@ struct KeyringState {
         SecretServiceAttributes attributes;
         QByteArray value;
         QString label;
+        bool otherKeyring = false; ///< In a second collection, locked while otherLocked is set.
     };
     QMutex mutex;
     QHash<QString, Item> items; ///< By object path.
     int nextItem = 1;
     bool locked = false;
+    bool otherLocked = false; ///< The second collection (a stale copy's keyring) is locked.
     bool dismissPrompt = false;
     int prompts = 0;
     int unlocks = 0; ///< Unlock calls.
@@ -75,6 +77,7 @@ public Q_SLOTS:
             if (!dismissed) {
                 QMutexLocker lock(&m_state->mutex);
                 m_state->locked = false;
+                m_state->otherLocked = false;
             }
             QDBusMessage signal = QDBusMessage::createSignal(m_path, QStringLiteral("org.freedesktop.Secret.Prompt"), QStringLiteral("Completed"));
             signal << dismissed << QVariant::fromValue(QDBusVariant(QVariant::fromValue(QList<QDBusObjectPath>())));
@@ -207,12 +210,9 @@ public Q_SLOTS:
                 match = match && it->attributes.value(a.key()) == a.value();
             }
             if (match) {
-                found.append(QDBusObjectPath(it.key()));
+                const bool isLocked = m_state->locked || (it->otherKeyring && m_state->otherLocked);
+                (isLocked ? locked : found).append(QDBusObjectPath(it.key()));
             }
-        }
-        if (m_state->locked) {
-            locked = found;
-            return {};
         }
         return found;
     }
@@ -221,7 +221,11 @@ public Q_SLOTS:
     {
         QMutexLocker lock(&m_state->mutex);
         ++m_state->unlocks;
-        if (!m_state->locked) {
+        bool needsPrompt = m_state->locked;
+        for (const QDBusObjectPath &object : objects) {
+            needsPrompt = needsPrompt || (m_state->otherLocked && m_state->items.value(object.path()).otherKeyring);
+        }
+        if (!needsPrompt) {
             prompt = QDBusObjectPath(QStringLiteral("/"));
             return objects;
         }
@@ -283,6 +287,22 @@ public:
     }
 
     bool registered() const { return m_registered; }
+
+    /// Puts an item straight into the second collection (as another keyring would hold it).
+    void addToOtherKeyring(const SecretServiceAttributes &attributes, const QByteArray &value)
+    {
+        QMetaObject::invokeMethod(
+            m_root.get(),
+            [this, attributes, value] {
+                QMutexLocker lock(&state.mutex);
+                const QString path = QStringLiteral("/org/freedesktop/secrets/collection/other/") + QString::number(state.nextItem++);
+                auto *item = new ItemObject(&state, path);
+                item->setParent(m_root.get());
+                QDBusConnection(state.connectionName).registerObject(path, item, QDBusConnection::ExportAllSlots);
+                state.items.insert(path, {attributes, value, QStringLiteral("Sugo: stale copy"), true});
+            },
+            Qt::BlockingQueuedConnection);
+    }
 
     KeyringState state;
 
@@ -431,6 +451,35 @@ private Q_SLOTS:
         QVERIFY(store.write(QStringLiteral("calendar-caldav"), QString()));
         QCOMPARE(m_keyring->state.prompts, 4);
         QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QString()));
+    }
+
+    void aLockedSecondCopyDoesNotHideTheReadableOne()
+    {
+        SecretServiceStore store(client(), QStringLiteral("io.github.mineraleyt.sugo"));
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QStringLiteral("pw")));
+        // A stale copy in a second keyring, which stays locked: the prompt is refused.
+        m_keyring->addToOtherKeyring({{QStringLiteral("application"), QStringLiteral("io.github.mineraleyt.sugo")},
+                                      {QStringLiteral("key"), QStringLiteral("calendar-caldav")}},
+                                     "stale");
+        m_keyring->state.otherLocked = true;
+        m_keyring->state.dismissPrompt = true;
+
+        // The readable copy is read, without asking to unlock the other one.
+        QCOMPARE(store.read(QStringLiteral("calendar-caldav")), std::optional<QString>(QStringLiteral("pw")));
+        QCOMPARE(m_keyring->state.prompts, 0);
+
+        // Removing it cannot reach the locked copy: what can be removed is, and the removal
+        // reports the failure (the locked copy is still there).
+        QVERIFY(!store.write(QStringLiteral("calendar-caldav"), QString()));
+        QCOMPARE(m_keyring->state.prompts, 1);
+        QCOMPARE(m_keyring->state.items.size(), 1);
+        QVERIFY(m_keyring->state.items.cbegin()->otherKeyring);
+
+        // Unlocked this time: the removal reaches it too.
+        m_keyring->state.dismissPrompt = false;
+        QVERIFY(store.write(QStringLiteral("calendar-caldav"), QString()));
+        QCOMPARE(m_keyring->state.prompts, 2);
+        QVERIFY(m_keyring->state.items.isEmpty());
     }
 
     void aRestartedKeyringGetsANewSession()
