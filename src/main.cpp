@@ -8,6 +8,9 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QElapsedTimer>
+#include <QStandardPaths>
+#include <QFile>
+#include <QDir>
 #include <QTimer>
 #include <QDebug>
 #include <QEvent>
@@ -28,6 +31,7 @@
 #include "DataManager.h"
 #include "Database.h"
 #include "InhibitorFactory.h"
+#include "LegacyAppId.h"
 #include "NotifierFactory.h"
 #include "FocusSoundController.h"
 #include "PhaseNotifier.h"
@@ -191,13 +195,13 @@ int main(int argc, char *argv[])
     // The interface is in English: so are day and month names, in the user's regional order.
     QLocale::setDefault(QLocale(QLocale::English, QLocale::system().territory()));
 
-    QCoreApplication::setOrganizationName(QStringLiteral("mineraleyt"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("io.github.mineraleyt"));
+    QCoreApplication::setOrganizationName(QStringLiteral("sugo"));
+    QCoreApplication::setOrganizationDomain(QStringLiteral("sugo.stream"));
     QCoreApplication::setApplicationName(QStringLiteral("sugo"));
-    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.mineraleyt.sugo"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("stream.sugo.app"));
     // Our own file, not the theme's: on Wayland Qt sends a theme icon's name, which the compositor
     // can't resolve when nothing is installed (an AppImage run directly).
-    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/io.github.mineraleyt.sugo.svg")));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/stream.sugo.app.svg")));
 
     QGuiApplication::setApplicationDisplayName(i18n("Sugo"));
     QCoreApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
@@ -240,7 +244,7 @@ int main(int argc, char *argv[])
     LocalSingleInstance singleInstance(LocalSingleInstance::defaultName(QStringLiteral("sugo")));
     using AppSingleInstance = LocalSingleInstance;
 #else
-    SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("io.github.mineraleyt.sugo"));
+    SingleInstance singleInstance(QDBusConnection::sessionBus(), QStringLiteral("stream.sugo.app"));
     using AppSingleInstance = SingleInstance;
 
     // The D-Bus objects of global shortcuts, scripts and KRunner are registered before the name is
@@ -265,6 +269,16 @@ int main(int argc, char *argv[])
     {
         MacKeychainStore keychain(secretStoreService());
         SecretHandoff::takeBack(keychain, SecretHandoff::defaultPath());
+    }
+#endif
+
+#ifdef Q_OS_LINUX
+    // Inside the Flatpak: the data of Sugo 1.0.2 and older, whose Flatpak had another app ID
+    // (io.github.mineraleyt.sugo), is copied over the first time, before anything reads ours.
+    if (QFile::exists(QStringLiteral("/.flatpak-info")) && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
+        LegacyAppId::importFlatpakData(QDir::homePath() + QStringLiteral("/.var/app/") + LegacyAppId::id(),
+                                       QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation),
+                                       QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
     }
 #endif
 
@@ -347,9 +361,9 @@ int main(int argc, char *argv[])
     // Services that must outlive any page. They are wired before the UI loads so the
     // first frame already shows the stored timers. Order matters: load presets first,
     // then configure the engine from them, then start recording.
-    auto *timer = engine.singletonInstance<TimerEngine *>("io.github.mineraleyt.sugo", "TimerEngine");
-    auto *presets = engine.singletonInstance<PresetModel *>("io.github.mineraleyt.sugo", "PresetModel");
-    auto *settings = engine.singletonInstance<AppSettings *>("io.github.mineraleyt.sugo", "AppSettings");
+    auto *timer = engine.singletonInstance<TimerEngine *>("stream.sugo.app", "TimerEngine");
+    auto *presets = engine.singletonInstance<PresetModel *>("stream.sugo.app", "PresetModel");
+    auto *settings = engine.singletonInstance<AppSettings *>("stream.sugo.app", "AppSettings");
     if (!timer || !presets || !settings) {
         qCritical() << "Cannot create the QML singletons";
         return EXIT_FAILURE;
@@ -358,7 +372,7 @@ int main(int argc, char *argv[])
     settings->applyColorScheme();
     auto *presetPersistence = new PresetPersistence(presets, &presetRepository, &services);
     new TimerBinding(timer, presets, &services);
-    auto *silence = engine.singletonInstance<SilenceController *>("io.github.mineraleyt.sugo", "SilenceController");
+    auto *silence = engine.singletonInstance<SilenceController *>("stream.sugo.app", "SilenceController");
     if (!silence) {
         qCritical() << "Cannot create the QML singletons";
         return EXIT_FAILURE;
@@ -390,7 +404,7 @@ int main(int argc, char *argv[])
 #endif
     auto *recorder = new SessionRecorder(timer, presets, &sessionRepository, &services);
 
-    auto *stats = engine.singletonInstance<StatsModel *>("io.github.mineraleyt.sugo", "StatsModel");
+    auto *stats = engine.singletonInstance<StatsModel *>("stream.sugo.app", "StatsModel");
     if (!stats) {
         qCritical() << "Cannot create the StatsModel singleton";
         return EXIT_FAILURE;
@@ -404,7 +418,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), dataManager);
 
     // The AppImage and the macOS app look for updates by themselves (when the user lets them) and install them.
-    auto *updates = engine.singletonInstance<UpdateChecker *>("io.github.mineraleyt.sugo", "UpdateChecker");
+    auto *updates = engine.singletonInstance<UpdateChecker *>("stream.sugo.app", "UpdateChecker");
     if (updates && !smokeTest) {
         updates->attach(settings);
     }
@@ -415,15 +429,15 @@ int main(int argc, char *argv[])
     auto *powerInhibitor = new PowerInhibitor(QDBusConnection::sessionBus(), &services);
 #endif
     powerInhibitor->attach(timer, settings);
-    auto *screenLockWatcher = engine.singletonInstance<ScreenLockWatcher *>("io.github.mineraleyt.sugo", "ScreenLockWatcher");
+    auto *screenLockWatcher = engine.singletonInstance<ScreenLockWatcher *>("stream.sugo.app", "ScreenLockWatcher");
     if (screenLockWatcher) {
         screenLockWatcher->attach(timer, settings);
     }
-    auto *diagnostics = engine.singletonInstance<Diagnostics *>("io.github.mineraleyt.sugo", "Diagnostics");
+    auto *diagnostics = engine.singletonInstance<Diagnostics *>("stream.sugo.app", "Diagnostics");
     if (diagnostics) {
         diagnostics->attach(settings, dataManager);
     }
-    auto *calendarSync = engine.singletonInstance<CalendarSync *>("io.github.mineraleyt.sugo", "CalendarSync");
+    auto *calendarSync = engine.singletonInstance<CalendarSync *>("stream.sugo.app", "CalendarSync");
     if (calendarSync) {
         QObject::connect(recorder, &SessionRecorder::workSessionRecorded, calendarSync, &CalendarSync::enqueueWorkSession);
         QObject::connect(dataManager, &DataManager::sessionNoteChanged, calendarSync, &CalendarSync::onNoteChanged);
@@ -438,7 +452,7 @@ int main(int argc, char *argv[])
         }
     }
     // Sugo Sync of the timers. Not in a smoke run: there it stays Off and never reads the keyring.
-    auto *presetSync = engine.singletonInstance<SyncController *>("io.github.mineraleyt.sugo", "SyncController");
+    auto *presetSync = engine.singletonInstance<SyncController *>("stream.sugo.app", "SyncController");
     if (presetSync && !smokeTest) {
         presetSync->setDesktopActions([](const QUrl &url) { return QDesktopServices::openUrl(url); },
                                       [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
@@ -498,7 +512,7 @@ int main(int argc, char *argv[])
     QObject::connect(&app, &QCoreApplication::aboutToQuit, powerInhibitor, &PowerInhibitor::shutdown);
     installQuitSignalHandlers(&app);
 
-    engine.loadFromModule("io.github.mineraleyt.sugo", "Main");
+    engine.loadFromModule("stream.sugo.app", "Main");
 
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().value(0));
     // For development and for the screenshots of the store pages: save a picture of the window

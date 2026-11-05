@@ -117,7 +117,7 @@ private:
         Notifier::Notification notification;
         notification.title = QStringLiteral("Work session finished");
         notification.text = QStringLiteral("Time for a short break: 5 minutes.");
-        notification.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+        notification.iconName = QStringLiteral("stream.sugo.app");
         notification.actions.append({QStringLiteral("Start Short Break"), [log](const QString &token) {
                                          *log << QStringLiteral("start:") + token;
                                      }});
@@ -172,7 +172,7 @@ private Q_SLOTS:
     {
         m_server = std::make_unique<FakeNotificationServer>(serverBus());
         publishServer();
-        m_notifier = std::make_unique<FreedesktopNotifier>(clientBus(), QStringLiteral("Sugo"), QStringLiteral("io.github.mineraleyt.sugo"));
+        m_notifier = std::make_unique<FreedesktopNotifier>(clientBus(), QStringLiteral("Sugo"), QStringLiteral("stream.sugo.app"));
         m_context = std::make_unique<QObject>();
     }
 
@@ -191,13 +191,13 @@ private Q_SLOTS:
         const auto &call = m_server->calls.constLast();
         QCOMPARE(call.appName, QStringLiteral("Sugo"));
         QCOMPARE(call.replacesId, 0U);
-        QCOMPARE(call.icon, QStringLiteral("io.github.mineraleyt.sugo"));
+        QCOMPARE(call.icon, QStringLiteral("stream.sugo.app"));
         QCOMPARE(call.summary, QStringLiteral("Work session finished"));
         QCOMPARE(call.body, QStringLiteral("Time for a short break: 5 minutes."));
         QCOMPARE(call.actions,
                  (QStringList{QStringLiteral("default"), QStringLiteral("View"), QStringLiteral("action-0"), QStringLiteral("Start Short Break"),
                               QStringLiteral("action-1"), QStringLiteral("Skip Break")}));
-        QCOMPARE(call.hints.value(QStringLiteral("desktop-entry")).toString(), QStringLiteral("io.github.mineraleyt.sugo"));
+        QCOMPARE(call.hints.value(QStringLiteral("desktop-entry")).toString(), QStringLiteral("stream.sugo.app"));
         // Sugo plays its own sound.
         QCOMPARE(call.hints.value(QStringLiteral("suppress-sound")).toBool(), true);
         QCOMPARE(call.timeout, -1);

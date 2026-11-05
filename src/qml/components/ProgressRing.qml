@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Shapes
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// Circular progress in the brand gradient; children are laid out inside the ring.
 Item {

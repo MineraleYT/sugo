@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A state in a few words after a small icon, e.g. "✓ Up to date"; the icon turns while `spinning`.
 Item {

@@ -14,7 +14,7 @@ class PresetModel;
 
 /**
  * Exposes TimerEngine controls over D-Bus at object path /Timer
- * with interface io.github.mineraleyt.sugo.Timer.
+ * with interface stream.sugo.app.Timer.
  *
  * This allows KDE Plasma Global Shortcuts, command line calls (qdbus),
  * scripts, and hardware buttons to start, pause, skip, or stop the timer.
@@ -45,15 +45,15 @@ public:
 class DBusTimerService : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "io.github.mineraleyt.sugo.Timer")
+    Q_CLASSINFO("D-Bus Interface", "stream.sugo.app.Timer")
 
 public:
     /// Register `host` (not the engine) at /Timer with QDBusConnection::ExportAdaptors.
     DBusTimerService(TimerEngine *engine, PresetModel *presets, TimerDBusObject *host);
 
-    static inline const QString ControlDisabledError = QStringLiteral("io.github.mineraleyt.sugo.Error.ControlDisabled");
-    static inline const QString UnknownPresetError = QStringLiteral("io.github.mineraleyt.sugo.Error.UnknownPreset");
-    static inline const QString TimerActiveError = QStringLiteral("io.github.mineraleyt.sugo.Error.TimerActive");
+    static inline const QString ControlDisabledError = QStringLiteral("stream.sugo.app.Error.ControlDisabled");
+    static inline const QString UnknownPresetError = QStringLiteral("stream.sugo.app.Error.UnknownPreset");
+    static inline const QString TimerActiveError = QStringLiteral("stream.sugo.app.Error.TimerActive");
 
     /// Asked before every command; without one, commands are always allowed.
     void setControlAllowed(std::function<bool()> allowed) { m_commands.setControlAllowed(std::move(allowed)); }

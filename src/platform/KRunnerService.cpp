@@ -87,7 +87,7 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
 
     if (!controlAllowed()) {
         RemoteMatch info = commandMatch(kControlDisabledId, i18n("Sugo: control from other programs is turned off"),
-                                        i18n("Open Sugo to change this in its settings"), QStringLiteral("io.github.mineraleyt.sugo"));
+                                        i18n("Open Sugo to change this in its settings"), QStringLiteral("stream.sugo.app"));
         info.properties.insert(ActionsKey, QStringList());
         matches.append(info);
         return matches;
@@ -176,7 +176,7 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
                                                          index.data(PresetModel::WorkMinutesRole).toInt()),
                                          index.data(PresetModel::IconNameRole).toString());
             if (m.iconName.isEmpty()) {
-                m.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+                m.iconName = QStringLiteral("stream.sugo.app");
             }
             m.categoryRelevance = CategoryHigh;
             m.relevance = lowerName == subCommand ? 1.0 : (lowerName.startsWith(subCommand) ? 0.9 : 0.7);
@@ -218,13 +218,13 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         matches.append(stopMatch);
     } else {
         RemoteMatch m = commandMatch(QStringLiteral("start"), i18n("Start Pomodoro (%1 min)", m_timer->workSeconds() / 60),
-                                     i18n("Preset: %1", presetName), QStringLiteral("io.github.mineraleyt.sugo"));
+                                     i18n("Preset: %1", presetName), QStringLiteral("stream.sugo.app"));
         m.categoryRelevance = CategoryHigh;
         matches.append(m);
     }
 
     RemoteMatch openMatch = commandMatch(QStringLiteral("open"), i18n("Open Sugo Window"), QString(),
-                                         QStringLiteral("io.github.mineraleyt.sugo"));
+                                         QStringLiteral("stream.sugo.app"));
     openMatch.categoryRelevance = CategoryModerate;
     openMatch.relevance = 0.6;
     matches.append(openMatch);

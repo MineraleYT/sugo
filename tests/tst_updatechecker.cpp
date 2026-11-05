@@ -122,7 +122,7 @@ QByteArray infoPlist(const QString &identifier, bool installsUpdates = true)
 }
 
 /// Makes a minimal Sugo.app in `folder` whose executable holds `content`.
-bool makeBundle(const QString &folder, const QByteArray &content, const QString &identifier = QStringLiteral("io.github.mineraleyt.sugo"))
+bool makeBundle(const QString &folder, const QByteArray &content, const QString &identifier = QStringLiteral("stream.sugo.app"))
 {
     const QString app = folder + QStringLiteral("/Sugo.app");
     return QDir().mkpath(app + QStringLiteral("/Contents/MacOS")) && writeFile(app + QStringLiteral("/Contents/Info.plist"), infoPlist(identifier))
@@ -147,7 +147,7 @@ struct LocalMacRelease {
     QByteArray newContent = QByteArrayLiteral("new Sugo");
     QByteArray dmgContent;
 
-    explicit LocalMacRelease(const QString &identifier = QStringLiteral("io.github.mineraleyt.sugo"))
+    explicit LocalMacRelease(const QString &identifier = QStringLiteral("stream.sugo.app"))
     {
         QDir root(dir.path());
         root.mkpath(QStringLiteral("download"));
@@ -375,9 +375,12 @@ private Q_SLOTS:
 
     void releaseUrlMustPointIntoTheProjectOnGitHub()
     {
-        const QString fallback = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
-        const QString good = QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v1.1.0");
+        const QString fallback = QStringLiteral("https://github.com/sugoHQ/sugo/releases");
+        const QString good = QStringLiteral("https://github.com/sugoHQ/sugo/releases/tag/v1.1.0");
+        const QString before = QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v1.1.0"); // before the move
         QCOMPARE(UpdateChecker::safeReleaseUrl(good), good);
+        QCOMPARE(UpdateChecker::safeReleaseUrl(before), before);
+        QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("https://github.com/sugoHQ/sugo-evil/releases")), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QString()), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("http://github.com/MineraleYT/sugo/releases/tag/v1")), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("https://evil.example/MineraleYT/sugo/releases")), fallback);
@@ -390,9 +393,9 @@ private Q_SLOTS:
     void feedsOfTheChannels()
     {
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("stable")),
-                 QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/latest/download/stable.json")));
+                 QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/latest/download/stable.json")));
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("nightly")),
-                 QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/nightly/nightly.json")));
+                 QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/nightly/nightly.json")));
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("anything")), UpdateChecker::feedUrl(QStringLiteral("stable")));
     }
 
@@ -681,15 +684,17 @@ private Q_SLOTS:
         qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
         LocalRelease release;
         const QString lookalike = QStringLiteral("https://github.com/MineraleYT/sugo-evil/releases/download/x/Sugo.AppImage");
-        const QString genuine = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
-        for (const QString &url : {lookalike, genuine}) {
+        const QString lookalikeHQ = QStringLiteral("https://github.com/sugoHQ/sugo-evil/releases/download/x/Sugo.AppImage");
+        const QString genuine = QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
+        const QString before = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
+        for (const QString &url : {lookalike, lookalikeHQ, genuine, before}) {
             release.announce(QStringLiteral("2.0.0"), {{QStringLiteral("url"), url}});
             UpdateChecker checker;
             checker.setAppImagePathForTesting(release.appImage);
             checker.setFeedUrlForTesting(QUrl::fromLocalFile(release.feed)); // the real download prefix
             checker.checkForUpdates();
             QTRY_VERIFY(checker.status() != UpdateChecker::Status::Checking);
-            QCOMPARE(checker.status(), url == genuine ? UpdateChecker::Status::UpdateAvailable : UpdateChecker::Status::Error);
+            QCOMPARE(checker.status(), url == genuine || url == before ? UpdateChecker::Status::UpdateAvailable : UpdateChecker::Status::Error);
         }
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
@@ -729,8 +734,8 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         const QString plist = dir.filePath(QStringLiteral("Info.plist"));
-        writeFile(plist, infoPlist(QStringLiteral("io.github.mineraleyt.sugo")));
-        QCOMPARE(MacBundleInstaller::bundleIdentifier(plist), QStringLiteral("io.github.mineraleyt.sugo"));
+        writeFile(plist, infoPlist(QStringLiteral("stream.sugo.app")));
+        QCOMPARE(MacBundleInstaller::bundleIdentifier(plist), QStringLiteral("stream.sugo.app"));
         writeFile(plist, QByteArrayLiteral("bplist00 binary"));
         QVERIFY(MacBundleInstaller::bundleIdentifier(plist).isEmpty());
         QVERIFY(MacBundleInstaller::bundleIdentifier(dir.filePath(QStringLiteral("missing.plist"))).isEmpty());
@@ -740,14 +745,14 @@ private Q_SLOTS:
     {
         QTemporaryDir dir;
         const QString plist = dir.filePath(QStringLiteral("Info.plist"));
-        writeFile(plist, infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), true));
+        writeFile(plist, infoPlist(QStringLiteral("stream.sugo.app"), true));
         QVERIFY(MacBundleInstaller::installsUpdates(plist));
         // Only the top-level key counts (the nested one says true in both).
-        writeFile(plist, infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), false));
+        writeFile(plist, infoPlist(QStringLiteral("stream.sugo.app"), false));
         QVERIFY(!MacBundleInstaller::installsUpdates(plist));
         writeFile(plist, QByteArrayLiteral("<plist><dict><key>SugoInstallsUpdates</key><string>true</string></dict></plist>"));
         QVERIFY(!MacBundleInstaller::installsUpdates(plist));
-        writeFile(plist, QByteArrayLiteral("<plist><dict><key>CFBundleIdentifier</key><string>io.github.mineraleyt.sugo</string></dict></plist>"));
+        writeFile(plist, QByteArrayLiteral("<plist><dict><key>CFBundleIdentifier</key><string>stream.sugo.app</string></dict></plist>"));
         QVERIFY(!MacBundleInstaller::installsUpdates(plist)); // an app from before the key
         QVERIFY(!MacBundleInstaller::installsUpdates(dir.filePath(QStringLiteral("missing.plist"))));
     }
@@ -756,7 +761,7 @@ private Q_SLOTS:
     {
         // build/bin/Sugo.app: "Install update" would replace the build being worked on with the release.
         LocalMacRelease release;
-        writeFile(release.bundle + QStringLiteral("/Contents/Info.plist"), infoPlist(QStringLiteral("io.github.mineraleyt.sugo"), false));
+        writeFile(release.bundle + QStringLiteral("/Contents/Info.plist"), infoPlist(QStringLiteral("stream.sugo.app"), false));
         UpdateChecker checker;
         release.setUp(checker);
         QVERIFY(!checker.canInstall());
@@ -960,7 +965,7 @@ private Q_SLOTS:
         QTest::addColumn<QString>("identifier");
         QTest::addColumn<QJsonObject>("changes");
         QTest::addColumn<bool>("attached");
-        const QString sugo = QStringLiteral("io.github.mineraleyt.sugo");
+        const QString sugo = QStringLiteral("stream.sugo.app");
         QTest::newRow("disk image does not open") << QStringLiteral("attach") << sugo << QJsonObject{} << false;
         QTest::newRow("another app inside") << QString() << QStringLiteral("com.example.other") << QJsonObject{} << true;
         QTest::newRow("bad signature") << QStringLiteral("codesign") << sugo << QJsonObject{} << true;

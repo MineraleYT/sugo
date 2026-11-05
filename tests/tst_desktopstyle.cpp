@@ -138,7 +138,7 @@ private Q_SLOTS:
         QVERIFY(!DesktopStyle::kwinForcesTitleBar(path));
         rules("wmclass=sugo\nwmclassmatch=2\ndecorationpolicy=server\ndecorationpolicyrule=3\n");
         QVERIFY(DesktopStyle::kwinForcesTitleBar(path));
-        rules("wmclass=^io\\\\.github\\\\..*$\nwmclassmatch=3\ndecorationpolicy=server\ndecorationpolicyrule=2\n");
+        rules("wmclass=^stream\\\\.sugo\\\\..*$\nwmclassmatch=3\ndecorationpolicy=server\ndecorationpolicyrule=2\n");
         QVERIFY(DesktopStyle::kwinForcesTitleBar(path));
     }
 

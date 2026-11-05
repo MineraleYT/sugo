@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A short message at the bottom of the window that goes away by itself.
 Rectangle {

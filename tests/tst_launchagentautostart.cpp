@@ -10,7 +10,7 @@
 
 namespace
 {
-const QString kLabel = QStringLiteral("io.github.mineraleyt.sugo");
+const QString kLabel = QStringLiteral("stream.sugo.app");
 const QString kTranslocated =
     QStringLiteral("/private/var/folders/xy/abc/T/AppTranslocation/1234-5678/d/Sugo.app/Contents/MacOS/Sugo");
 
@@ -41,7 +41,7 @@ private Q_SLOTS:
 
         QVERIFY(autostart.setEnabled(true)); // also creates the missing LaunchAgents folder
         QVERIFY(autostart.isEnabled());
-        QCOMPARE(autostart.filePath(), agents + QStringLiteral("/io.github.mineraleyt.sugo.plist"));
+        QCOMPARE(autostart.filePath(), agents + QStringLiteral("/stream.sugo.app.plist"));
         QCOMPARE(LaunchAgentAutostart::programArguments(autostart.filePath()), command());
     }
 

@@ -1006,7 +1006,7 @@ void SyncController::notifyApproval()
     Notifier::Notification notification;
     notification.title = i18n("New device wants to sync");
     notification.text = i18n("%1 asks for your timers. Open Sugo to compare the verification code and approve it.", name);
-    notification.iconName = QStringLiteral("io.github.mineraleyt.sugo");
+    notification.iconName = QStringLiteral("stream.sugo.app");
     const Notifier::Handler review = [this](const QString &token) { Q_EMIT showSyncPageRequested(token); };
     notification.actions.append({i18n("Review"), review});
     notification.defaultActionLabel = i18n("Review");

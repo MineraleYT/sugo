@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Shapes
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A picture of the running-timer tray icon, imitating TrayController's trayIcon(): the dark tile of
 /// the application icon in the phase colour, in one of the badge styles of AppSettings.trayBadgeStyle.

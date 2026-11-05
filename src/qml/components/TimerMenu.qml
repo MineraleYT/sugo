@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * The timers to choose from, over the composer's timer button: a search field, the timers by

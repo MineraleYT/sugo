@@ -2,5 +2,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [D-BUS Service]
-Name=io.github.mineraleyt.sugo
+Name=stream.sugo.app
 Exec=@KDE_INSTALL_FULL_BINDIR@/sugo --background

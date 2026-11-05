@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "Autostart.h"
+#include "LegacyAppId.h"
 #include "AppImage.h"
 #include "LaunchAgentAutostart.h"
 
@@ -188,17 +189,29 @@ std::unique_ptr<Autostart> createAutostart()
     }
     const QString directory = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
         + QStringLiteral("/autostart");
-    return std::make_unique<XdgAutostart>(directory,
-                                          QGuiApplication::desktopFileName(),
-                                          QStringLiteral("Sugo"),
-                                          QStringLiteral("Pomodoro timer"),
-                                          QStringList{autostartProgram(), QStringLiteral("--background")});
+    auto autostart = std::make_unique<XdgAutostart>(directory,
+                                                    QGuiApplication::desktopFileName(),
+                                                    QStringLiteral("Sugo"),
+                                                    QStringLiteral("Pomodoro timer"),
+                                                    QStringList{autostartProgram(), QStringLiteral("--background")});
+    // The entry of Sugo 1.0.2 and older, named after the old app ID: renamed, then written anew
+    // (icon, name, program) if it is enabled.
+    if (LegacyAppId::moveLoginEntry(directory, QStringLiteral(".desktop"), QGuiApplication::desktopFileName()) && autostart->isEnabled()) {
+        autostart->setEnabled(true);
+    }
+    return autostart;
 #elif defined(Q_OS_MACOS)
     // The bundle's executable (Sugo.app/Contents/MacOS/Sugo); repair() follows the bundle if it moves.
-    return std::make_unique<LaunchAgentAutostart>(
-        QDir::homePath() + QStringLiteral("/Library/LaunchAgents"),
-        QStringLiteral("io.github.mineraleyt.sugo"),
-        QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--background")});
+    const QString directory = QDir::homePath() + QStringLiteral("/Library/LaunchAgents");
+    const QString label = QStringLiteral("stream.sugo.app");
+    auto autostart = std::make_unique<LaunchAgentAutostart>(
+        directory, label, QStringList{QCoreApplication::applicationFilePath(), QStringLiteral("--background")});
+    // The agent of Sugo 1.0.2 and older, named after the old app ID: renamed, then written anew
+    // (label, program) if it is enabled.
+    if (LegacyAppId::moveLoginEntry(directory, QStringLiteral(".plist"), label) && autostart->isEnabled()) {
+        autostart->setEnabled(true);
+    }
+    return autostart;
 #else
     return std::make_unique<UnsupportedAutostart>();
 #endif

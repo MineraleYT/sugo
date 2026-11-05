@@ -216,7 +216,7 @@ QString PresetModel::iconNameFor(const TimerPreset &preset)
     // Theme icons chosen by earlier versions, shown as the matching Sugo icon.
     static const QHash<QString, QString> earlier = {
         {QStringLiteral("chronometer"), QStringLiteral("sugo-timer")},
-        {QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("sugo-tomato")},
+        {QStringLiteral("io.github.mineraleyt.sugo"), QStringLiteral("sugo-tomato")}, // the app ID before 1.0.3
         {QStringLiteral("flash-symbolic"), QStringLiteral("sugo-focus")},
         {QStringLiteral("crosshairs-symbolic"), QStringLiteral("sugo-focus")},
         {QStringLiteral("view-readermode-symbolic"), QStringLiteral("sugo-study")},
