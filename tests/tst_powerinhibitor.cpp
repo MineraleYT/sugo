@@ -133,9 +133,15 @@ private Q_SLOTS:
 
     void cleanup()
     {
-        // The release on destruction is asynchronous: let it land before the next test starts.
+        // The release is asynchronous: let it land before the next test starts. The screen saver
+        // may have handed out its cookie with the reply still on its way: quit as the program does
+        // (shutdown() waits for that reply and hands the cookie back), since a plain destruction
+        // would drop the reply and with it the UnInhibit.
         const bool wasInhibited = inhibitor && screenInhibited();
         const int before = server.calls.size();
+        if (inhibitor) {
+            inhibitor->shutdown();
+        }
         inhibitor.reset();
         if (wasInhibited) {
             QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), before + 1, 3000);
