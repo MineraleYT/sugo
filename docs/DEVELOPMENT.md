@@ -240,7 +240,7 @@ git push origin testing:main    # mark the tested build as the base of the next 
 
 ## Releasing
 
-A release is a version bump, a commit, an annotated tag on `main` and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages and the macOS apps on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one).
+A release is a version bump, a commit, an annotated tag on `main` and a push. The release workflow (`release.yml`) builds the AppImage and the Flatpak bundle and publishes the GitHub release when it sees a `v*` tag, with `stable.json`: the feed the AppImages and the macOS apps on the stable channel read to update themselves (`releases/latest/download/stable.json`, so the release must be the latest one). Every file of a release or a nightly is named after its version, the same way for each package: `Sugo-X.Y.Z-x86_64.AppImage`, `Sugo-X.Y.Z-x86_64.flatpak`, `Sugo-X.Y.Z-macOS-universal.dmg` (the build scripts write them without the version; the publish jobs rename them). So no link can point straight at the latest file: the README and the user guide link the page of the latest release (`releases/latest`), and the feeds carry each file's full address.
 
 **Nightly builds.** Every push to `testing` that passes CI is built by `nightly.yml` and published as a new pre-release tagged `vX.Y.Z-nightly.YYYYMMDD.N` (`release.yml` ignores these tags): the AppImage and `nightly.json`. Started by hand (Run workflow on `testing`), it publishes only when the newest CI run of that commit on `testing` passed. The pre-release `nightly` stays as the fixed address of the feed of the nightly channel (it holds only the latest `nightly.json`; its tag follows `testing`, the branch can't be called `nightly` like the tag) and as the starting point of the next release notes. Old nightlies are not deleted. Its version is a pre-release of the version in `CMakeLists.txt`, `X.Y.Z-nightly.YYYYMMDD.N` (of the next patch if `vX.Y.Z` is already released), so a nightly is newer than the last release and older than the next one. `YYYYMMDD` is the day the workflow run was created (UTC), not the date of the commit, and `N` its run number, so each nightly is newer than the ones before it even when `testing` moves to an older commit. The feed and the tag `nightly` only move forward: a publish that finds `nightly.json` already announcing a newer version (an older run re-run, or one that reached the publish job late) keeps its own pre-release and leaves them as they are. Bump `CMakeLists.txt` after a release to name the next one. The build commands of both are in `appimage.yml`, which also starts the AppImage without a display before anything is published.
 
@@ -262,10 +262,11 @@ A release is a version bump, a commit, an annotated tag on `main` and a push. Th
    git tag -a vX.Y.Z -m "Sugo X.Y.Z: …"
    git push origin main vX.Y.Z
    ```
-6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand, or leave it for the next release. By hand, the feed needs the disk image's `macos` entry too, as `release.yml` writes it (without it the Macs see the update but never install it): build with `bash packaging/macos/build.sh X.Y.Z out` on a Mac, then
+6. Check the macOS part of the run: the job of `macos.yml` passed, the release has `Sugo-X.Y.Z-macOS-universal.dmg` and its notes start with the Gatekeeper instructions, and `stable.json` has a `macos` entry. If the macOS job failed, the release went out without it: fix the build and attach the disk image by hand, or leave it for the next release. By hand, the feed needs the disk image's `macos` entry too, as `release.yml` writes it (without it the Macs see the update but never install it): build with `bash packaging/macos/build.sh X.Y.Z out` on a Mac, then
    ```sh
    cd out
-   dmg=Sugo-macOS-universal.dmg
+   dmg=Sugo-X.Y.Z-macOS-universal.dmg
+   mv Sugo-macOS-universal.dmg "$dmg"
    gh release upload vX.Y.Z "$dmg" --repo MineraleYT/sugo
    gh release download vX.Y.Z --repo MineraleYT/sugo --pattern stable.json --clobber
    jq --arg url "https://github.com/MineraleYT/sugo/releases/download/vX.Y.Z/$dmg" \

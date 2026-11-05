@@ -39,23 +39,23 @@ Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three
 
 One file that runs on any recent x86_64 Linux and keeps itself up to date (the recommended package on Linux):
 
-1. Download [Sugo-x86_64.AppImage](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-x86_64.AppImage).
+1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
 2. Make it executable and start it:
    ```sh
-   chmod +x Sugo-x86_64.AppImage
-   ./Sugo-x86_64.AppImage
+   chmod +x Sugo-*-x86_64.AppImage
+   ./Sugo-*-x86_64.AppImage
    ```
 
 Keep the file in a folder you can write to (for example `~/Applications`): Sugo puts its updates in place of it. If AppImageLauncher is installed, starting the AppImage makes it offer to move the file there and add Sugo to the application menu. How updates work is described in [Updates and diagnostics](#updates-and-diagnostics).
 
 ### Flatpak
 
-The Flatpak bundle is attached to each release as `sugo-v<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
+The Flatpak bundle is attached to each release as `Sugo-<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
 
-1. Download `sugo-v*-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
 2. Install it for your user, then start Sugo from the application menu, or with:
    ```sh
-   flatpak install --user ./sugo-v*-x86_64.flatpak
+   flatpak install --user ./Sugo-*-x86_64.flatpak
    flatpak run io.github.mineraleyt.sugo
    ```
 
@@ -70,7 +70,7 @@ The first install also downloads the KDE runtime from Flathub, if it is not inst
 
 One app for both Apple Silicon and Intel Macs, for **macOS 13 Ventura or later**:
 
-1. Download [Sugo-macOS-universal.dmg](https://github.com/MineraleYT/sugo/releases/latest/download/Sugo-macOS-universal.dmg), open it and drag **Sugo** to **Applications**.
+1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
 2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
    - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
    - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
