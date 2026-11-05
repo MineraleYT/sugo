@@ -459,17 +459,18 @@ QQC2.ApplicationWindow {
                 return false;
             }
             // A message (no keyring, signed out on sugo.stream) goes in the Sign in row's
-            // description, which keeps its height whichever text it shows.
+            // description, which keeps room for the longest of its texts. The layout catches up
+            // only later, so each text is compared with that room rather than the row's height.
             const row = findItem(page, item => item.objectName === "syncSignInRow");
-            if (!row || row.height <= 0 || row.descriptionVariants.length < 3) {
+            if (!row || row.height <= 0 || row.descriptionVariants.length < 3 || row.descriptionRoom <= 0) {
                 fail(58, "The Sync tab's Sign in row, or the messages it can show, is missing");
                 return false;
             }
-            const height = row.height;
-            for (const variant of row.descriptionVariants) {
+            for (const variant of [page.syncSignInText, page.syncNoKeyringText, page.syncSignedOutRemotelyText]) {
                 row.description = variant;
-                if (Math.abs(row.height - height) > 0.5) {
-                    fail(58, "A message changed the height of the Sync tab's Sign in row: " + height + " → " + row.height);
+                if (row.descriptionHeight > row.descriptionRoom + 0.5) {
+                    fail(58, "A message would move the Sync tab: " + row.descriptionHeight + " > " + row.descriptionRoom
+                         + " for \"" + variant + "\"");
                     return false;
                 }
             }

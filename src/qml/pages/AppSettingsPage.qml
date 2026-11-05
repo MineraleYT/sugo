@@ -639,6 +639,10 @@ QQC2.Page {
         /// Every text `description` can show, when it changes with a state: the row keeps the
         /// height of the tallest, so nothing moves when the description changes.
         property var descriptionVariants: []
+        /// The height of the description shown, and the room the row keeps for its variants
+        /// (smoke checks: both follow the text at once, while the layout catches up later).
+        readonly property real descriptionHeight: descriptionText.implicitHeight
+        readonly property real descriptionRoom: descriptionText.reservedHeight
         default property alias controls: controlBox.data
 
         Layout.fillWidth: true
