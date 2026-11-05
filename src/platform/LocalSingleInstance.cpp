@@ -106,7 +106,9 @@ bool LocalSingleInstance::acquire(bool activateExisting)
     token = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
 #endif
 
-    // A second round: the other instance may have quit while this one tried to reach it.
+    // A second round: the other instance may have quit while this one tried to reach it. Not
+    // after a connection that got no answer: that instance still runs and still holds the lock,
+    // and asking again would only make this launch wait twice as long.
     for (int attempt = 0; attempt < 2; ++attempt) {
         if (m_lock->tryLock(0)) {
             m_primary = true;
@@ -122,8 +124,12 @@ bool LocalSingleInstance::acquire(bool activateExisting)
         if (!activateExisting) {
             return false;
         }
-        if (activateOther(token)) {
+        const Reply reply = activateOther(token);
+        if (reply == Reply::Ok) {
             return false;
+        }
+        if (reply == Reply::NoAnswer) {
+            break;
         }
     }
     qCWarning(lcLocalSingleInstance) << "Sugo is already running but did not answer";
@@ -184,7 +190,7 @@ void LocalSingleInstance::request(const QString &token)
     Q_EMIT activateRequested(token);
 }
 
-bool LocalSingleInstance::activateOther(const QString &token)
+LocalSingleInstance::Reply LocalSingleInstance::activateOther(const QString &token)
 {
     QLocalSocket socket;
     const QDeadlineTimer connectDeadline(qMin(kConnectWindowMs, m_replyTimeoutMs));
@@ -195,7 +201,7 @@ bool LocalSingleInstance::activateOther(const QString &token)
         }
         socket.abort();
         if (connectDeadline.hasExpired()) {
-            return false;
+            return Reply::Unreachable;
         }
         QThread::msleep(kConnectRetryMs);
     }
@@ -205,6 +211,7 @@ bool LocalSingleInstance::activateOther(const QString &token)
     QEventLoop loop;
     QByteArray received;
     bool answered = false;
+    bool timedOut = false;
     connect(&socket, &QLocalSocket::readyRead, &loop, [&]() {
         received += socket.readAll();
         if (received.contains('\n')) {
@@ -214,7 +221,10 @@ bool LocalSingleInstance::activateOther(const QString &token)
     });
     connect(&socket, &QLocalSocket::disconnected, &loop, &QEventLoop::quit);
     connect(&socket, &QLocalSocket::errorOccurred, &loop, &QEventLoop::quit);
-    QTimer::singleShot(m_replyTimeoutMs, &loop, &QEventLoop::quit);
+    QTimer::singleShot(m_replyTimeoutMs, &loop, [&]() {
+        timedOut = true;
+        loop.quit();
+    });
 
     QByteArray message = kActivate;
     if (!token.isEmpty()) {
@@ -230,7 +240,10 @@ bool LocalSingleInstance::activateOther(const QString &token)
         received += socket.readAll();
         answered = received.trimmed() == kOk;
     }
-    return answered;
+    if (answered) {
+        return Reply::Ok;
+    }
+    return timedOut ? Reply::NoAnswer : Reply::Unreachable;
 }
 
 void LocalSingleInstance::connectNotify(const QMetaMethod &signal)

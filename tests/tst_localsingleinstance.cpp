@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QElapsedTimer>
 #include <QFile>
 #include <QLocalServer>
 #include <QLockFile>
@@ -106,6 +107,34 @@ private Q_SLOTS:
         LocalSingleInstance later(QStringLiteral("silent"), dir.path());
         later.setReplyTimeout(200);
         QVERIFY(!later.acquire());
+    }
+
+    void aPrimaryThatHangsIsWaitedForOnlyOnce()
+    {
+        // The lock is held and the socket accepts connections, but nothing ever answers: the
+        // first instance is alive but stuck. Asking it again would only double the wait.
+        QLockFile held(dir.filePath(QStringLiteral("hung.lock")));
+        QVERIFY(held.tryLock(0));
+        LocalSingleInstance later(QStringLiteral("hung"), dir.path());
+        QLocalServer hung;
+        QLocalServer::removeServer(later.socketPath());
+        QVERIFY(hung.listen(later.socketPath()));
+        int connections = 0;
+        connect(&hung, &QLocalServer::newConnection, &hung, [&]() {
+            while (hung.nextPendingConnection()) {
+                ++connections; // kept open (parented to the server), never answered
+            }
+        });
+
+        constexpr int timeoutMs = 1000;
+        later.setReplyTimeout(timeoutMs);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QVERIFY(!later.acquire());
+        const qint64 waited = elapsed.elapsed();
+        // Two rounds would take at least twice the timeout, whatever the machine's load.
+        QVERIFY2(waited < timeoutMs * 2, qPrintable(QStringLiteral("waited %1 ms").arg(waited)));
+        QCOMPARE(connections, 1);
     }
 
     void defaultNamesDifferPerUser()
