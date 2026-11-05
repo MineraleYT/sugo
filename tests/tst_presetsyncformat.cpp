@@ -277,6 +277,22 @@ private Q_SLOTS:
         QCOMPARE(PresetSyncFormat::merge(theirs, mineAsSeenThere, kOther, kNow).result.presets.at(0).name, QStringLiteral("Theirs"));
     }
 
+    void builtInChangedBeforeChangeTimesBeatsTheUntouchedOne()
+    {
+        // Both at time 0: changed on an older Sugo here, as it comes on a new computer whose id
+        // sorts higher. The change is kept on both sides.
+        TimerPreset changed = PresetModel::makeDefaultPreset();
+        changed.workSeconds = 50 * 60;
+        TimerPreset untouched = PresetModel::makeDefaultPreset();
+        TimerPreset untouchedAsSeenHere = untouched;
+        untouchedAsSeenHere.updatedBy = kOther;
+        TimerPreset changedAsSeenThere = changed;
+        changedAsSeenThere.updatedBy = kMe;
+
+        QCOMPARE(PresetSyncFormat::merge(Data{{changed}, {}}, Data{{untouchedAsSeenHere}, {}}, kMe, kNow).result.presets.at(0).workSeconds, 50 * 60);
+        QCOMPARE(PresetSyncFormat::merge(Data{{untouched}, {}}, Data{{changedAsSeenThere}, {}}, kOther, kNow).result.presets.at(0).workSeconds, 50 * 60);
+    }
+
     void timesOutOfRangeAreBroughtIntoIt()
     {
         QJsonObject p{{QStringLiteral("uuid"), QStringLiteral("a")}, {QStringLiteral("name"), QStringLiteral("A")},

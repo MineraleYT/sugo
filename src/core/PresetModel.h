@@ -55,6 +55,8 @@ public:
     Q_ENUM(Role)
 
     static const QString DefaultUuid;
+    /// The built-in timer as it comes, before any change.
+    static TimerPreset makeDefaultPreset();
 
     explicit PresetModel(QObject *parent = nullptr);
 
@@ -129,7 +131,6 @@ Q_SIGNALS:
     void valuesAdjusted(const QString &uuid, const QStringList &fields);
 
 private:
-    static TimerPreset makeDefaultPreset();
     /// Returns the keys whose value was out of range or unreadable and had to be adjusted.
     static QStringList applyFields(TimerPreset &preset, const QVariantMap &fields);
     static QString iconNameFor(const TimerPreset &preset);
