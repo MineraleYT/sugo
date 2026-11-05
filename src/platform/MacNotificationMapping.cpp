@@ -155,3 +155,62 @@ bool MacNotificationRegistry::respond(const QString &requestId, const QString &a
     }
     return false;
 }
+
+quint64 MacPendingNotifications::add(QObject *context, const Notifier::Notification &notification)
+{
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        const QObject *owner = it->context.data();
+        if (!owner || owner == context) {
+            it = m_entries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    const quint64 ticket = m_nextTicket++;
+    m_entries.insert(ticket, Entry{context, notification});
+    return ticket;
+}
+
+std::optional<MacPendingNotifications::Item> MacPendingNotifications::take(quint64 ticket)
+{
+    m_waiting.removeOne(ticket);
+    const auto it = m_entries.constFind(ticket);
+    if (it == m_entries.cend()) {
+        return std::nullopt;
+    }
+    const Entry entry = *it;
+    m_entries.erase(it);
+    if (!entry.context) {
+        return std::nullopt;
+    }
+    return Item{entry.context.data(), entry.notification};
+}
+
+bool MacPendingNotifications::beginQuestion()
+{
+    if (m_asking) {
+        return false;
+    }
+    m_asking = true;
+    return true;
+}
+
+void MacPendingNotifications::waitForAnswer(quint64 ticket)
+{
+    if (!m_waiting.contains(ticket)) {
+        m_waiting.append(ticket);
+    }
+}
+
+QList<quint64> MacPendingNotifications::endQuestion()
+{
+    m_asking = false;
+    QList<quint64> answered;
+    for (const quint64 ticket : std::as_const(m_waiting)) {
+        if (m_entries.contains(ticket)) {
+            answered.append(ticket);
+        }
+    }
+    m_waiting.clear();
+    return answered;
+}
