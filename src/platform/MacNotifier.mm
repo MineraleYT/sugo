@@ -148,6 +148,34 @@ MacNotifier::MacNotifier(std::unique_ptr<Notifier> fallback, QObject *parent)
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     // The center keeps only a weak reference: d->delegate holds it.
     center.delegate = d->delegate;
+    // Banners an earlier run left behind (it crashed or was killed, so ~MacNotifier did not take
+    // them out): their handlers went with it, so a click on one of their buttons, or a task note
+    // typed into one, would reach nothing. The list arrives later: those this run has shown by
+    // then (known to the registry) stay.
+    [center removeAllPendingNotificationRequests];
+    const std::shared_ptr<Shared> shared = d->shared;
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *delivered) {
+        NSMutableArray<NSString *> *identifiers = [NSMutableArray arrayWithCapacity:delivered.count];
+        for (UNNotification *notification in delivered) {
+            [identifiers addObject:notification.request.identifier];
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            MacNotifier::Private *notifier = shared->notifier;
+            if (!notifier) {
+                return;
+            }
+            NSMutableArray<NSString *> *stale = [NSMutableArray arrayWithCapacity:identifiers.count];
+            for (NSString *identifier in identifiers) {
+                if (!notifier->registry.contains(QString::fromNSString(identifier))) {
+                    [stale addObject:identifier];
+                }
+            }
+            if (stale.count > 0) {
+                qCInfo(lcMacNotifier) << "Removing" << stale.count << "notification(s) left by an earlier run";
+                [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:stale];
+            }
+        });
+    }];
     // No sound: Sugo plays its own. The first call shows the system's question; later ones
     // return what the user chose.
     [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert
@@ -167,6 +195,21 @@ MacNotifier::~MacNotifier()
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     if (center.delegate == d->delegate) {
         center.delegate = nil;
+    }
+    // Sugo is quitting: its banners would stay in the Notification Center with buttons and a
+    // reply field that reach nothing (a click would start Sugo again in the background, which
+    // knows nothing of them). They go with it.
+    [center removeAllPendingNotificationRequests];
+    [center removeAllDeliveredNotifications];
+    // Both are only sent to the notification service, which may not have them before the process
+    // ends. It answers requests in order, so an answer to one more means they arrived; the wait is
+    // bounded in case the service does not answer at all.
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> *) {
+        dispatch_semaphore_signal(done);
+    }];
+    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC)) != 0) {
+        qCWarning(lcMacNotifier) << "The notification service did not confirm removing Sugo's notifications";
     }
 }
 
