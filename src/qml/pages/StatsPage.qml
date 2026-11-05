@@ -122,12 +122,14 @@ QQC2.Page {
         }
     }
 
-    /// A bordered surface with a title.
+    /// A bordered surface with a quiet title, and maybe something at the right of it.
     component Panel: Rectangle {
         id: panel
         default property alias content: panelColumn.data
         property string title
         property alias headerExtra: panelExtra.data
+        /// Panels side by side give their headers the same height, so their rows line up.
+        property real headerHeight: 0
         implicitHeight: panelColumn.implicitHeight + Theme.spaceLg * 2
         radius: Theme.radiusLg
         color: Theme.card
@@ -137,19 +139,24 @@ QQC2.Page {
         ColumnLayout {
             id: panelColumn
             anchors.fill: parent
-            anchors.margins: Theme.spaceLg
-            anchors.leftMargin: Theme.spaceXl
-            anchors.rightMargin: Theme.spaceXl
-            spacing: Theme.spaceMd
+            anchors.topMargin: Theme.spaceLg
+            anchors.bottomMargin: Theme.spaceLg
+            anchors.leftMargin: Theme.spaceLg + Theme.hairline * 2
+            anchors.rightMargin: Theme.spaceLg + Theme.hairline * 2
+            spacing: Theme.spaceMd + Theme.hairline * 2
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.minimumHeight: panel.headerHeight
+                spacing: Theme.spaceMd
                 Text {
                     text: panel.title
-                    color: Theme.foreground
-                    font.pixelSize: Theme.fontTitle
-                    font.weight: Font.DemiBold
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                    font.weight: Font.Medium
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
                 RowLayout {
                     id: panelExtra
@@ -278,32 +285,87 @@ QQC2.Page {
                 }
             }
 
-            // One chart: work per hour, day or month, in the brand gradient; breaks as a thin cap.
+            // One chart: work per hour, day or month, in quiet bars; the chosen one in the accent
+            // colour, named with its focus time at the right of the title.
             Panel {
                 Layout.fillWidth: true
                 title: i18n("Activity")
+                headerExtra: Text {
+                    objectName: "chartSelection"
+                    opacity: chart.selectedBucket ? 1 : 0
+                    text: chart.selectedBucket
+                          ? i18nc("the chosen bar of the chart: its hour, day or month · its focus time", "%1 · %2",
+                                  chart.selectedBucket.name, StatsModel.formatDuration(chart.selectedBucket.workSeconds))
+                          : " "
+                    color: Theme.dim
+                    font.pixelSize: Theme.fontCaption
+                    font.weight: Font.Medium
+                    font.features: { "tnum": 1 }
+                }
 
                 Item {
                     id: chart
+                    objectName: "activityChart"
                     Layout.fillWidth: true
-                    implicitHeight: Theme.space4xl * 3.5
+                    implicitHeight: page.compact ? Theme.chartHeightCompact : Theme.chartHeight
 
                     readonly property var buckets: StatsModel.buckets
-                    // The tallest stack (work and the break cap on it), with a little room above.
-                    readonly property real scaleTop: Math.max(1, buckets.reduce((m, b) => Math.max(m, b.workSeconds + b.breakSeconds), 0) * 1.12)
-                    readonly property real labelHeight: Theme.spaceXl + Theme.spaceXs
+                    // The tallest bar, with a little room above.
+                    readonly property real scaleTop: Math.max(1, buckets.reduce((m, b) => Math.max(m, b.workSeconds), 0) * 1.05)
+                    readonly property real labelHeight: Theme.spaceXl
                     readonly property real plotHeight: height - labelHeight - Theme.spaceSm
                     readonly property real slot: buckets.length > 0 ? width / buckets.length : width
+                    readonly property real barWidth: Math.max(Theme.hairline * 2, Math.min(Theme.chartBarMaxWidth, slot * 0.7))
                     // Labels thin out when there are many bars (a month, a day's hours).
                     readonly property int labelEvery: slot < Theme.space3xl ? Math.ceil(Theme.space3xl / Math.max(1, slot)) : 1
 
-                    // Baseline.
-                    Rectangle {
-                        y: chart.plotHeight
-                        width: parent.width
-                        height: Theme.hairline
-                        color: Theme.border
+                    /// The bar chosen by a click or the arrow keys, or -1 for the default one.
+                    property int chosenIndex: -1
+                    /// The bar of "now" when the period is under way, else the last one with work.
+                    readonly property int defaultIndex: {
+                        const current = buckets.findIndex(b => b.isCurrent);
+                        if (current >= 0) {
+                            return current;
+                        }
+                        for (let i = buckets.length - 1; i >= 0; --i) {
+                            if (buckets[i].workSeconds > 0) {
+                                return i;
+                            }
+                        }
+                        return -1;
                     }
+                    readonly property int selectedIndex: chosenIndex >= 0 && chosenIndex < buckets.length ? chosenIndex : defaultIndex
+                    readonly property var selectedBucket: selectedIndex >= 0 ? buckets[selectedIndex] : null
+
+                    function choose(index: int): void {
+                        if (buckets.length > 0) {
+                            chosenIndex = Math.max(0, Math.min(buckets.length - 1, index));
+                        }
+                    }
+
+                    // Another period starts with its default bar again.
+                    Connections {
+                        target: StatsModel
+                        function onPeriodChanged() {
+                            chart.chosenIndex = -1;
+                        }
+                    }
+
+                    activeFocusOnTab: buckets.length > 0
+                    Keys.onLeftPressed: choose(selectedIndex - 1)
+                    Keys.onRightPressed: choose(selectedIndex + 1)
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Home) {
+                            choose(0);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_End) {
+                            choose(buckets.length - 1);
+                            event.accepted = true;
+                        }
+                    }
+                    Accessible.role: Accessible.Chart
+                    Accessible.name: i18n("Activity")
+                    Accessible.description: chart.selectedBucket ? chart.selectedBucket.tooltip : ""
 
                     Repeater {
                         model: chart.buckets
@@ -312,51 +374,54 @@ QQC2.Page {
                             id: bucket
                             required property var modelData
                             required property int index
+                            readonly property bool selected: index === chart.selectedIndex
                             x: index * chart.slot
                             width: chart.slot
                             height: chart.height
 
                             readonly property real workHeight: chart.plotHeight * modelData.workSeconds / chart.scaleTop
-                            readonly property real breakHeight: chart.plotHeight * modelData.breakSeconds / chart.scaleTop
 
                             // The tooltip's text, for screen readers too.
                             Accessible.role: Accessible.StaticText
                             Accessible.name: modelData.tooltip
+                            Accessible.selectable: true
+                            Accessible.selected: selected
 
                             HoverHandler {
                                 id: bucketHover
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                            TapHandler {
+                                onTapped: chart.choose(bucket.index)
                             }
                             QQC2.ToolTip.visible: bucketHover.hovered && (modelData.workSeconds > 0 || modelData.breakSeconds > 0)
                             QQC2.ToolTip.text: modelData.tooltip
                             QQC2.ToolTip.delay: Theme.durationShort
 
                             Rectangle {
+                                id: bar
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                width: Math.max(Theme.spaceXs, Math.min(chart.slot * 0.62, Theme.space3xl + Theme.spaceXs))
+                                width: chart.barWidth
                                 y: chart.plotHeight - height
-                                height: Math.max(bucket.modelData.workSeconds > 0 ? Theme.spaceXs : Theme.hairline * 2, bucket.workHeight)
-                                radius: Math.min(width / 2, Theme.radiusSm)
-                                opacity: bucketHover.hovered ? 0.85 : 1
-                                color: Theme.track
-                                gradient: bucket.modelData.workSeconds > 0 ? barGradient : null
-                                Gradient {
-                                    id: barGradient
-                                    GradientStop { position: 0; color: Theme.brand }
-                                    GradientStop { position: 1; color: Theme.brandMagenta }
-                                }
+                                height: Math.max(bucket.modelData.workSeconds > 0 ? Theme.spaceXs : Theme.hairline * 3, bucket.workHeight)
+                                radius: Math.min(width / 2, Theme.radiusXs)
+                                bottomLeftRadius: Math.min(width / 2, Theme.hairline * 2)
+                                bottomRightRadius: bottomLeftRadius
+                                opacity: bucketHover.hovered && !bucket.selected ? 0.8 : 1
+                                color: bucket.selected ? Theme.accent : bucket.modelData.workSeconds > 0 ? Theme.subtle : Theme.track
                                 Behavior on height { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
-
-                                // Breaks: a green cap on top of the bar, or on the empty stub when
-                                // there were only breaks (the chart then has data to show).
-                                Rectangle {
-                                    visible: bucket.modelData.breakSeconds > 0
-                                    anchors.bottom: parent.top
-                                    anchors.bottomMargin: Theme.hairline * 2
-                                    width: parent.width
-                                    height: Math.max(Theme.hairline * 2, bucket.breakHeight)
-                                    radius: parent.radius
-                                    color: Theme.alpha(Theme.breakColor, 0.7)
-                                }
+                                Behavior on color { ColorAnimation { duration: Theme.durationShort } }
+                            }
+                            // The keyboard's place.
+                            Rectangle {
+                                visible: bucket.selected && chart.activeFocus
+                                anchors.centerIn: bar
+                                width: bar.width + Theme.spaceXs * 2
+                                height: bar.height + Theme.spaceXs * 2
+                                radius: Theme.radiusSm
+                                color: "transparent"
+                                border.width: Theme.hairline * 2
+                                border.color: Theme.focusRing
                             }
 
                             Text {
@@ -364,9 +429,9 @@ QQC2.Page {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 y: chart.plotHeight + Theme.spaceSm
                                 text: bucket.modelData.label
-                                color: bucket.modelData.isCurrent ? Theme.foreground : Theme.subtle
+                                color: bucket.selected ? Theme.foreground : Theme.muted
                                 font.pixelSize: Theme.fontSmall
-                                font.weight: bucket.modelData.isCurrent ? Font.Medium : Font.Normal
+                                font.weight: bucket.selected ? Font.Medium : Font.Normal
                             }
                         }
                     }
