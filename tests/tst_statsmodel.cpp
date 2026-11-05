@@ -45,10 +45,18 @@ private Q_SLOTS:
     void testPreviousYearComparesTheSameDate();
     void testPreviousMonthCountsAClampedDayWhole();
 
+    void testNotesOfThePeriodNewestFirst();
+    void testNoteLabelsFollowThePeriod();
+    void testNotesFollowNewNotesAndRecords();
+
 private:
     void insertWork(const QDateTime &start, bool completed = true);
     /// The days of the shown period, as the page lists them.
     QList<QDate> shownDays() const;
+    /// A session with a task note.
+    void insertNote(const QDateTime &start, const QString &note, SessionKind kind = SessionKind::Work);
+    /// The notes' texts, as the page lists them.
+    QStringList noteTexts() const;
 
     std::unique_ptr<Database> m_db;
     std::unique_ptr<SessionRepository> m_repo;
@@ -541,6 +549,128 @@ void TestStatsModel::testDays()
 
     m_model->setPeriod(StatsModel::Period::Year);
     QCOMPARE(m_model->days().size(), 365);
+}
+
+void TestStatsModel::insertNote(const QDateTime &start, const QString &note, SessionKind kind)
+{
+    SessionRecord r;
+    r.kind = kind;
+    r.startedAtMs = start.toMSecsSinceEpoch();
+    r.endedAtMs = r.startedAtMs + 1'500'000;
+    r.durationSec = 1500;
+    r.plannedSec = 1500;
+    r.completed = true;
+    r.presetName = QStringLiteral("Default");
+    r.note = note;
+    QVERIFY(m_repo->insert(r));
+}
+
+QStringList TestStatsModel::noteTexts() const
+{
+    QStringList texts;
+    const QVariantList notes = m_model->notes();
+    for (const QVariant &entry : notes) {
+        texts.append(entry.toMap().value(QStringLiteral("note")).toString());
+    }
+    return texts;
+}
+
+void TestStatsModel::testNotesOfThePeriodNewestFirst()
+{
+    // "Now" is Saturday 2026-10-03 12:00; the week runs from Monday 09-28.
+    const QTimeZone utc = QTimeZone::utc();
+    insertNote(QDateTime(QDate(2026, 9, 29), QTime(9, 0), utc), QStringLiteral("Tuesday's note"));
+    insertNote(QDateTime(QDate(2026, 10, 3), QTime(10, 25), utc), QStringLiteral("  Fixed the retry  "));
+    insertNote(QDateTime(QDate(2026, 10, 3), QTime(9, 50), utc), QStringLiteral("Refactored"));
+    insertNote(QDateTime(QDate(2026, 10, 1), QTime(9, 0), utc), QString()); // no note
+    insertNote(QDateTime(QDate(2026, 10, 1), QTime(11, 0), utc), QStringLiteral("   ")); // blank
+    insertNote(QDateTime(QDate(2026, 10, 2), QTime(9, 0), utc), QStringLiteral("A break"), SessionKind::ShortBreak);
+    insertNote(QDateTime(QDate(2026, 9, 27), QTime(9, 0), utc), QStringLiteral("The week before"));
+    m_model->setPeriod(StatsModel::Period::Week);
+    m_model->refresh();
+
+    QCOMPARE(noteTexts(), (QStringList{QStringLiteral("Fixed the retry"), QStringLiteral("Refactored"),
+                                       QStringLiteral("Tuesday's note")}));
+    const QVariantMap newest = m_model->notes().constFirst().toMap();
+    QCOMPARE(newest.value(QStringLiteral("time")).toDateTime(), QDateTime(QDate(2026, 10, 3), QTime(10, 25), utc));
+    QVERIFY(newest.value(QStringLiteral("sessionId")).toLongLong() > 0);
+    QVERIFY(!newest.value(QStringLiteral("when")).toString().isEmpty());
+
+    // Another period, another list.
+    m_model->previousPeriod();
+    QCOMPARE(noteTexts(), QStringList{QStringLiteral("The week before")});
+    m_model->today();
+    m_model->setPeriod(StatsModel::Period::Day);
+    QCOMPARE(noteTexts(), (QStringList{QStringLiteral("Fixed the retry"), QStringLiteral("Refactored")}));
+
+    // Never more than kMaxNotes, the newest kept.
+    for (int i = 0; i < StatsModel::kMaxNotes + 5; ++i) {
+        insertNote(QDateTime(QDate(2026, 10, 3), QTime(0, i), utc), QStringLiteral("Early %1").arg(i));
+    }
+    m_model->refresh();
+    QCOMPARE(m_model->notes().size(), StatsModel::kMaxNotes);
+    QCOMPARE(noteTexts().constFirst(), QStringLiteral("Fixed the retry"));
+}
+
+void TestStatsModel::testNoteLabelsFollowThePeriod()
+{
+    StatsModel::Environment env = m_env;
+    env.locale = QLocale(QLocale::English, QLocale::UnitedKingdom);
+    m_model->setEnvironment(env);
+    const QTimeZone utc = QTimeZone::utc();
+    insertNote(QDateTime(QDate(2026, 10, 3), QTime(10, 25), utc), QStringLiteral("Today"));
+    insertNote(QDateTime(QDate(2026, 10, 1), QTime(9, 0), utc), QStringLiteral("Thursday"));
+    m_model->refresh();
+
+    const auto labels = [this]() {
+        QStringList list;
+        const QVariantList notes = m_model->notes();
+        for (const QVariant &entry : notes) {
+            list.append(entry.toMap().value(QStringLiteral("label")).toString());
+        }
+        return list;
+    };
+    const QString today = env.locale.toString(QTime(10, 25), QLocale::ShortFormat);
+    // Today: the time; another day of the week: its name; further: the day and month.
+    m_model->setPeriod(StatsModel::Period::Week);
+    QCOMPARE(labels(), (QStringList{today, env.locale.dayName(Qt::Thursday, QLocale::ShortFormat)}));
+    m_model->setPeriod(StatsModel::Period::Month);
+    QCOMPARE(labels(), (QStringList{today, env.locale.toString(QDate(2026, 10, 1), QStringLiteral("d MMM"))}));
+    // A past day: the times.
+    m_model->setPeriod(StatsModel::Period::Day);
+    m_model->previousPeriod();
+    m_model->previousPeriod();
+    QCOMPARE(labels(), QStringList{env.locale.toString(QTime(9, 0), QLocale::ShortFormat)});
+}
+
+void TestStatsModel::testNotesFollowNewNotesAndRecords()
+{
+    PresetRepository presetRepo(m_db->connectionName());
+    PresetModel presets;
+    PresetPersistence persistence(&presets, &presetRepo);
+    TimerEngine engine;
+    SessionRecorder recorder(&engine, &presets, m_repo.get());
+    m_model->attach(m_repo.get(), &recorder);
+
+    const QTimeZone utc = QTimeZone::utc();
+    insertNote(QDateTime(QDate(2026, 10, 3), QTime(9, 0), utc), QStringLiteral("First"));
+    QSignalSpy notesSpy(m_model.get(), &StatsModel::notesChanged);
+    Q_EMIT recorder.sessionRecorded();
+    QCOMPARE(notesSpy.count(), 1);
+    QCOMPARE(noteTexts(), QStringList{QStringLiteral("First")});
+
+    // A note added later to a session (the task-note dialog) shows after the refresh.
+    const QList<SessionRecord> rows = m_repo->between(0, m_env.now().toMSecsSinceEpoch() + 1);
+    QCOMPARE(rows.size(), 1);
+    QVERIFY(m_repo->updateNote(rows.constFirst().id, QStringLiteral("Edited")));
+    m_model->refresh();
+    QCOMPARE(notesSpy.count(), 2);
+    QCOMPARE(noteTexts(), QStringList{QStringLiteral("Edited")});
+
+    // Nothing new: no signal (the page keeps its rows).
+    m_model->refresh();
+    m_model->setBreakdownMode(StatsModel::BreakdownMode::ByTask);
+    QCOMPARE(notesSpy.count(), 2);
 }
 
 QTEST_MAIN(TestStatsModel)
