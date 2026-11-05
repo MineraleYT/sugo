@@ -56,6 +56,46 @@ private Q_SLOTS:
         QCOMPARE(store.read(key).value_or(QStringLiteral("<read failed>")), QString());
         QVERIFY(store.write(key, QString())); // removing what is not there succeeds
     }
+
+    void failedWriteKeepsThePreviousSecret()
+    {
+        if (qEnvironmentVariable("SUGO_TEST_KEYCHAIN") != QStringLiteral("1")) {
+            QSKIP("Set SUGO_TEST_KEYCHAIN=1 to run it, from a terminal of the logged-in desktop session");
+        }
+        const QString service = QStringLiteral("io.github.mineraleyt.sugo.test-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        const QString key = QStringLiteral("calendar-test");
+        MacKeychainStore store(service);
+        if (!store.write(key, QStringLiteral("old"))) {
+            if (unreachableKeychain(store.lastStatus())) {
+                QSKIP("The Keychain cannot be reached here (locked on CI, or no login session)");
+            }
+            QFAIL(qPrintable(QStringLiteral("SecItemAdd failed with OSStatus %1").arg(store.lastStatus())));
+        }
+
+        // The old item is deleted, then adding the new one fails: the old secret is put back.
+        store.failNextAddForTest(errSecInteractionNotAllowed);
+        QVERIFY(!store.write(key, QStringLiteral("new")));
+        QCOMPARE(store.lastStatus(), static_cast<int>(errSecInteractionNotAllowed));
+        QCOMPARE(store.read(key).value_or(QStringLiteral("<read failed>")), QStringLiteral("old"));
+
+        // A store that has only read the item knows it as well (Sugo reads its secrets at start).
+        MacKeychainStore reader(service);
+        QCOMPARE(reader.read(key).value_or(QStringLiteral("<read failed>")), QStringLiteral("old"));
+        reader.failNextAddForTest(errSecDuplicateItem);
+        QVERIFY(!reader.write(key, QStringLiteral("new")));
+        QCOMPARE(reader.read(key).value_or(QStringLiteral("<read failed>")), QStringLiteral("old"));
+
+        // Known to be absent: nothing is put back.
+        QVERIFY(store.write(key, QString()));
+        store.failNextAddForTest(errSecInteractionNotAllowed);
+        QVERIFY(!store.write(key, QStringLiteral("new")));
+        QCOMPARE(store.read(key).value_or(QStringLiteral("<read failed>")), QString());
+
+        // After a failed write the store works as before.
+        QVERIFY(store.write(key, QStringLiteral("third")));
+        QCOMPARE(store.read(key).value_or(QStringLiteral("<read failed>")), QStringLiteral("third"));
+        QVERIFY(store.write(key, QString()));
+    }
 };
 
 QTEST_GUILESS_MAIN(MacKeychainStoreTest)
