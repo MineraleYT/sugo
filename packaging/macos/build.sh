@@ -16,6 +16,8 @@
 # set to a "Developer ID Application" identity signs it for distribution instead, with the hardened
 # runtime and the entitlements in entitlements.plist (notarization is a separate step, not done here).
 set -euo pipefail
+# With pipefail, "producer | grep -q" fails when grep stops at the first match and the producer,
+# still writing, dies of SIGPIPE: searched output is read into a variable (or a here-string) first.
 
 VERSION=${1:?version}
 OUT=${2:?output directory}
@@ -142,7 +144,7 @@ rpaths | while read -r rpath; do
         *) install_name_tool -delete_rpath "$rpath" "$CONTENTS/MacOS/Sugo" ;;
     esac
 done
-if ! rpaths | grep -qx '@executable_path/../Frameworks'; then
+if ! grep -qx '@executable_path/../Frameworks' <<<"$(rpaths)"; then
     install_name_tool -add_rpath @executable_path/../Frameworks "$CONTENTS/MacOS/Sugo"
 fi
 
@@ -165,13 +167,14 @@ done
 # D-Bus is Linux-only: Sugo itself must not link QtDBus on macOS. Qt from qt.io is built with
 # its dbus feature, though, and QtGui links QtDBus.framework, so macdeployqt has to ship it: name
 # what pulls it in instead of deleting it (QtGui would not load without it).
-if deps "$CONTENTS/MacOS/Sugo" | grep -q 'QtDBus\.framework/'; then
+sugo_deps=$(deps "$CONTENTS/MacOS/Sugo")
+if grep -q 'QtDBus\.framework/' <<<"$sugo_deps"; then
     fail "Sugo links QtDBus.framework: D-Bus code is built on macOS (see SUGO_DBUS in CMakeLists.txt)"
 fi
 if [ -e "$CONTENTS/Frameworks/QtDBus.framework" ]; then
     users=$(find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -not -path '*/QtDBus.framework/*' -print0 \
         | while IFS= read -r -d '' f; do
-              if otool -arch all -L "$f" 2>/dev/null | grep -q 'QtDBus\.framework/'; then echo "${f#"$CONTENTS"/}"; fi
+              if grep -q 'QtDBus\.framework/' <<<"$(otool -arch all -L "$f" 2>/dev/null)"; then echo "${f#"$CONTENTS"/}"; fi
           done)
     [ -n "$users" ] || fail "QtDBus.framework was deployed but nothing in the bundle links it"
     echo "note: QtDBus.framework is in the bundle only for Qt itself: $(echo $users)" >&2
@@ -180,20 +183,20 @@ fi
 # libsodium is linked statically: no libsodium dylib in the program (macdeployqt would copy one
 # for a single architecture from wherever CMake found it), and, once the sources use it, its code
 # in the program.
-if deps "$CONTENTS/MacOS/Sugo" | grep -qi 'libsodium'; then
+if grep -qi 'libsodium' <<<"$sugo_deps"; then
     fail "Sugo links a libsodium dylib: CMake did not find the static library of $WORK/sodium"
 fi
 if grep -rqs --include='*.cpp' --include='*.mm' '#include <sodium' "$SRC/src"; then
     for arch in arm64 x86_64; do
-        nm -arch "$arch" -g "$CONTENTS/MacOS/Sugo" | grep -q ' _sodium_init$' \
-            || fail "libsodium is not linked into Sugo ($arch)"
+        symbols=$(nm -arch "$arch" -g "$CONTENTS/MacOS/Sugo") || fail "cannot list the symbols of Sugo ($arch)"
+        grep -q ' _sodium_init$' <<<"$symbols" || fail "libsodium is not linked into Sugo ($arch)"
     done
 fi
 
 # HTTPS (update checks, CalDAV): a TLS backend that needs nothing outside the bundle.
 if [ ! -e "$CONTENTS/PlugIns/tls/libqsecuretransportbackend.dylib" ]; then
     [ -e "$CONTENTS/PlugIns/tls/libqopensslbackend.dylib" ] || fail "no TLS backend in PlugIns/tls"
-    find "$CONTENTS/Frameworks" -name 'libssl*.dylib' | grep -q . \
+    [ -n "$(find "$CONTENTS/Frameworks" -name 'libssl*.dylib')" ] \
         || fail "only the OpenSSL TLS backend was deployed, without OpenSSL"
 fi
 
@@ -206,9 +209,9 @@ done
 # the system's own libraries.
 macho_files() {
     find "$APP" -type f \( -perm -u+x -o -name '*.dylib' \) -print0 | while IFS= read -r -d '' f; do
-        if file -b "$f" | grep -q 'Mach-O'; then
-            printf '%s\0' "$f"
-        fi
+        case "$(file -b "$f")" in
+            *Mach-O*) printf '%s\0' "$f" ;;
+        esac
     done
 }
 problems=0
@@ -222,7 +225,7 @@ while IFS= read -r -d '' f; do
     done
     dir=$(dirname "$f")
     # A library lists its own install name among its dependencies: skip it.
-    own=$(otool -arch all -D "$f" 2>/dev/null | awk '!/:$/ { print; exit }')
+    own=$(otool -arch all -D "$f" 2>/dev/null | awk '!/:$/ && !found { print; found = 1 }')
     while read -r dep; do
         [ -n "$dep" ] && [ "$dep" != "$own" ] || continue
         case "$dep" in
