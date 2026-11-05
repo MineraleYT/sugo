@@ -559,6 +559,13 @@ bool Database::recoverSugo100Database()
 
     // Candidates: the files Sugo moved aside as foreign, whose header carries 1.0.0's id. Each is
     // copied (with its write-ahead log) into a private directory and converted there.
+    QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
+    names.removeIf([](const QString &name) {
+        return name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"));
+    });
+    if (names.isEmpty()) {
+        return checked(); // the usual case: nothing was ever moved aside
+    }
     QTemporaryDir work;
     if (!work.isValid()) {
         return true; // try again next time
@@ -567,11 +574,7 @@ bool Database::recoverSugo100Database()
     QString foundCopy;
     int candidates = 0;
     int copies = 0;
-    const QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
-    for (const QString &name : names) {
-        if (name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"))) {
-            continue;
-        }
+    for (const QString &name : std::as_const(names)) {
         const QString original = dir.filePath(name);
         // A file whose header still reads 0 may have its stamp in the write-ahead log.
         const qint64 headerId = headerApplicationId(original);

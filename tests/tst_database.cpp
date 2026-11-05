@@ -678,6 +678,20 @@ private Q_SLOTS:
         QCOMPARE(QDir(dir.path()).entryList({QStringLiteral("*.replaced-*")}, QDir::Files).size(), 1);
     }
 
+    void withoutFilesMovedAsideThereIsNothingToTakeBack()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        Database db(path);
+        QVERIFY(db.open());
+        QVERIFY(db.recoverSugo100Database());
+        QVERIFY(db.recoveredFromPath().isEmpty());
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT value FROM meta WHERE key = 'sugo100_recovery'")).toString(),
+                 QStringLiteral("checked"));
+        QCOMPARE(QDir(dir.path()).entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot),
+                 (QStringList{QStringLiteral("sugo.db"), QStringLiteral("sugo.db-shm"), QStringLiteral("sugo.db-wal")}));
+    }
+
     void dataIsTakenBackOnlyOnce()
     {
         // A user of 1.0.0's built-in timer only: taken back, then the history cleared. The 1.0.0
