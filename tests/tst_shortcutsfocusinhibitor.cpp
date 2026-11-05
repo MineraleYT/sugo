@@ -281,6 +281,36 @@ private Q_SLOTS:
         QCOMPARE(fake->runs(), (QStringList{QStringLiteral("run|My On|"), QStringLiteral("run|My Off|")}));
     }
 
+    void aFailingOnShortcutIsNotRetriedOnEveryRefresh()
+    {
+        QVERIFY(makeReady());
+        fake->setFails(kOn, true);
+        inhibitor->inhibit(QStringLiteral("work"));
+        QVERIFY(waitForInhibited(false));
+        QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), QStringList{kRunOn}, 5000);
+
+        // The application becoming active reads the same list again: no new try.
+        QSignalSpy listed(inhibitor.get(), &ShortcutsFocusInhibitor::shortcutListChanged);
+        inhibitor->refreshShortcutList();
+        QVERIFY(listed.wait(5000));
+        inhibitor->refreshShortcutList();
+        QVERIFY(listed.wait(5000));
+        QTest::qWait(300);
+        QCOMPARE(fake->runs(), QStringList{kRunOn});
+
+        // A list that changed (the user edited the shortcuts) is worth another try.
+        fake->setList({QStringLiteral("Other"), QStringLiteral("My On"), kOn, kOff});
+        inhibitor->refreshShortcutList();
+        QVERIFY(listed.wait(5000));
+        QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), (QStringList{kRunOn, kRunOn}), 5000);
+        QVERIFY(waitForInhibited(false));
+
+        // So are new names (with the same list).
+        inhibitor->setShortcutNames(QStringLiteral("My On"), kOff);
+        QVERIFY(listed.wait(5000));
+        QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), (QStringList{kRunOn, kRunOn, QStringLiteral("run|My On|")}), 5000);
+    }
+
     void aFailingListMakesItUnavailable()
     {
         QVERIFY(makeReady());
