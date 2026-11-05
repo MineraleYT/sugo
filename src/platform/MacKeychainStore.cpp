@@ -97,12 +97,18 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     // hoc signed build (each update has another code hash) may still change the data of an item
     // it cannot read. SecItemUpdate then succeeds, but leaves an item that neither build reads
     // without asking the user. Deleting needs no permission, and the new item is this build's.
-    if (!remove(key)) {
-        return false;
-    }
     const QByteArray utf8 = secret.toUtf8();
     const CFRef<CFDataRef> data(CFDataCreate(kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(utf8.constData()),
                                              static_cast<CFIndex>(utf8.size())));
+    if (!data.get()) {
+        // Checked before anything is deleted: a null value in the query would crash, not fail.
+        qCWarning(lcKeychain) << "Cannot store" << key << "in the Keychain: out of memory";
+        m_lastStatus = static_cast<int>(errSecAllocate);
+        return false;
+    }
+    if (!remove(key)) {
+        return false;
+    }
 
     const CFRef<CFMutableDictionaryRef> query(newItemQuery(m_service, key));
     CFDictionarySetValue(query.get(), kSecValueData, data.get());
