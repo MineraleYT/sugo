@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// How the phases of the timer in use start, over the composer's button: by hand, the breaks by
 /// themselves, or all of them. The choice is the timer's option "Start automatically".

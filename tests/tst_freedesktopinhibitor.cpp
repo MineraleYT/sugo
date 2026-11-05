@@ -187,7 +187,7 @@ private Q_SLOTS:
     {
         server = std::make_unique<FakeNotificationServer>();
         publishServer();
-        inhibitor = std::make_unique<FreedesktopInhibitor>(clientBus(), QStringLiteral("io.github.mineraleyt.sugo"));
+        inhibitor = std::make_unique<FreedesktopInhibitor>(clientBus(), QStringLiteral("stream.sugo.app"));
     }
 
     void cleanup()
@@ -204,7 +204,7 @@ private Q_SLOTS:
         QVERIFY(inhibitor->isInhibited());           // true already while the call is in flight
         QTRY_COMPARE(server->active.size(), 1);
         QCOMPARE(server->calls, (QStringList{QStringLiteral("Inhibit")}));
-        QCOMPARE(server->appIds.first(), QStringLiteral("io.github.mineraleyt.sugo"));
+        QCOMPARE(server->appIds.first(), QStringLiteral("stream.sugo.app"));
 
         inhibitor->release();
         inhibitor->release();
@@ -455,7 +455,7 @@ private Q_SLOTS:
         QVERIFY(serverConnection.isConnected());
         FakeNotificationServer started;
         {
-            FreedesktopInhibitor lateInhibitor(client, QStringLiteral("io.github.mineraleyt.sugo"));
+            FreedesktopInhibitor lateInhibitor(client, QStringLiteral("stream.sugo.app"));
             lateInhibitor.inhibit(QStringLiteral("focus"));
             QTest::qWait(200); // the call waits on the bus for the server it asked to start
             QVERIFY(started.calls.isEmpty());

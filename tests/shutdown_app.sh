@@ -54,8 +54,8 @@ env QT_QPA_PLATFORM=offscreen \
 app_pid=$!
 
 status_call() {
-    dbus-send --session --print-reply --dest=io.github.mineraleyt.sugo /Timer \
-        io.github.mineraleyt.sugo.Timer.status >/dev/null 2>&1
+    dbus-send --session --print-reply --dest=stream.sugo.app /Timer \
+        stream.sugo.app.Timer.status >/dev/null 2>&1
 }
 for _ in $(seq 1 100); do
     status_call && break
@@ -67,7 +67,7 @@ if ! status_call; then
     exit 1
 fi
 # Something running while it quits: the session is saved, the silencing handed back.
-dbus-send --session --print-reply --dest=io.github.mineraleyt.sugo /Timer io.github.mineraleyt.sugo.Timer.start >/dev/null
+dbus-send --session --print-reply --dest=stream.sugo.app /Timer stream.sugo.app.Timer.start >/dev/null
 
 kill -TERM "$app_pid"
 set +e

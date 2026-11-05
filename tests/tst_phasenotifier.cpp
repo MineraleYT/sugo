@@ -214,7 +214,7 @@ private Q_SLOTS:
         const auto &shown = notifications->last();
         QCOMPARE(shown.title, QStringLiteral("Work session finished"));
         QCOMPARE(shown.text, QStringLiteral("Time for a short break: 5 minutes."));
-        QCOMPARE(shown.iconName, QStringLiteral("io.github.mineraleyt.sugo"));
+        QCOMPARE(shown.iconName, QStringLiteral("stream.sugo.app"));
         QCOMPARE(notifications->actionLabels(), (QStringList{QStringLiteral("Start Short Break"), QStringLiteral("Skip Break")}));
         QVERIFY(!shown.reply); // no settings, no task note
 

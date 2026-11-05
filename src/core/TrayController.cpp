@@ -25,7 +25,7 @@
 
 namespace
 {
-const QString kIconName = QStringLiteral("io.github.mineraleyt.sugo");
+const QString kIconName = QStringLiteral("stream.sugo.app");
 
 /// The outline of `rect` with rounded corners, starting at 12 o'clock and running clockwise.
 QPainterPath roundedFromTop(const QRectF &rect, double radius)

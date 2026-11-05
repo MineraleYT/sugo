@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * The tour of the first start, in four steps: the logo comes in and says what Sugo is; how a

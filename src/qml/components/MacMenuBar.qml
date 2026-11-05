@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import Qt.labs.platform as Platform
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * The menu bar of macOS, created only there (Main.qml loads it when DesktopStyle.nativeChrome).

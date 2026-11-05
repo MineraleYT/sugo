@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import QtQuick.Dialogs
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// Settings of the program itself. The options of each timer live on that timer's own page.
 QQC2.Page {
@@ -2294,7 +2294,7 @@ QQC2.Page {
                 spacing: Theme.spaceLg
 
                 Image {
-                    source: "qrc:/icons/io.github.mineraleyt.sugo.svg"
+                    source: "qrc:/icons/stream.sugo.app.svg"
                     sourceSize.width: Theme.aboutLogo * 2
                     sourceSize.height: Theme.aboutLogo * 2
                     Layout.preferredWidth: Theme.aboutLogo
@@ -2427,7 +2427,7 @@ QQC2.Page {
                         visible: updateRow.step === "error"
                         kind: "ghost"
                         text: i18n("Open Releases Page")
-                        onClicked: Qt.openUrlExternally("https://github.com/MineraleYT/sugo/releases")
+                        onClicked: Qt.openUrlExternally("https://github.com/sugoHQ/sugo/releases")
                     }
                     SButton {
                         visible: updateRow.step === "error"
@@ -2447,7 +2447,7 @@ QQC2.Page {
                 LinkRow {
                     first: true
                     text: i18n("Report a bug")
-                    url: "https://github.com/MineraleYT/sugo/issues"
+                    url: "https://github.com/sugoHQ/sugo/issues"
                 }
                 LinkRow {
                     text: i18n("Project website")

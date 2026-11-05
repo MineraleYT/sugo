@@ -7,10 +7,12 @@ Name=Sugo
 GenericName=Pomodoro Timer
 Comment=Pomodoro timer with work and break statistics
 Exec=sugo
-Icon=io.github.mineraleyt.sugo
+Icon=stream.sugo.app
 Terminal=false
 Categories=Qt;Utility;
 Keywords=pomodoro;timer;focus;productivity;
 StartupNotify=true
 # Lets the task manager find this entry even when an AppImage integrator renames the file.
-StartupWMClass=io.github.mineraleyt.sugo
+StartupWMClass=stream.sugo.app
+# The app ID before 1.0.3: Flatpak and the task managers carry pins and favourites over.
+X-Flatpak-RenamedFrom=io.github.mineraleyt.sugo.desktop;

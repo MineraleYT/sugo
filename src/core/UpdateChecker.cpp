@@ -20,8 +20,18 @@
 
 namespace
 {
-const QString kReleasesPage = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
-const QString kDownloadPrefix = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/");
+const QString kReleasesPage = QStringLiteral("https://github.com/sugoHQ/sugo/releases");
+const QString kDownloadPrefix = QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/");
+/// The project's paths on github.com: its own, and the one it had before it moved to the
+/// organization (GitHub redirects it, and the feeds keep using it so that older versions, which
+/// trust only that one, can still update).
+const QLatin1String kProjectPaths[] = {QLatin1String("/sugoHQ/sugo/"), QLatin1String("/MineraleYT/sugo/")};
+
+bool isProjectPath(const QString &path, const QString &below, Qt::CaseSensitivity cs)
+{
+    return std::any_of(std::begin(kProjectPaths), std::end(kProjectPaths),
+                       [&](QLatin1String project) { return path.startsWith(project + below, cs); });
+}
 /// An AppImage of Sugo is about 50 MB, the macOS disk image about twice that; a feed announcing
 /// more than this is not believed.
 constexpr qint64 kMaxDownloadSize = 512 * 1024 * 1024;
@@ -236,8 +246,8 @@ QUrl UpdateChecker::feedUrl(const QString &channel)
 {
     // The newest release's feed is always at the same address; the nightly's is held by the release "nightly".
     return channel == QLatin1String("nightly")
-        ? QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/nightly/nightly.json"))
-        : QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/latest/download/stable.json"));
+        ? QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/nightly/nightly.json"))
+        : QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/latest/download/stable.json"));
 }
 
 void UpdateChecker::reset()
@@ -261,7 +271,7 @@ QString UpdateChecker::safeReleaseUrl(const QString &url)
     if (parsed.isValid() && parsed.scheme() == QLatin1String("https")
         && parsed.host().compare(QLatin1String("github.com"), Qt::CaseInsensitive) == 0
         && parsed.userInfo().isEmpty() && parsed.port() == -1
-        && parsed.path().startsWith(QLatin1String("/MineraleYT/sugo/"), Qt::CaseInsensitive)) {
+        && isProjectPath(parsed.path(), QString(), Qt::CaseInsensitive)) {
         return parsed.toString();
     }
     return kReleasesPage;
@@ -276,7 +286,8 @@ QString UpdateChecker::trustedDownloadUrl(const QString &url) const
     if (parsed.isValid() && parsed.scheme() == QLatin1String("https")
         && parsed.host().compare(QLatin1String("github.com"), Qt::CaseInsensitive) == 0
         && parsed.userInfo().isEmpty() && parsed.port() == -1 && !parsed.hasQuery() && !parsed.hasFragment()
-        && parsed.path().startsWith(QLatin1String("/MineraleYT/sugo/releases/download/")) && !parsed.path().contains(QLatin1String("/../"))) {
+        && isProjectPath(parsed.path(), QStringLiteral("releases/download/"), Qt::CaseSensitive)
+        && !parsed.path().contains(QLatin1String("/../"))) {
         return parsed.toString();
     }
     return QString();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * A row of a FormSection: the title and a description on the left, the control on the right, or

@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /**
  * The bar at the top of the window: the logo and the name at the left, the three tabs (Focus,
@@ -106,7 +106,7 @@ Rectangle {
             onCloseRequested: bar.closeRequested()
         }
         Image {
-            source: "qrc:/icons/io.github.mineraleyt.sugo.svg"
+            source: "qrc:/icons/stream.sugo.app.svg"
             sourceSize.width: Theme.logoSmall * 2
             sourceSize.height: Theme.logoSmall * 2
             Layout.preferredWidth: Theme.logoSmall

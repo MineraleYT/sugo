@@ -2,7 +2,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A message inside a page: `tone` "info", "warning" or "danger"; buttons go in as children.
 /// A message that may come, go or change belongs in a MessageSlot, which keeps its place.

@@ -21,6 +21,7 @@ sugo_add_test(tst_presetrepository Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
 sugo_add_test(tst_autostart Qt6::Core Qt6::Gui ${SUGO_DBUS})
+sugo_add_test(tst_legacyappid Qt6::Core)
 sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 sugo_add_test(tst_alertsound Qt6::Core Qt6::Multimedia)
 sugo_add_test(tst_traypresenter Qt6::Core Qt6::Qml)
@@ -67,11 +68,11 @@ sugo_add_test(tst_synccontroller Qt6::Core Qt6::Qml Qt6::Network Qt6::Sql)
 
 # The installed runner definition carries the project version (see the top-level CMakeLists.txt).
 add_test(NAME tst_runner_version
-    COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
+    COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/stream.sugo.app.runner.desktop
 )
 # KRunner skips a query shorter than the runner's minimum: it must let the bare keyword "sugo" through.
 add_test(NAME tst_runner_min_letters
-    COMMAND grep -qx "X-Plasma-Runner-Min-Letter-Count=[1-4]" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
+    COMMAND grep -qx "X-Plasma-Runner-Min-Letter-Count=[1-4]" ${CMAKE_BINARY_DIR}/stream.sugo.app.runner.desktop
 )
 
 # Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,

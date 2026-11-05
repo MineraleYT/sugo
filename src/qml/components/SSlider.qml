@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls as QQC2
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A slider: a thin track, filled up to a round handle in the accent colour.
 QQC2.Slider {

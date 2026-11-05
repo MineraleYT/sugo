@@ -59,7 +59,7 @@ QString categoryIdentifier(const QList<ActionSpec> &actions)
             hash.addData(bytes);
         }
     }
-    return QStringLiteral("io.github.mineraleyt.sugo.actions.") + QString::fromLatin1(hash.result().toHex().left(16));
+    return QStringLiteral("stream.sugo.app.actions.") + QString::fromLatin1(hash.result().toHex().left(16));
 }
 } // namespace MacNotificationMapping
 
@@ -70,7 +70,7 @@ MacNotificationRegistry::MacNotificationRegistry(int capacity)
 
 QString MacNotificationRegistry::add(QObject *context, const Notifier::Notification &notification)
 {
-    const QString id = QStringLiteral("io.github.mineraleyt.sugo.") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString id = QStringLiteral("stream.sugo.app.") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     Entry entry;
     entry.context = context;
     entry.notification = notification;

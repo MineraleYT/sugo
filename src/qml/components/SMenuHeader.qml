@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import io.github.mineraleyt.sugo
+import stream.sugo.app
 
 /// A small caption over a group of rows in an SMenu ("Start automatically").
 Item {

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-app-id: io.github.mineraleyt.sugo
+app-id: stream.sugo.app
 runtime: org.kde.Platform
 runtime-version: '6.11'
 sdk: org.kde.Sdk
 command: sugo
-# Owning io.github.mineraleyt.sugo (single instance, /Timer, /krunner) needs no permission:
+# Owning stream.sugo.app (single instance, /Timer, /krunner) needs no permission:
 # an app may always own its own ID. The Background portal (start at login) and the other
 # xdg-desktop-portal interfaces are reachable by default. Flatpak exports the D-Bus service
 # file (share/dbus-1/services) and, with a flatpak recent enough to know that export, the
@@ -24,6 +24,9 @@ finish-args:
   # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal) or the
   # session is locked (its LockedHint, Lock and Unlock).
   - --system-talk-name=org.freedesktop.login1
+  # Read only: the data of Sugo 1.0.2 and older, whose Flatpak had the app ID
+  # io.github.mineraleyt.sugo, copied over at the first start (src/platform/LegacyAppId.h).
+  - --filesystem=~/.var/app/io.github.mineraleyt.sugo:ro
 modules:
   # Sugo Sync's encryption: neither the KDE runtime nor the freedesktop SDK under it has libsodium.
   - name: libsodium
