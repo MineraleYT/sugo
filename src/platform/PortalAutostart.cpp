@@ -32,6 +32,8 @@ class PortalResponse : public QObject
     Q_OBJECT
 
 public:
+    QString handle; // the request's object path
+    bool enabled = false; // what was asked for
     bool received = false;
     uint code = 2; // 0 success, 1 cancelled by the user, 2 other error
     QVariantMap results;
@@ -74,22 +76,63 @@ bool PortalAutostart::storeState(bool enabled) const
     return file.open(QIODevice::WriteOnly) && file.write("autostart=true\n") >= 0 && file.commit();
 }
 
+PortalAutostart::~PortalAutostart()
+{
+    dropPendingRequest();
+}
+
+void PortalAutostart::listen(const QString &handle, PortalResponse *response)
+{
+    m_bus.connect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), response,
+                  SLOT(onResponse(uint, QVariantMap)));
+}
+
+void PortalAutostart::stopListening(const QString &handle, PortalResponse *response)
+{
+    m_bus.disconnect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), response,
+                     SLOT(onResponse(uint, QVariantMap)));
+}
+
+void PortalAutostart::dropPendingRequest()
+{
+    if (!m_pending) {
+        return;
+    }
+    stopListening(m_pending->handle, m_pending.get());
+    m_pending.reset();
+}
+
+bool PortalAutostart::confirms(const PortalResponse &response, bool enabled)
+{
+    if (response.code != 0) {
+        qCWarning(lcPortalAutostart) << "The Background portal refused the request (response" << response.code << ")";
+        return false;
+    }
+    if (response.results.value(QStringLiteral("autostart"), enabled).toBool() != enabled) {
+        qCWarning(lcPortalAutostart) << "The Background portal did not change the login entry";
+        return false;
+    }
+    return true;
+}
+
 bool PortalAutostart::setEnabled(bool enabled)
 {
     if (!m_bus.isConnected()) {
         return false;
     }
+    // Only the latest choice counts: the answer to an older request is no longer awaited.
+    dropPendingRequest();
 
     // Subscribe to the request's Response before asking, at the path the portal will use
     // (…/request/<our unique name>/<token>), so a quick answer cannot be missed.
     const QString token = QStringLiteral("sugo_") + QUuid::createUuid().toString(QUuid::Id128);
     QString sender = m_bus.baseService().mid(1);
     sender.replace(QLatin1Char('.'), QLatin1Char('_'));
-    QString handle = kPortalPath + QStringLiteral("/request/") + sender + QLatin1Char('/') + token;
 
-    PortalResponse response;
-    m_bus.connect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), &response,
-                  SLOT(onResponse(uint, QVariantMap)));
+    auto response = std::make_unique<PortalResponse>();
+    response->handle = kPortalPath + QStringLiteral("/request/") + sender + QLatin1Char('/') + token;
+    response->enabled = enabled;
+    listen(response->handle, response.get());
 
     QDBusMessage call = QDBusMessage::createMethodCall(kPortalService, kPortalPath, kBackgroundInterface,
                                                        QStringLiteral("RequestBackground"));
@@ -104,42 +147,56 @@ bool PortalAutostart::setEnabled(bool enabled)
     const QDBusReply<QDBusObjectPath> reply = m_bus.call(call, QDBus::BlockWithGui, 10000);
     if (!reply.isValid()) {
         qCWarning(lcPortalAutostart) << "Background portal request failed:" << reply.error().message();
-        m_bus.disconnect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), &response,
-                         SLOT(onResponse(uint, QVariantMap)));
+        stopListening(response->handle, response.get());
         return false;
     }
-    if (reply.value().path() != handle && !response.received) {
+    if (reply.value().path() != response->handle && !response->received) {
         // Older portals choose their own path.
-        m_bus.disconnect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), &response,
-                         SLOT(onResponse(uint, QVariantMap)));
-        handle = reply.value().path();
-        m_bus.connect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), &response,
-                      SLOT(onResponse(uint, QVariantMap)));
+        stopListening(response->handle, response.get());
+        response->handle = reply.value().path();
+        listen(response->handle, response.get());
     }
 
-    if (!response.received) {
+    if (!response->received) {
         QEventLoop loop;
-        QObject::connect(&response, &PortalResponse::done, &loop, &QEventLoop::quit);
+        QObject::connect(response.get(), &PortalResponse::done, &loop, &QEventLoop::quit);
         QTimer::singleShot(m_responseTimeoutMs, &loop, &QEventLoop::quit);
         loop.exec(QEventLoop::ExcludeUserInputEvents);
     }
-    m_bus.disconnect(kPortalService, handle, kRequestInterface, QStringLiteral("Response"), &response,
-                     SLOT(onResponse(uint, QVariantMap)));
 
-    if (!response.received) {
-        // Only a confirmed answer is stored: the user may still refuse.
-        qCWarning(lcPortalAutostart) << "No answer from the Background portal in time";
+    if (!response->received) {
+        // The dialog may still be open: if the user allows the change later, the portal makes
+        // it, so the answer is still listened to. Only a confirmed answer is stored.
+        qCWarning(lcPortalAutostart) << "No answer from the Background portal in time; still waiting for it";
+        QObject::connect(response.get(), &PortalResponse::done, response.get(), [this]() {
+            onLateResponse();
+        });
+        m_pending = std::move(response);
         return false;
     }
-    if (response.code != 0) {
-        qCWarning(lcPortalAutostart) << "The Background portal refused the request (response" << response.code << ")";
-        return false;
+    stopListening(response->handle, response.get());
+    return confirms(*response, enabled) && storeState(enabled);
+}
+
+void PortalAutostart::onLateResponse()
+{
+    // Called from the response's own signal: deleted once that returns.
+    PortalResponse *response = m_pending.release();
+    stopListening(response->handle, response);
+    response->deleteLater();
+
+    if (!confirms(*response, response->enabled)) {
+        return;
     }
-    if (response.results.value(QStringLiteral("autostart"), enabled).toBool() != enabled) {
-        qCWarning(lcPortalAutostart) << "The Background portal did not change the login entry";
-        return false;
+    const bool before = isEnabled();
+    if (!storeState(response->enabled)) {
+        qCWarning(lcPortalAutostart) << "Cannot store the Background portal's late answer in" << m_stateFile;
+        return;
     }
-    return storeState(enabled);
+    qCInfo(lcPortalAutostart) << "The Background portal answered late: start at login" << (response->enabled ? "on" : "off");
+    if (isEnabled() != before) {
+        notifyChanged();
+    }
 }
 
 #include "PortalAutostart.moc"

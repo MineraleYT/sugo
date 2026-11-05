@@ -361,16 +361,41 @@ private Q_SLOTS:
         const QString state = tmp.filePath(QStringLiteral("config/portal-autostart"));
         {
             PortalAutostart impatient(client, state, QStringLiteral("reason"), {QStringLiteral("sugo")}, 10);
+            int changes = 0;
+            impatient.setChangedCallback([&changes]() { ++changes; });
             // No answer in time: a failure for now, nothing stored yet.
             QVERIFY(!impatient.setEnabled(true));
             QVERIFY(!impatient.isEnabled());
-            // The portal wrote the login entry once the user allowed it: Sugo must know.
+            QCOMPARE(changes, 0);
+            // The portal wrote the login entry once the user allowed it: Sugo must know, and say so.
             QTRY_VERIFY(impatient.isEnabled());
+            QCOMPARE(changes, 1);
 
             // The same for switching it off.
             QVERIFY(!impatient.setEnabled(false));
             QVERIFY(impatient.isEnabled());
             QTRY_VERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+
+            // A late refusal changes nothing.
+            portal.answer = 1;
+            QVERIFY(!impatient.setEnabled(true));
+            QTest::qWait(portal.answerDelayMs + 200);
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+            portal.answer = 0;
+
+            // Only the latest request counts: the late "yes" to switching on is not kept once
+            // switching off was asked for.
+            QVERIFY(!impatient.setEnabled(true));
+            portal.answerDelayMs = 600;
+            QVERIFY(!impatient.setEnabled(false));
+            QTest::qWait(400); // the first request's answer
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+            QTest::qWait(400); // the second one's
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
         }
 
         server.unregisterObject(kPortalPath);
