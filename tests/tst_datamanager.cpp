@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QFileInfo>
 #include <QDateTime>
+#include <QDir>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -488,6 +489,70 @@ private Q_SLOTS:
         const auto stored = sessions->between(0, 2000);
         QCOMPARE(stored.size(), 1);
         QCOMPARE(stored.first().presetName, QStringLiteral("Current"));
+    }
+
+    void restoreKeepsTheSugo100RecoveryMarker()
+    {
+        // The one-time look for Sugo 1.0.0's data belongs to this computer's database, not to the
+        // backup: a backup taken before the look (or elsewhere) must neither take its mark away
+        // nor bring its own.
+        QTemporaryDir here;
+        QVERIFY(here.isValid());
+        const QString path = here.filePath(QStringLiteral("sugo.db"));
+        const QString aside = path + QStringLiteral(".foreign-20260101-000000");
+        const QUrl backup = QUrl::fromLocalFile(here.filePath(QStringLiteral("backup.db")));
+        const auto marker = [](const QString &connection) {
+            QSqlQuery query(QSqlDatabase::database(connection, false));
+            if (!query.exec(QStringLiteral("SELECT value FROM meta WHERE key = 'sugo100_recovery'"))) {
+                return QStringLiteral("<unreadable>");
+            }
+            return query.next() ? query.value(0).toString() : QString();
+        };
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            SessionRepository repo(db.connectionName());
+            DataManager data(&db, &repo, nullptr, nullptr, nullptr);
+            QVERIFY(repo.insert(sampleRecord(QStringLiteral("Before the look"))));
+            QVERIFY(data.backupDatabase(backup)); // no mark in it yet
+        }
+        createSugo100Database(aside); // what 1.0.1 moved aside
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            QVERIFY(db.recoverSugo100Database());
+            QVERIFY(db.recoveredFromPath().isEmpty()); // the user had data: looked once, nothing taken
+            QCOMPARE(marker(db.connectionName()), QStringLiteral("checked"));
+
+            SessionRepository repo(db.connectionName());
+            DataManager data(&db, &repo, nullptr, nullptr, nullptr);
+            QVERIFY(data.restoreDatabase(backup));
+            QCOMPARE(data.sessionCount(), 1);
+            QCOMPARE(marker(db.connectionName()), QStringLiteral("checked"));
+            QVERIFY(data.clearHistory()); // the user empties the database on purpose
+        }
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            QVERIFY(db.recoverSugo100Database());
+            QVERIFY(db.recoveredFromPath().isEmpty());
+            QVERIFY(db.replacedPath().isEmpty());
+            SessionRepository repo(db.connectionName());
+            QCOMPARE(repo.between(0, std::numeric_limits<qint64>::max()).size(), 0);
+        }
+        QCOMPARE(QDir(here.path()).entryList({QStringLiteral("*.replaced-*")}, QDir::Files).size(), 0);
+
+        // A backup carrying another computer's mark does not bring it here.
+        QVERIFY(execOn(backup.toLocalFile(), {QStringLiteral("INSERT INTO meta (key, value) VALUES "
+                                                             "('sugo100_recovery', 'sugo.db.foreign-elsewhere')")}));
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            SessionRepository repo(db.connectionName());
+            DataManager data(&db, &repo, nullptr, nullptr, nullptr);
+            QVERIFY(data.restoreDatabase(backup));
+            QCOMPARE(marker(db.connectionName()), QStringLiteral("checked"));
+        }
     }
 
         void temporaryDatabaseIsReported()
