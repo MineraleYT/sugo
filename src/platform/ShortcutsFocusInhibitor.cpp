@@ -4,8 +4,10 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QTimer>
 
+#include <algorithm>
 #include <memory>
 
 Q_LOGGING_CATEGORY(lcShortcutsInhibitor, "sugo.platform.inhibitor.shortcuts")
@@ -25,7 +27,8 @@ bool ShortcutsFocusInhibitor::toolFound() const
 bool ShortcutsFocusInhibitor::isAvailable() const
 {
     return !m_onShortcut.isEmpty() && !m_offShortcut.isEmpty() && m_list.contains(m_onShortcut)
-        && m_list.contains(m_offShortcut) && toolFound();
+        && m_list.contains(m_offShortcut) && !runArgument(m_onShortcut, m_identifiers).isEmpty()
+        && !runArgument(m_offShortcut, m_identifiers).isEmpty() && toolFound();
 }
 
 void ShortcutsFocusInhibitor::setShortcutNames(const QString &onShortcut, const QString &offShortcut)
@@ -56,6 +59,31 @@ QStringList ShortcutsFocusInhibitor::parseShortcutList(const QByteArray &output)
     return names;
 }
 
+QHash<QString, QString> ShortcutsFocusInhibitor::parseShortcutIdentifiers(const QByteArray &output)
+{
+    // The identifier is the last thing on the line: a name may hold parentheses of its own.
+    static const QRegularExpression line(QStringLiteral("^(.*\\S)\\s+\\(([0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12})\\)$"));
+    QHash<QString, QString> identifiers;
+    for (const QString &text : QString::fromUtf8(output).split(QLatin1Char('\n'))) {
+        const QRegularExpressionMatch match = line.match(text.trimmed());
+        if (match.hasMatch()) {
+            const QString name = match.captured(1).trimmed();
+            if (!identifiers.contains(name)) {
+                identifiers.insert(name, match.captured(2));
+            }
+        }
+    }
+    return identifiers;
+}
+
+QString ShortcutsFocusInhibitor::runArgument(const QString &name, const QHash<QString, QString> &identifiers)
+{
+    if (!name.startsWith(QLatin1Char('-'))) {
+        return name;
+    }
+    return identifiers.value(name);
+}
+
 void ShortcutsFocusInhibitor::refreshShortcutList()
 {
     if (m_listing) {
@@ -70,29 +98,54 @@ void ShortcutsFocusInhibitor::refreshShortcutList()
     }
     m_listing = true;
     runProgram({QStringLiteral("list")}, m_listTimeoutMs, [this](bool ok, bool, const QByteArray &output, const QString &error) {
-        m_listing = false;
         QStringList list;
         if (ok) {
             list = parseShortcutList(output);
         } else {
             qCWarning(lcShortcutsInhibitor) << "Cannot list the shortcuts:" << error;
         }
-        if (list != m_list) {
-            m_list = list;
-            // The shortcuts may have been fixed: worth another try. The same list again (read
-            // each time the application becomes active) is not, or a broken "on" would run on
-            // every activation.
-            m_onFailed = false;
+        const bool needIdentifiers = std::any_of(list.cbegin(), list.cend(), [](const QString &name) {
+            return name.startsWith(QLatin1Char('-'));
+        });
+        if (!needIdentifiers) {
+            finishListing(list, {});
+            return;
         }
-        report();
-        Q_EMIT shortcutListChanged();
-        if (m_listAgain) {
-            m_listAgain = false;
-            refreshShortcutList();
-        } else {
-            sync(); // silencing may have been wanted while the shortcuts were not known yet
-        }
+        // Only these need them: the plain list works with every version of the tool.
+        runProgram({QStringLiteral("list"), QStringLiteral("--show-identifiers")}, m_listTimeoutMs,
+                   [this, list](bool ok, bool, const QByteArray &output, const QString &error) {
+                       QHash<QString, QString> identifiers;
+                       if (ok) {
+                           identifiers = parseShortcutIdentifiers(output);
+                       } else {
+                           qCWarning(lcShortcutsInhibitor)
+                               << "Cannot read the identifiers of the shortcuts; those whose name starts with \"-\" cannot run:"
+                               << error;
+                       }
+                       finishListing(list, identifiers);
+                   });
     });
+}
+
+void ShortcutsFocusInhibitor::finishListing(const QStringList &list, const QHash<QString, QString> &identifiers)
+{
+    m_listing = false;
+    if (list != m_list || identifiers != m_identifiers) {
+        m_list = list;
+        m_identifiers = identifiers;
+        // The shortcuts may have been fixed: worth another try. The same list again (read
+        // each time the application becomes active) is not, or a broken "on" would run on
+        // every activation.
+        m_onFailed = false;
+    }
+    report();
+    Q_EMIT shortcutListChanged();
+    if (m_listAgain) {
+        m_listAgain = false;
+        refreshShortcutList();
+    } else {
+        sync(); // silencing may have been wanted while the shortcuts were not known yet
+    }
 }
 
 void ShortcutsFocusInhibitor::inhibit(const QString &reason)
@@ -130,9 +183,9 @@ void ShortcutsFocusInhibitor::sync()
         m_busy = true;
         // The names may change while the Focus is on (the settings, "Install Shortcuts"): the
         // release must still run the "off" that goes with this "on".
-        m_releaseShortcut = m_offShortcut;
+        m_releaseShortcut = runArgument(m_offShortcut, m_identifiers);
         report();
-        runProgram({QStringLiteral("run"), m_onShortcut}, m_runTimeoutMs,
+        runProgram({QStringLiteral("run"), runArgument(m_onShortcut, m_identifiers)}, m_runTimeoutMs,
                    [this](bool ok, bool timedOut, const QByteArray &, const QString &error) {
                        m_busy = false;
                        if (!ok) {

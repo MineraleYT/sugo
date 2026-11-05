@@ -60,6 +60,25 @@ private Q_SLOTS:
         QVERIFY(ShortcutsFocusInhibitor::parseShortcutList("").isEmpty());
     }
 
+    void parsesTheIdentifiers()
+    {
+        const QHash<QString, QString> ids = ShortcutsFocusInhibitor::parseShortcutIdentifiers(
+            "-Focus On (9A5ED166-E259-42AE-A9EA-B87D85B90E59)\n"
+            "  Notes (draft) (2cde1111-0804-421f-92f3-84d753d89044)  \r\n"
+            "No identifier\n"
+            "\n"
+            "-Focus On (11111111-2222-3333-4444-555555555555)\n");
+        QCOMPARE(ids.size(), 2);
+        QCOMPARE(ids.value(QStringLiteral("-Focus On")), QStringLiteral("9A5ED166-E259-42AE-A9EA-B87D85B90E59")); // the first
+        QCOMPARE(ids.value(QStringLiteral("Notes (draft)")), QStringLiteral("2cde1111-0804-421f-92f3-84d753d89044"));
+        QVERIFY(ShortcutsFocusInhibitor::parseShortcutIdentifiers("").isEmpty());
+
+        QCOMPARE(ShortcutsFocusInhibitor::runArgument(kOn, ids), kOn);
+        QCOMPARE(ShortcutsFocusInhibitor::runArgument(QStringLiteral("-Focus On"), ids),
+                 QStringLiteral("9A5ED166-E259-42AE-A9EA-B87D85B90E59"));
+        QVERIFY(ShortcutsFocusInhibitor::runArgument(QStringLiteral("-Unknown"), ids).isEmpty());
+    }
+
     void unavailableWithoutTheTool()
     {
         ShortcutsFocusInhibitor missing(QStringLiteral("/nonexistent/shortcuts"));
@@ -335,6 +354,70 @@ private Q_SLOTS:
         inhibitor->setShortcutNames(QStringLiteral("My On"), kOff);
         QVERIFY(listed.wait(5000));
         QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), (QStringList{kRunOn, kRunOn, QStringLiteral("run|My On|")}), 5000);
+    }
+
+    void aShortcutWhoseNameStartsWithADashRunsByItsIdentifier()
+    {
+        // `shortcuts run -Name` takes the name for an option (and `run -- -Name` does not work
+        // either): such a shortcut is run by the identifier the list gives it.
+        const QString dashOn = QStringLiteral("-Focus On");
+        const QString dashOff = QStringLiteral("--Focus Off");
+        fake->setList({QStringLiteral("Other"), dashOn, dashOff});
+        QSignalSpy listed(inhibitor.get(), &ShortcutsFocusInhibitor::shortcutListChanged);
+        inhibitor->setShortcutNames(dashOn, dashOff);
+        QVERIFY(listed.wait(5000));
+        QVERIFY(inhibitor->isAvailable());
+        QCOMPARE(inhibitor->shortcutList(), (QStringList{dashOff, dashOn, QStringLiteral("Other")}));
+
+        inhibitor->inhibit(QStringLiteral("work"));
+        QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), QStringList{QStringLiteral("run|%1|").arg(fake->identifierOf(dashOn))}, 5000);
+        QTest::qWait(200);
+        QVERIFY(inhibitor->isInhibited());
+        inhibitor->release();
+        QVERIFY(waitForInhibited(false));
+        QCOMPARE(fake->runs(), (QStringList{QStringLiteral("run|%1|").arg(fake->identifierOf(dashOn)),
+                                            QStringLiteral("run|%1|").arg(fake->identifierOf(dashOff))}));
+    }
+
+    void onlyADashedNameReadsTheIdentifiers()
+    {
+        // Other names are run by name: one plain list, as before.
+        QVERIFY(makeReady());
+        QCOMPARE(fake->calls(), QStringList{QStringLiteral("list|")});
+
+        // A dashed name in the list (even one not chosen) reads them too.
+        fake->setList({QStringLiteral("-Other"), kOn, kOff});
+        QSignalSpy listed(inhibitor.get(), &ShortcutsFocusInhibitor::shortcutListChanged);
+        inhibitor->refreshShortcutList();
+        QVERIFY(listed.wait(5000));
+        QCOMPARE(fake->calls(), (QStringList{QStringLiteral("list|"), QStringLiteral("list|"),
+                                             QStringLiteral("list|--show-identifiers|")}));
+        QVERIFY(inhibitor->isAvailable());
+        inhibitor->inhibit(QStringLiteral("work"));
+        QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), QStringList{kRunOn}, 5000);
+    }
+
+    void aDashedNameWithoutAnIdentifierIsUnavailable()
+    {
+        // A tool that cannot list the identifiers: the dashed shortcut cannot be run at all.
+        fake->setNoIdentifiers(true);
+        const QString dashOn = QStringLiteral("-Focus On");
+        fake->setList({dashOn, kOn, kOff});
+        QSignalSpy listed(inhibitor.get(), &ShortcutsFocusInhibitor::shortcutListChanged);
+        inhibitor->setShortcutNames(dashOn, kOff);
+        QVERIFY(listed.wait(5000));
+        // Still listed (the picker shows what is there), but not available.
+        QCOMPARE(inhibitor->shortcutList(), (QStringList{dashOn, kOff, kOn}));
+        QVERIFY(!inhibitor->isAvailable());
+        inhibitor->inhibit(QStringLiteral("work"));
+        QTest::qWait(300);
+        QVERIFY(fake->runs().isEmpty());
+        QVERIFY(!inhibitor->isInhibited());
+
+        // Names that need no identifier still work with that tool.
+        inhibitor->setShortcutNames(kOn, kOff);
+        QVERIFY(listed.wait(5000));
+        QVERIFY(inhibitor->isAvailable());
     }
 
     void aFailingListMakesItUnavailable()
