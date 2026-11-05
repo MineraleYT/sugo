@@ -806,7 +806,7 @@ QQC2.Page {
         }
     }
 
-    // --- Bottom bar: skip, the step dots, back and next ---------------------------------------
+    // --- Bottom bar: skip at the left; the step dots, back and next at the right ---------------
 
     // Opaque, so that a scrolled step never shows through it (the software renderer does not
     // clip shapes).
@@ -815,7 +815,7 @@ QQC2.Page {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        implicitHeight: Theme.space4xl + Theme.spaceMd
+        implicitHeight: Theme.welcomeFooterHeight
         height: implicitHeight
         color: Theme.background
 
@@ -828,7 +828,7 @@ QQC2.Page {
         SButton {
             id: skipButton
             anchors.left: parent.left
-            anchors.leftMargin: Theme.spaceXl
+            anchors.leftMargin: Theme.welcomeFooterPaddingX
             anchors.verticalCenter: parent.verticalCenter
             kind: "ghost"
             text: i18n("Skip Tour")
@@ -842,10 +842,14 @@ QQC2.Page {
             readonly property int count: page.count
             // Only ever follows the steps; the dots move the steps themselves.
             readonly property int currentIndex: page.current
-            anchors.centerIn: parent
+            // Left of the room Back takes on every step but the first: the dots never move.
+            anchors.right: navButtons.right
+            anchors.rightMargin: backButton.implicitWidth + primaryButton.Layout.preferredWidth + navButtons.spacing + Theme.spaceLg
+            anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.spaceSm
             // Hidden when the window is too narrow to fit the dots between the buttons.
-            visible: parent.width - 2 * Math.max(skipButton.implicitWidth, navButtons.implicitWidth) - Theme.space4xl > implicitWidth
+            visible: bottomBar.width - 2 * Theme.welcomeFooterPaddingX - skipButton.implicitWidth - anchors.rightMargin
+                     - Theme.space2xl > implicitWidth
 
             Repeater {
                 model: indicator.count
@@ -861,37 +865,37 @@ QQC2.Page {
                     Accessible.role: Accessible.Button
                     Accessible.name: accessibleName
                     Accessible.onPressAction: activate()
-                    implicitWidth: active ? Theme.space2xl - Theme.spaceXs : Theme.spaceSm
+                    implicitWidth: Theme.phaseDot
                     implicitHeight: Theme.spaceXl
-                    Behavior on implicitWidth {
-                        NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic }
-                    }
                     TapHandler {
+                        // A dot is small: the tap counts a little around it too.
+                        margin: Theme.spaceXs
                         onTapped: dot.activate()
                     }
                     HoverHandler {
+                        margin: Theme.spaceXs
                         cursorShape: Qt.PointingHandCursor
                     }
                     Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width
-                        height: Theme.spaceSm
+                        anchors.centerIn: parent
+                        width: Theme.phaseDot
+                        height: Theme.phaseDot
                         radius: height / 2
-                        color: dot.active ? Theme.foreground : Theme.borderStrong
+                        color: dot.active ? Theme.accent : Theme.borderStrong
                         Behavior on color { ColorAnimation { duration: Theme.durationLong } }
                     }
                 }
             }
         }
-
         RowLayout {
             id: navButtons
             anchors.right: parent.right
-            anchors.rightMargin: Theme.spaceXl
+            anchors.rightMargin: Theme.welcomeFooterPaddingX
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.spaceXs
+            spacing: Theme.spaceMd
 
             SButton {
+                id: backButton
                 kind: "ghost"
                 iconName: "chevron-left"
                 text: i18n("Back")
