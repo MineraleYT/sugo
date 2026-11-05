@@ -665,9 +665,10 @@ QQC2.Page {
                 Layout.preferredWidth: 0
                 Layout.alignment: Qt.AlignVCenter
                 // With variants, as tall as the title and the tallest of them; the text shown sits
-                // in the middle of that room, in line with the controls.
+                // in the middle of that room, in line with the controls. The two fillers make three
+                // gaps, all counted, or the tallest text would push the row taller.
                 Layout.minimumHeight: row.descriptionVariants.length > 0
-                                      ? titleText.implicitHeight + spacing + descriptionText.reservedHeight : 0
+                                      ? titleText.implicitHeight + descriptionText.reservedHeight + spacing * 3 : 0
                 spacing: Theme.hairline * 2
                 opacity: row.enabled ? 1 : 0.5
                 Item { visible: row.descriptionVariants.length > 0; Layout.fillHeight: true }
