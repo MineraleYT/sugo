@@ -373,6 +373,48 @@ QQC2.ApplicationWindow {
                 fail(29, "The volume slider no longer follows the setting after a drag: " + slider.value);
                 return;
             }
+            // The accent colour's menu opens under its button, 4 px away, right edges together,
+            // with every colour; choosing one sets the setting and moves the check.
+            const accentButton = findItem(page, item => item.objectName === "accentColorButton");
+            if (!accentButton || !accentButton.visible) {
+                fail(62, "The Accent color button is missing from General");
+                return;
+            }
+            const accentMenu = accentButton.menu;
+            const accentBefore = AppSettings.accentColor;
+            accentMenu.open();
+            const accentEntries = [];
+            findItem(accentMenu.contentItem, item => {
+                if (item.objectName.startsWith("accentEntry-")) {
+                    accentEntries.push(item);
+                }
+                return false;
+            });
+            const accentGap = accentMenu.y - accentButton.height;
+            const accentRightEdges = accentMenu.x + accentMenu.width - accentButton.width;
+            // The colour after the current one (the ids in quotes would read as colours to the checks).
+            const accentTarget = AppSettings.accentColors[(AppSettings.accentColors.indexOf(accentBefore) + 1) % AppSettings.accentColors.length];
+            const accentEntry = accentEntries.find(item => item.objectName === "accentEntry-" + accentTarget);
+            const accentOld = accentEntries.find(item => item.objectName === "accentEntry-" + accentBefore);
+            if (accentMenu.objectName !== "accentColorMenu" || !accentMenu.visible || accentMenu.openedSide !== "bottom"
+                    || Math.abs(accentGap - Theme.menuOffset) > 0.5 || Math.abs(accentRightEdges) > 1
+                    || accentEntries.length !== AppSettings.accentColors.length || accentEntries.length !== 10
+                    || !accentEntry || !accentOld || !accentOld.checked) {
+                fail(62, "The Accent color menu is not 4 px under its button with its right edge on the button's and ten colours: gap "
+                     + accentGap + ", right edges " + accentRightEdges + ", side " + accentMenu.openedSide
+                     + ", " + accentEntries.length + " entries");
+                accentMenu.close();
+                return;
+            }
+            accentEntry.clicked();
+            const accentChosen = AppSettings.accentColor === accentTarget && accentEntry.checked && !accentOld.checked
+                                 && !accentMenu.opened;
+            AppSettings.accentColor = accentBefore;
+            if (!accentChosen) {
+                fail(62, "Choosing \"" + accentTarget + "\" in the Accent color menu did not set it, move the check or close the menu: "
+                     + AppSettings.accentColor);
+                return;
+            }
             // The Focus card (shortcuts that silence notifications) exists on macOS only, and
             // openSettings() shows the category it is in.
             const focusCard = findItem(page, item => item.objectName === "focusModeCard");

@@ -1065,6 +1065,11 @@ QQC2.Page {
                         onActivated: AppSettings.colorScheme = currentValue
                     }
                 }
+                SettingRow {
+                    title: i18n("Accent color")
+                    description: i18n("Buttons, switches and the running time. Breaks stay green (blue with a green accent).")
+                    AccentButton {}
+                }
             }
 
             SettingsCard {

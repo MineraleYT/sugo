@@ -47,6 +47,7 @@ qt6_add_qml_module(sugo_core
         qml/components/SMenuItem.qml
         qml/components/SMenuSeparator.qml
         qml/components/SettingsNav.qml
+        qml/components/AccentButton.qml
         qml/components/BrandGlow.qml
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml

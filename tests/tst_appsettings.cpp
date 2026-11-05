@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QScopeGuard>
+#include <QSet>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -655,6 +656,19 @@ private Q_SLOTS:
         }
         QCOMPARE(stored("AccentColor"), QStringLiteral("blue"));
         QCOMPARE(make()->accentColor(), QStringLiteral("blue"));
+    }
+
+    void everyAccentColorHasAName()
+    {
+        QSet<QString> names;
+        for (const QString &id : AppSettings::accentColors()) {
+            const QString name = AppSettings::accentColorName(id);
+            QVERIFY2(!name.isEmpty() && name != id, qPrintable(id));
+            names.insert(name);
+        }
+        QCOMPARE(names.size(), AppSettings::accentColors().size());
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("red")), QStringLiteral("Red"));
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("purple")), QStringLiteral("purple"));
     }
 
     void everyAccentColorIsKept()

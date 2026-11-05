@@ -193,6 +193,8 @@ public:
     /// An id that is not one of accentColors() sets the default.
     void setAccentColor(const QString &id);
     static QStringList accentColors();
+    /// The name of an accent colour for the interface ("Red"), or the id itself if it is not one.
+    Q_INVOKABLE static QString accentColorName(const QString &id);
 
     QString updateChannel() const { return m_updateChannel; }
     void setUpdateChannel(const QString &channel);

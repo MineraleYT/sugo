@@ -148,6 +148,7 @@
     "settings/general": {
       "common": [
         "button: About",
+        "button: Accent color",
         "button: Advanced",
         "button: Calendar",
         "button: Focus",
@@ -157,6 +158,7 @@
         "button: Timers",
         "choice: Badge style",
         "choice: Color scheme",
+        "row: Accent color",
         "row: Badge style",
         "row: Color scheme",
         "row: Show an icon in the system tray",
