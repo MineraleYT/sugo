@@ -1001,6 +1001,36 @@ private Q_SLOTS:
         QVERIFY(m_sync->lastError().isEmpty());
     }
 
+    void putRefusedForTheCalendarKeepsTheQueue_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::newRow("409 (the calendar is gone)") << 409;
+        QTest::newRow("423 (the calendar is locked)") << 423;
+    }
+    void putRefusedForTheCalendarKeepsTheQueue()
+    {
+        // The problem is the calendar, not the event: skipping would drop every queued session
+        // one after the other while the calendar is away or locked.
+        QFETCH(int, http);
+        configureCustom();
+        m_server->defaultPut = http;
+        m_sync->enqueueWorkSession(record(1));
+        m_sync->enqueueWorkSession(record(2));
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->lastError().contains(QString::number(http)));
+        QVERIFY(!m_sync->lastError().contains(QStringLiteral("skipped")));
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_VERIFY(m_server->count("PUT") >= 2); // tried again, with the backoff
+        QCOMPARE(m_sync->pendingCount(), 2);      // kept, not skipped
+        QVERIFY(m_server->stored.isEmpty());
+
+        m_server->defaultPut = 201;
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 2);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QVERIFY(m_sync->lastError().isEmpty());
+    }
+
     void serverErrorMessage()
     {
         configureCustom();
