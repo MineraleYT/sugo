@@ -104,6 +104,8 @@ QQC2.Page {
         property real clock: 0
         /// Before the first element comes in (the logo's entrance, on the first step).
         property int delay: 0
+        /// How wide the step's column may grow.
+        property int groupWidth: Theme.welcomeGroupWidth
         property real shift: 0
         signal entered()
 
@@ -167,7 +169,7 @@ QQC2.Page {
 
         ColumnLayout {
             id: column
-            width: Math.min(step.width - Theme.space2xl * 2, Theme.welcomeGroupWidth)
+            width: Math.min(step.width - Theme.space2xl * 2, step.groupWidth)
             x: (step.width - width) / 2
             y: Math.max(Theme.space3xl, (step.height - implicitHeight) / 2)
             spacing: 0
@@ -697,11 +699,12 @@ QQC2.Page {
             }
         }
 
-        // 4 · Ready: the ring closes, a check, and the button to begin.
+        // 4 · Ready: the ring closes, a check, and the focus page's composer to pick a timer and start.
         Step {
             id: readyStep
             index: 3
             anchors.fill: parent
+            groupWidth: Theme.composerWidth
 
             Item {
                 Layout.alignment: Qt.AlignHCenter
@@ -752,6 +755,41 @@ QQC2.Page {
                 opacity: readyStep.reveal(9)
                 transform: Translate { y: readyStep.rise(9) }
             }
+            // Starting the timer here ends the tour, on the focus page.
+            Composer {
+                id: readyComposer
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.space2xl
+                app: composerApp
+                compact: page.width < Theme.compactBreakpoint
+                opacity: readyStep.reveal(10)
+                transform: Translate { y: readyStep.rise(10) }
+                onStartPressed: {
+                    if (TimerEngine.active && !TimerEngine.paused) {
+                        page.finish();
+                    }
+                }
+            }
+        }
+    }
+
+    // The window, as the composer of the last step sees it: what leads out of the tour from its
+    // menus (a new timer, the settings) ends the tour first, as Skip Tour does.
+    QtObject {
+        id: composerApp
+        function chooseTimer(uuid: string): void {
+            applicationWindow().chooseTimer(uuid);
+        }
+        function newTimer(): void {
+            AppSettings.firstRunCompleted = true;
+            applicationWindow().newTimer();
+        }
+        function openSettings(category: string): void {
+            AppSettings.firstRunCompleted = true;
+            applicationWindow().openSettings(category);
+        }
+        function requestEndPhase(skipping: bool): bool {
+            return applicationWindow().requestEndPhase(skipping);
         }
     }
 
