@@ -449,19 +449,19 @@ QQC2.ApplicationWindow {
             const ids = page.categories.map(category => category.id);
             const at = ids.indexOf("sync");
             if (at < 0 || ids[at - 1] !== "calendar" || ids[at + 1] !== "advanced") {
-                fail(49, "The Sync tab is missing, or not between Calendar and Advanced: " + ids.join(","));
+                fail(56, "The Sync tab is missing, or not between Calendar and Advanced: " + ids.join(","));
                 return false;
             }
             page.category = "sync";
             const signIn = findItem(page, item => item.objectName === "syncSignInButton");
             if (SyncController.state !== SyncController.Off || !signIn || !signIn.visible || signIn.text.length === 0) {
-                fail(50, "Signed out, the Sync tab does not offer Sign in");
+                fail(57, "Signed out, the Sync tab does not offer Sign in");
                 return false;
             }
             // The message place keeps its height when a message comes, long or short.
             const slot = findItem(page, item => item.objectName === "syncStatusMessage");
             if (!slot || slot.height <= 0) {
-                fail(51, "The Sync tab's message place is missing");
+                fail(58, "The Sync tab's message place is missing");
                 return false;
             }
             const height = slot.height;
@@ -469,7 +469,7 @@ QQC2.ApplicationWindow {
                         + "that grew with its text would show here, and move what is below it.";
             slot.shown = true;
             if (Math.abs(slot.height - height) > 0.5) {
-                fail(51, "A message changed the height of the Sync tab's message place: " + height + " → " + slot.height);
+                fail(58, "A message changed the height of the Sync tab's message place: " + height + " → " + slot.height);
                 return false;
             }
             // Signing out asks first.
@@ -477,7 +477,7 @@ QQC2.ApplicationWindow {
             const asked = page.syncSignOutConfirming;
             page.category = "general";
             if (!asked) {
-                fail(52, "Signing out of Sugo Sync did not ask first");
+                fail(59, "Signing out of Sugo Sync did not ask first");
                 return false;
             }
             return true;
