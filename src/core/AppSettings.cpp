@@ -81,8 +81,12 @@ int intSetting(const QSettings &settings, const char *key, int fallback)
 constexpr qint64 kAlertFadeInMs = 300;
 constexpr qint64 kAlertFadeOutMs = 600;
 
-/// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume.
-void playWithPlayerProgram(const QString &file, int vol)
+/// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
+/// backend; a file it cannot decode falls back to AppSettings::playWithPlayerProgram().
+bool playWithFade(const QString &file, int vol, QObject *parent);
+} // namespace
+
+void AppSettings::playWithPlayerProgram(const QString &file, int vol)
 {
 #ifdef Q_OS_MACOS
     if (AppSettings::afplayCanPlay(file)
@@ -108,8 +112,8 @@ void playWithPlayerProgram(const QString &file, int vol)
 #endif
 }
 
-/// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
-/// backend; a file it cannot decode falls back to playWithPlayerProgram().
+namespace
+{
 bool playWithFade(const QString &file, int vol, QObject *parent)
 {
     auto *player = new QMediaPlayer(parent);
@@ -134,7 +138,7 @@ bool playWithFade(const QString &file, int vol, QObject *parent)
     QObject::connect(player, &QMediaPlayer::errorOccurred, player, [player, file, vol]() {
         player->disconnect(); // errors can come more than once: play the fallback only once
         player->deleteLater();
-        playWithPlayerProgram(file, vol);
+        AppSettings::playWithPlayerProgram(file, vol);
     });
     player->setSource(QUrl::fromLocalFile(file));
     fade->start();
