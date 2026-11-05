@@ -32,9 +32,12 @@ QQC2.Control {
 
     /// Takes what is typed, as leaving the field does: before acting on `value` (e.g. Save), since
     /// clicking a button does not take the focus from the field.
+    /// The whole text must be a whole number, sign included ("-5" is below `from`, not 5); any
+    /// other text leaves the value as it was.
     function commit(): void {
-        const match = input.text.match(/\d+/);
-        setValue(match ? parseInt(match[0]) : value);
+        const match = input.text.match(/^\s*([+-]?\d+)\s*$/);
+        // Brought into range here already: a number too long for an int must not wrap.
+        setValue(match ? Math.max(from, Math.min(to, parseInt(match[1], 10))) : value);
     }
 
     readonly property string displayText: fromText.length > 0 && value === from ? fromText : String(value)
