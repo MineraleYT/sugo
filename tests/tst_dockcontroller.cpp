@@ -2,6 +2,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QMenu>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QWindow>
@@ -204,7 +205,17 @@ private Q_SLOTS:
         QVERIFY(!timers->isEnabled());
         start->trigger();
         QCOMPARE(start->text(), QStringLiteral("Resume"));
+        // Stop and Skip ask the window, which asks first when work would be cut short.
+        QSignalSpy endPhase(dock.get(), SIGNAL(endPhaseRequested(bool)));
+        QVERIFY(endPhase.isValid());
+        skip->trigger();
         stop->trigger();
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QCOMPARE(endPhase.count(), 2);
+        QCOMPARE(endPhase.at(0).at(0).toBool(), true);
+        QCOMPARE(endPhase.at(1).at(0).toBool(), false);
+        engine->stop();
         QCOMPARE(engine->state(), TimerEngine::State::Idle);
         QCOMPARE(start->text(), QStringLiteral("Start"));
     }

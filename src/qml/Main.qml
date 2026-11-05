@@ -614,8 +614,9 @@ QQC2.ApplicationWindow {
                 // Stop from the search asks where it is, without leaving the page.
                 root.navigate("stats");
                 TimerEngine.start();
-                root.requestEndPhase(false);
-                if (root.currentDestination !== "stats" || !TimerEngine.active || !root.endPhaseConfirming) {
+                // It also says it asks: the tray and Dock menus bring the window up for the question.
+                const asked = root.requestEndPhase(false);
+                if (!asked || root.currentDestination !== "stats" || !TimerEngine.active || !root.endPhaseConfirming) {
                     fail(48, "Stopping work under way away from the timer page did not ask there");
                     return true;
                 }
@@ -1053,19 +1054,23 @@ QQC2.ApplicationWindow {
     readonly property bool endPhaseConfirming: endPhaseDialog.visible
 
     /// Stops the phase (or skips to the next one with `skipping`), asking first when work under
-    /// way would be cut short.
-    function requestEndPhase(skipping: bool): void {
+    /// way would be cut short. Returns whether it asks, so the tray and Dock menus (main.cpp) can
+    /// bring a hidden window to the front for the question.
+    function requestEndPhase(skipping: bool): bool {
         if (!TimerEngine.active) {
-            return;
+            return false;
         }
         if (workUnderWay) {
             endPhaseDialog.skipping = skipping;
             endPhaseDialog.open();
-        } else if (skipping) {
+            return true;
+        }
+        if (skipping) {
             TimerEngine.skip();
         } else {
             TimerEngine.stop();
         }
+        return false;
     }
 
     ConfirmDialog {

@@ -234,6 +234,7 @@ void TrayController::createItem()
     // Start/Pause, Stop, Skip and the timers: the same entries as the macOS Dock menu.
     m_timerActions = std::make_unique<TimerMenuActions>(m_engine, m_presets);
     m_timerActions->addControls(menu);
+    connect(m_timerActions.get(), &TimerMenuActions::endPhaseRequested, this, &TrayController::endPhaseRequested);
     menu->addSeparator();
     m_timerActions->addTimerMenu(menu);
     menu->addSeparator();

@@ -46,6 +46,7 @@ DockController::DockController(TimerEngine *engine, PresetModel *presets, AppSet
     m_menu = std::make_unique<QMenu>();
     m_timerActions = std::make_unique<TimerMenuActions>(engine, presets);
     m_timerActions->addControls(m_menu.get());
+    connect(m_timerActions.get(), &TimerMenuActions::endPhaseRequested, this, &DockController::endPhaseRequested);
     m_menu->addSeparator();
     m_timerActions->addTimerMenu(m_menu.get());
     m_timerActions->updateTexts();

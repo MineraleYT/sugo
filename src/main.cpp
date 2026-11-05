@@ -562,6 +562,24 @@ int main(int argc, char *argv[])
             QMetaObject::invokeMethod(window, "requestQuit");
         });
 
+        // Stop and Skip in the tray and Dock menus: the window's own, which ends the phase at once
+        // unless work under way would be cut short; then it asks, and comes to the front (also
+        // from the tray, the window closed) so the question is seen.
+        const auto requestEndPhase = [window, activateWindow](bool skipping) {
+            bool asking = false;
+            if (!QMetaObject::invokeMethod(window, "requestEndPhase", Q_RETURN_ARG(bool, asking), Q_ARG(bool, skipping))) {
+                qWarning() << "Cannot ask the window to end the phase";
+                return;
+            }
+            if (asking) {
+                activateWindow();
+            }
+        };
+        QObject::connect(tray, &TrayController::endPhaseRequested, window, requestEndPhase);
+#ifdef Q_OS_MACOS
+        QObject::connect(dock, &DockController::endPhaseRequested, window, requestEndPhase);
+#endif
+
         // A click on a notification with nothing more specific to do.
         QObject::connect(notifier, &PhaseNotifier::showWindowRequested, window, activateWindow);
 
@@ -589,6 +607,14 @@ int main(int argc, char *argv[])
     } else {
         // No window to ask from.
         QObject::connect(tray, &TrayController::quitRequested, &app, &QCoreApplication::quit);
+        QObject::connect(tray, &TrayController::endPhaseRequested, timer, [timer](bool skipping) {
+            skipping ? timer->skip() : timer->stop();
+        });
+#ifdef Q_OS_MACOS
+        QObject::connect(dock, &DockController::endPhaseRequested, timer, [timer](bool skipping) {
+            skipping ? timer->skip() : timer->stop();
+        });
+#endif
     }
 
     const int status = app.exec();

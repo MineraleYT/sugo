@@ -157,9 +157,21 @@ private Q_SLOTS:
         QVERIFY(engine->isPaused());
         QCOMPARE(start->text(), QStringLiteral("Resume"));
 
+        // Stop and Skip ask the window, which asks first when work would be cut short: the
+        // menu never ends the phase by itself.
+        QSignalSpy endPhase(tray.get(), SIGNAL(endPhaseRequested(bool)));
+        QVERIFY(endPhase.isValid());
         skip->trigger();
-        QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
         stop->trigger();
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QVERIFY(engine->isActive());
+        QCOMPARE(endPhase.count(), 2);
+        QCOMPARE(endPhase.at(0).at(0).toBool(), true);
+        QCOMPARE(endPhase.at(1).at(0).toBool(), false);
+
+        engine->skip();
+        QCOMPARE(engine->phase(), TimerEngine::Phase::ShortBreak);
+        engine->stop();
         QVERIFY(!engine->isActive());
         QCOMPARE(start->text(), engine->phase() == TimerEngine::Phase::Work ? QStringLiteral("Start") : QStringLiteral("Start break"));
         QVERIFY(!stop->isVisible());

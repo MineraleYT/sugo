@@ -19,6 +19,9 @@ class TimerEngine;
  * The entries are added to a menu the caller owns (which owns the actions too) and follow the
  * timer by themselves: Stop and Skip show only while a phase runs, the timer list is locked
  * then, and the first entry's text and icon follow the state.
+ *
+ * Stop and Skip do not end the phase themselves: they emit endPhaseRequested(), which main.cpp
+ * hands to the window, so they ask first when work under way would be cut short, as everywhere else.
  */
 class TimerMenuActions : public QObject
 {
@@ -38,6 +41,10 @@ public:
     void refresh();
     /// Lists the timers again if they changed, and ticks the one in use.
     void rebuildTimerMenu();
+
+Q_SIGNALS:
+    /// Stop (`skipping` false) or Skip was chosen.
+    void endPhaseRequested(bool skipping);
 
 private:
     void syncTimerChecks();

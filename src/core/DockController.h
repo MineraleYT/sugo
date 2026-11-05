@@ -70,6 +70,11 @@ public:
     /// tile is in the Dock).
     static bool wantsHiddenIcon(bool hideDockIcon, bool menuBarIconShown, bool windowShown);
 
+Q_SIGNALS:
+    /// "Stop" (`skipping` false) or "Skip" in the menu. The window decides: it asks first when
+    /// work under way would be cut short (main.cpp).
+    void endPhaseRequested(bool skipping);
+
 private:
     void updateBadge();
     void updateIcon();

@@ -47,6 +47,9 @@ Q_SIGNALS:
     void showWindowRequested();
     /// "Quit" in the menu. The window decides: it asks first while a phase runs (main.cpp).
     void quitRequested();
+    /// "Stop" (`skipping` false) or "Skip" in the menu. The window decides: it asks first when
+    /// work under way would be cut short (main.cpp).
+    void endPhaseRequested(bool skipping);
 
 private:
     void sync();
