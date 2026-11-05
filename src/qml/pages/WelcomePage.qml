@@ -23,6 +23,8 @@ QQC2.Page {
     /// The logo's entrance runs once, the first time the tour opens.
     property bool introPlayed: false
     property string autostartError: ""
+    /// What the start-at-login switch last asked for (undefined before any attempt).
+    property var autostartWanted: undefined
     /// The tour starts once the window is on screen and the start-up work is over, so that the
     /// logo's entrance is not spent before anyone can see it.
     property bool started: false
@@ -70,10 +72,16 @@ QQC2.Page {
 
     Connections {
         target: AppSettings
-        // Not cleared on startAtLoginChanged: AppSettings announces that after a failure too,
-        // right after this message. A new attempt clears it (the switch's `applying`).
+        // Not cleared on every startAtLoginChanged: AppSettings announces that after a failure too,
+        // right before this message. A new attempt clears it (the switch's `applying`), and so does
+        // the entry reaching what was asked for after all (the Background portal answering late).
         function onAutostartFailed(message) {
             page.autostartError = message;
+        }
+        function onStartAtLoginChanged() {
+            if (AppSettings.startAtLogin === page.autostartWanted) {
+                page.autostartError = "";
+            }
         }
         function onFocusShortcutNamesChanged() {
             page.focusShortcutNames = AppSettings.focusShortcutNames();
@@ -660,7 +668,10 @@ QQC2.Page {
                         SettingSwitch {
                             setting: "startAtLogin"
                             row: loginRow
-                            onApplying: page.autostartError = ""
+                            onApplying: {
+                                page.autostartError = "";
+                                page.autostartWanted = checked;
+                            }
                         }
                     }
                     // macOS: the two shortcuts that turn Do Not Disturb on and off while working.

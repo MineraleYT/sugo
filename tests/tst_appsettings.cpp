@@ -55,6 +55,13 @@ public:
     void repair() override { ++m_state->repairCalls; }
     bool runsFromTemporaryLocation() const override { return m_state->temporaryLocation; }
 
+    /// As when the Background portal's dialog answers after setEnabled() gave up waiting.
+    void changeLater(bool enabled)
+    {
+        m_state->enabled = enabled;
+        notifyChanged();
+    }
+
 private:
     std::shared_ptr<FakeState> m_state;
 };
@@ -67,13 +74,15 @@ class AppSettingsTest : public QObject
 private:
     QTemporaryDir dir;
     std::shared_ptr<FakeState> state;
+    FakeAutostart *autostart = nullptr; // owned by the last AppSettings made
 
     QString configPath() const { return dir.filePath(QStringLiteral("settings.conf")); }
 
     std::unique_ptr<AppSettings> make(bool trayAvailable = true)
     {
-        return std::make_unique<AppSettings>(Settings::open(configPath()),
-                                             std::make_unique<FakeAutostart>(state), trayAvailable);
+        auto fake = std::make_unique<FakeAutostart>(state);
+        autostart = fake.get();
+        return std::make_unique<AppSettings>(Settings::open(configPath()), std::move(fake), trayAvailable);
     }
 
     // Reads the file directly, not through the object under test.
@@ -403,6 +412,26 @@ private Q_SLOTS:
         settings->setStartAtLogin(false);
         QVERIFY(!settings->startAtLogin());
         QCOMPARE(failed.count(), 1);
+    }
+
+    // The portal's dialog answered after setStartAtLogin() reported a failure.
+    void aChangeMadeLaterIsAnnounced()
+    {
+        const auto settings = make();
+        QSignalSpy changed(settings.get(), &AppSettings::startAtLoginChanged);
+        QSignalSpy failed(settings.get(), &AppSettings::autostartFailed);
+
+        autostart->changeLater(true);
+        QVERIFY(settings->startAtLogin());
+        QCOMPARE(changed.count(), 1);
+
+        // Switched off later: "Start minimized" goes with it, as when switched off from here.
+        settings->setStartMinimized(true);
+        autostart->changeLater(false);
+        QVERIFY(!settings->startAtLogin());
+        QVERIFY(!settings->startMinimized());
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(failed.count(), 0);
     }
 
     // The welcome tour clears its message on startAtLoginChanged: the failure must come after it.
