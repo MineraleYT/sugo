@@ -1200,7 +1200,7 @@ QQC2.ApplicationWindow {
             const uuid = PresetModel.uuidAt(i);
             const preset = PresetModel.get(uuid);
             list.push({ text: preset.name, timerIcon: preset.iconName || "sugo-timer",
-                        hint: i18nc("minutes, short", "%1m", Math.round(preset.workSeconds / 60)),
+                        detail: String(preset.category ?? "").trim(),
                         run: () => root.chooseTimer(uuid) });
         }
         return list;
