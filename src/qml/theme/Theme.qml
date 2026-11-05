@@ -114,7 +114,7 @@ QtObject {
     readonly property int space3xl: 32
     readonly property int space4xl: 48
 
-    readonly property int radiusSm: 5
+    readonly property int radiusSm: 6
     readonly property int radius: 8
     /// Larger surfaces: popups, segmented controls, cards inside cards.
     readonly property int radiusMd: 10
