@@ -252,10 +252,16 @@ QString Diagnostics::redact(const QString &text)
     result.replace(urlCredentialsRegex, QStringLiteral("\\1<redacted>@"));
     static const QRegularExpression &secretAssignmentRegex = *new QRegularExpression(
         // A quoted value up to its closing quote; an unquoted one up to the end of the line or a
-        // query-string '&' (a password may contain spaces, so a space does not end it).
-        QStringLiteral(R"re(("?\b(?:app[_-]?password|password|passwd|secret|token)"?\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\r\n&]+))re"),
+        // query-string '&' (a password may contain spaces, so a space does not end it). The key
+        // may carry a prefix (access_token, client_secret, X-Auth-Token) but must end in the
+        // secret word, so "tokens: 5" or "passwordless login: yes" stay.
+        QStringLiteral(R"re(("?[\p{L}\p{N}_-]*(?:password|passwd|secret|token)"?\s*[:=]\s*)(?:"[^"\r\n]*"?|'[^'\r\n]*'?|[^\r\n&]+))re"),
         QRegularExpression::CaseInsensitiveOption);
     result.replace(secretAssignmentRegex, QStringLiteral("\\1<redacted>"));
+    // A bearer token outside an Authorization header.
+    static const QRegularExpression &bearerRegex = *new QRegularExpression(
+        QStringLiteral(R"(\b(bearer\s+)[A-Za-z0-9._~+/=-]+)"), QRegularExpression::CaseInsensitiveOption);
+    result.replace(bearerRegex, QStringLiteral("\\1<redacted>"));
 
     // The accounts the user set up (the calendar login can differ from the system user name).
     QList<QRegularExpression> accounts;
@@ -267,11 +273,14 @@ QString Diagnostics::redact(const QString &text)
         replaceWord(result, pattern, QStringLiteral("<account>"));
     }
 
-    // 1. Redact the home directory path (and its resolved form, if it is a symlink)
+    // 1. Redact the home directory path (and its resolved form, if it is a symlink), only where
+    // the path ends: /home/alice next to the home /home/al does not become "~ice".
     const QString home = QDir::homePath();
     for (const QString &path : {home, QDir(home).canonicalPath()}) {
         if (!path.isEmpty() && path != QLatin1String("/")) {
-            result.replace(path, QStringLiteral("~"));
+            const QRegularExpression pathRegex(
+                QStringLiteral(R"(%1(?![\p{L}\p{N}_.-]))").arg(QRegularExpression::escape(path)));
+            result.replace(pathRegex, QStringLiteral("~"));
         }
     }
 
