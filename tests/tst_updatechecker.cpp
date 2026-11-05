@@ -817,10 +817,48 @@ private Q_SLOTS:
                                                                       "(rename it to %2 ), the update %2.new")
                                                            .arg(backup, bundle)));
         QVERIFY(!installer.finish(true, 0));
-        QTest::qWait(300);
-        QCOMPARE(release.executable(backup), QStringLiteral("old Sugo")); // never removed: the only copy
+        // Never removed, it is the only copy: renamed back once the program has ended.
+        QTRY_COMPARE(release.executable(bundle), QStringLiteral("old Sugo"));
+        QVERIFY(!QFileInfo::exists(backup));
         QCOMPARE(release.executable(bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
         QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(bundle)));
+    }
+
+    void macBundleLeftAsBackupIsRestored()
+    {
+        // A crash between the two renames: only Sugo.app.old, which the Dock opens.
+        LocalMacRelease release;
+        const QString backup = release.bundle + QStringLiteral(".old");
+        QVERIFY(QDir().rename(release.bundle, backup));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Sugo runs from .*/Sugo\\.app\\.old, left there by an update")));
+        QVERIFY(MacBundleInstaller::restoreInterruptedUpdate(backup + QStringLiteral("/Contents/MacOS"), endedProcessId()));
+        QTRY_COMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
+        QVERIFY(!QFileInfo::exists(backup));
+    }
+
+    void macBackupNextToABundleIsLeftAlone()
+    {
+        // The swap went through and this copy still runs from the backup, which finish() removes
+        // when it quits; or a backup of another app; or not a backup at all.
+        LocalMacRelease release;
+        const QString backup = release.bundle + QStringLiteral(".old");
+        QVERIFY(QDir().rename(release.bundle, backup));
+        QVERIFY(release.stageUpdate());
+        QVERIFY(QDir().rename(release.bundle + QStringLiteral(".new"), release.bundle));
+        const qint64 ended = endedProcessId();
+        QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(backup + QStringLiteral("/Contents/MacOS"), ended));
+        QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(release.bundle + QStringLiteral("/Contents/MacOS"), ended));
+        QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(backup, ended));
+        QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(QString(), ended));
+        QTest::qWait(300);
+        QCOMPARE(release.executable(release.bundle), QStringLiteral("new Sugo"));
+        QCOMPARE(release.executable(backup), QStringLiteral("old Sugo"));
+
+        LocalMacRelease other(QStringLiteral("com.example.other"));
+        const QString otherBackup = other.dir.filePath(QStringLiteral("staging/Sugo.app.old"));
+        QVERIFY(QDir().rename(other.dir.filePath(QStringLiteral("staging/Sugo.app")), otherBackup));
+        QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(otherBackup + QStringLiteral("/Contents/MacOS"), ended));
+        QVERIFY(QFileInfo::exists(otherBackup));
     }
 
     void macSwapKeepsABackupWhenTheBundleIsGone()
