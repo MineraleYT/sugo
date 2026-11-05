@@ -15,6 +15,7 @@
 #endif
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -30,6 +31,8 @@
 #include "Settings.h"
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <memory>
 
 
 namespace
@@ -84,6 +87,69 @@ constexpr qint64 kAlertFadeOutMs = 600;
 /// Plays a file through Qt Multimedia, fading it in and out. False if Qt Multimedia has no
 /// backend; a file it cannot decode falls back to AppSettings::playWithPlayerProgram().
 bool playWithFade(const QString &file, int vol, QObject *parent);
+
+#ifndef Q_OS_MACOS
+/// A player program that exits with an error sooner than this after starting did not play the
+/// sound (pw-play with no PipeWire daemon, a file it cannot decode): the next one plays it instead.
+constexpr qint64 kQuickPlayerFailureMs = 2000;
+
+/// Player programs that cannot play here, not tried again in this session: those that failed to
+/// start, and those that failed at once on a file the next player then played. One that only
+/// failed on a file no player could play (a broken file) keeps its chances.
+QStringList &unusableAlertPlayers()
+{
+    static QStringList players;
+    return players;
+}
+
+/// Plays a file with the first usable player program from `first` on: pw-play, then paplay.
+/// failedHere: the players that failed at once on this file before.
+void playWithPlayerFrom(int first, const QString &file, int vol, const QStringList &failedHere = {})
+{
+    const QString programs[] = {QStringLiteral("pw-play"), QStringLiteral("paplay")};
+    for (int i = first; i < int(std::size(programs)); ++i) {
+        const QString &program = programs[i];
+        if (unusableAlertPlayers().contains(program) || QStandardPaths::findExecutable(program).isEmpty()) {
+            continue;
+        }
+        const QStringList arguments = i == 0
+            ? QStringList{QStringLiteral("--volume"), QString::number(vol / 100.0, 'f', 2), file}
+            // paplay's volume is linear, 65536 = 100 %.
+            : QStringList{QStringLiteral("--volume=%1").arg(vol * 65536 / 100), file};
+
+        // Not detached, to see it fail. No parent: a sound still playing at quit plays to its end.
+        auto *process = new QProcess;
+        process->setProcessChannelMode(QProcess::ForwardedChannels);
+        process->setStandardInputFile(QProcess::nullDevice());
+        auto clock = std::make_shared<QElapsedTimer>();
+        QObject::connect(process, &QProcess::errorOccurred, process, [process, i, program, file, vol, failedHere](QProcess::ProcessError error) {
+            if (error == QProcess::FailedToStart) {
+                process->deleteLater();
+                qWarning().noquote() << program << "failed to start - trying the next player";
+                unusableAlertPlayers().append(program);
+                playWithPlayerFrom(i + 1, file, vol, failedHere);
+            }
+        });
+        QObject::connect(process, &QProcess::finished, process,
+                         [process, clock, i, program, file, vol, failedHere](int exitCode, QProcess::ExitStatus status) {
+            process->deleteLater();
+            if (status == QProcess::NormalExit && exitCode == 0) {
+                // It played what those before it could not: they cannot play here.
+                unusableAlertPlayers().append(failedHere);
+            } else if (status == QProcess::NormalExit && clock->elapsed() < kQuickPlayerFailureMs) {
+                // An error right away: it did not play this file. Later, or killed, it was playing.
+                qWarning().noquote() << program << "cannot play" << file << QStringLiteral("(exit code %1)").arg(exitCode)
+                                     << "- trying the next player";
+                playWithPlayerFrom(i + 1, file, vol, failedHere + QStringList{program});
+            }
+        });
+        clock->start();
+        process->start(program, arguments);
+        return;
+    }
+    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could play it";
+}
+#endif
 } // namespace
 
 void AppSettings::playWithPlayerProgram(const QString &file, int vol)
@@ -95,20 +161,7 @@ void AppSettings::playWithPlayerProgram(const QString &file, int vol)
     }
     qWarning() << "Cannot play" << file << "- afplay could not be started or cannot read the format";
 #else
-    if (!QStandardPaths::findExecutable(QStringLiteral("pw-play")).isEmpty()) {
-        const double volFactor = vol / 100.0;
-        if (QProcess::startDetached(QStringLiteral("pw-play"), {QStringLiteral("--volume"), QString::number(volFactor, 'f', 2), file})) {
-            return;
-        }
-    }
-    if (!QStandardPaths::findExecutable(QStringLiteral("paplay")).isEmpty()) {
-        // paplay's volume is linear, 65536 = 100 %.
-        const int paVolume = vol * 65536 / 100;
-        if (QProcess::startDetached(QStringLiteral("paplay"), {QStringLiteral("--volume=%1").arg(paVolume), file})) {
-            return;
-        }
-    }
-    qWarning() << "Cannot play" << file << "- neither pw-play nor paplay could be started";
+    playWithPlayerFrom(0, file, vol);
 #endif
 }
 
