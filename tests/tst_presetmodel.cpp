@@ -72,6 +72,28 @@ private Q_SLOTS:
         QCOMPARE(stored(PresetModel::DefaultUuid).createdAt, 0);
     }
 
+    void resettingTheBuiltInKeepsItsCreationTime()
+    {
+        // Sugo 1.0.0 stamped the built-in timer when it made it. A reset changes its settings,
+        // not when it was made (Sugo Sync orders and compares timers by it); it is a change made
+        // here, so its author is this computer.
+        qint64 now = 1762300000000;
+        model->setNowProvider([&now] { return QDateTime::fromMSecsSinceEpoch(now, QTimeZone::UTC); });
+        TimerPreset builtin = PresetModel::makeDefaultPreset();
+        builtin.workSeconds = 50 * 60;
+        builtin.createdAt = 1761875000000;
+        builtin.updatedAt = now - 5000;
+        builtin.updatedBy = QStringLiteral("dev_other");
+        model->setPresets({builtin}, builtin.uuid);
+
+        QVERIFY(model->reset(PresetModel::DefaultUuid));
+        const TimerPreset reset = model->presets().at(model->indexOf(PresetModel::DefaultUuid));
+        QVERIFY(reset.sameContent(PresetModel::makeDefaultPreset()));
+        QCOMPARE(reset.createdAt, qint64(1761875000000));
+        QCOMPARE(reset.updatedAt, now);
+        QCOMPARE(reset.updatedBy, QString());
+    }
+
     void anEditHereClearsTheAuthor()
     {
         TimerPreset received;

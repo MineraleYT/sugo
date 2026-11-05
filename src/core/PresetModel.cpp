@@ -521,8 +521,11 @@ bool PresetModel::reset(const QString &uuid)
         return false;
     }
     const qint64 previous = m_presets.at(row).updatedAt;
+    const qint64 createdAt = m_presets.at(row).createdAt; // a reset changes the settings, not when it was made
     m_presets[row] = makeDefaultPreset();
+    m_presets[row].createdAt = createdAt;
     m_presets[row].updatedAt = changeTime(previous); // the reset itself is a change other computers must see
+    // updatedBy stays empty: made here, as any other edit.
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {
