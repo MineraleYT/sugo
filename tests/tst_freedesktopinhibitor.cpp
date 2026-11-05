@@ -292,6 +292,22 @@ private Q_SLOTS:
         QVERIFY(inhibitor->isInhibited());
     }
 
+    void aSlowInhibitIsWaitedForAndItsCookieReleased()
+    {
+        // plasmashell is busy as the focus session starts and answers only after several seconds,
+        // yet still grants the inhibition: its cookie must be kept, or nothing would ever end it.
+        server->replyDelayMs = 4000;
+        inhibitor->inhibit(QStringLiteral("focus"));
+        QTest::qWait(3500);
+        QVERIFY(inhibitor->isInhibited()); // still waiting for the answer, not given up
+        inhibitor->release();              // the session ends before the server has answered
+
+        QTRY_COMPARE_WITH_TIMEOUT(server->calls.size(), 2, 5000);
+        QTRY_VERIFY(!inhibitor->isInhibited());
+        QVERIFY(server->active.isEmpty()); // the late cookie was handed back
+        QCOMPARE(server->calls, (QStringList{QStringLiteral("Inhibit"), QStringLiteral("UnInhibit")}));
+    }
+
     void anUnansweredUnInhibitIsSentAgain()
     {
         inhibitor->inhibit(QStringLiteral("focus"));
