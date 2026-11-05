@@ -113,7 +113,7 @@ QtObject {
     readonly property int space3xl: 32
     readonly property int space4xl: 48
 
-    readonly property int radiusSm: 5
+    readonly property int radiusSm: 6
     readonly property int radius: 8
     /// Larger surfaces: popups, segmented controls, cards inside cards.
     readonly property int radiusMd: 10
@@ -127,7 +127,7 @@ QtObject {
     /// The application icon in the welcome tour.
     readonly property int logoHero: 128
 
-    readonly property int controlHeight: 32
+    readonly property int controlHeight: 30
     readonly property int controlHeightLg: 40
     readonly property int navHeight: 34
     readonly property int contentMaxWidth: 760

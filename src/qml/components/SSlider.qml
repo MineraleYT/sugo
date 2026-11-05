@@ -3,11 +3,11 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// A slider: a thin track, filled in the brand colour up to a round handle.
+/// A slider: a thin track, filled up to a round handle in the accent colour.
 QQC2.Slider {
     id: control
 
-    implicitWidth: Theme.space4xl * 3.5
+    implicitWidth: Theme.sliderWidth
     implicitHeight: Theme.controlHeight
     hoverEnabled: true
 
@@ -15,7 +15,7 @@ QQC2.Slider {
         x: control.leftPadding
         y: control.topPadding + control.availableHeight / 2 - height / 2
         width: control.availableWidth
-        height: Theme.spaceXs
+        height: Theme.sliderTrack
         radius: height / 2
         color: Theme.track
 
@@ -23,17 +23,17 @@ QQC2.Slider {
             width: control.visualPosition * parent.width
             height: parent.height
             radius: height / 2
-            color: control.enabled ? Theme.brand : Theme.subtle
+            color: control.enabled ? Theme.dim : Theme.subtle
         }
     }
 
     handle: Rectangle {
         x: control.leftPadding + control.visualPosition * (control.availableWidth - width)
         y: control.topPadding + control.availableHeight / 2 - height / 2
-        implicitWidth: Theme.spaceXl
-        implicitHeight: Theme.spaceXl
+        implicitWidth: Theme.sliderKnob
+        implicitHeight: Theme.sliderKnob
         radius: width / 2
-        color: Theme.foreground
+        color: control.enabled ? Theme.accent : Theme.subtle
         border.width: control.visualFocus ? Theme.hairline * 2 : 0
         border.color: Theme.focusRing
         scale: control.pressed ? 1.1 : 1

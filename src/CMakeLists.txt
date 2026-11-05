@@ -43,6 +43,10 @@ qt6_add_qml_module(sugo_core
         qml/components/SSlider.qml
         qml/components/Segmented.qml
         qml/components/NumberField.qml
+        qml/components/SMenu.qml
+        qml/components/SMenuHeader.qml
+        qml/components/SMenuItem.qml
+        qml/components/SMenuSeparator.qml
         qml/components/BrandGlow.qml
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml
