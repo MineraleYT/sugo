@@ -28,8 +28,8 @@
   <developer id="io.github.mineraleyt">
     <name>MinerAle</name>
   </developer>
-  <url type="homepage">https://github.com/MineraleYT/sugo</url>
-  <url type="bugtracker">https://github.com/MineraleYT/sugo/issues</url>
+  <url type="homepage">https://github.com/sugoHQ/sugo</url>
+  <url type="bugtracker">https://github.com/sugoHQ/sugo/issues</url>
   <provides>
     <binary>sugo</binary>
   </provides>
