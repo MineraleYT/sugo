@@ -43,9 +43,26 @@
     "timer": {
       "common": [
         "button: Pomodoro",
+        "button: Silence notifications while working",
         "button: Skip",
         "button: Start",
+        "button: Start automatically",
         "button: Stop"
+      ]
+    },
+    "timer/menu-timers": {
+      "common": [
+        "button: Edit timers…",
+        "button: New timer",
+        "button: Pomodoro",
+        "field: Search timers"
+      ]
+    },
+    "timer/menu-start": {
+      "common": [
+        "button: All phases",
+        "button: Breaks only",
+        "button: Manual"
       ]
     },
     "timer-page": {
@@ -328,7 +345,7 @@
         "command: About",
         "command: Focus",
         "command: New timer",
-        "command: Pomodoro (shortcut)",
+        "command: Pomodoro",
         "command: Settings",
         "command: Start the timer",
         "command: Statistics"

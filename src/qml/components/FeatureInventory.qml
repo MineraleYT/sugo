@@ -45,7 +45,41 @@ QtObject {
                 app.pageStack.currentItem.current = step;
             } });
         }
+        // The composer's menus: popups, so their rows are not children of the page.
+        for (const menu of [{ name: "timer/menu-timers", property: "timerMenu" },
+                            { name: "timer/menu-start", property: "autoStartMenu" }]) {
+            list.push({ name: menu.name,
+                        open: () => {
+                            app.navigate("timer");
+                            // Once the page is laid out, so the menu finds its button.
+                            Qt.callLater(() => composerMenu(menu.property).open());
+                        },
+                        root: () => composerMenu(menu.property).contentItem,
+                        close: () => composerMenu(menu.property).close() });
+        }
         return list;
+    }
+
+    /// One of the focus page's composer menus ("timerMenu", "autoStartMenu").
+    function composerMenu(property: string): var {
+        const find = item => {
+            if (!item) {
+                return null;
+            }
+            if (item.objectName === "composer") {
+                return item;
+            }
+            const kids = item.children || [];
+            for (let i = 0; i < kids.length; ++i) {
+                const found = find(kids[i]);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        };
+        const composer = find(app.pageStack.currentItem);
+        return composer ? composer[property] : null;
     }
 
     /// What a control is called: its name for screen readers, else its text.
@@ -109,16 +143,20 @@ QtObject {
             return false;
         }
         const entries = [];
-        collect(app.pageStack.currentItem, entries);
+        const screen = screens[index];
+        collect(screen.root ? screen.root() : app.pageStack.currentItem, entries);
         entries.sort();
-        collected[screens[index].name] = entries;
+        collected[screen.name] = entries;
+        if (screen.close) {
+            screen.close();
+        }
         ticks = 0;
         if (++index < screens.length) {
             screens[index].open();
             return false;
         }
-        // The search's commands; a keyboard shortcut is noted, not its keys (Ctrl or Cmd).
-        collected["search"] = app.paletteCommands().map(command => "command: " + command.text + (command.hint ? " (shortcut)" : "")).sort();
+        // The search's commands.
+        collected["search"] = app.paletteCommands().map(command => "command: " + command.text).sort();
         const report = {
             platform: DesktopStyle.macos ? "macos" : "linux",
             capabilities: {
