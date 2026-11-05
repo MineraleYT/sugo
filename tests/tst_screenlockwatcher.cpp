@@ -2,8 +2,10 @@
 #include <QtGlobal>
 #ifndef Q_OS_MACOS
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #endif
+#include <QCoreApplication>
 #include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -18,6 +20,33 @@
 #include "PrivateDBus.h"
 #include "ScreenLockWatcher.h"
 #include "TimerEngine.h"
+
+#ifndef Q_OS_MACOS
+namespace
+{
+// True once `name` has no owner, as `bus` sees it. The bus sends NameOwnerChanged to `bus` before
+// the answer that says the name is free, so the watchers on `bus` have been told, and the events
+// that QtDBus posted for them are delivered before this returns.
+bool nameReleased(const QDBusConnection &bus, const QString &name)
+{
+    const bool released = QTest::qWaitFor([&] { return !bus.interface()->isServiceRegistered(name).value(); });
+    QCoreApplication::processEvents();
+    return released;
+}
+
+// Returns once `receiver` has handled every signal `sender` sent before: the bus handles each
+// connection's messages in order, so it has passed `sender`'s signals on when it answers its
+// call, and `receiver` gets them before the answer to its own call. Waiting a while instead
+// would prove nothing on a slow machine.
+void flush(const QDBusConnection &sender, const QDBusConnection &receiver)
+{
+    const QString bus = QStringLiteral("org.freedesktop.DBus");
+    sender.interface()->isServiceRegistered(bus);
+    receiver.interface()->isServiceRegistered(bus);
+    QCoreApplication::processEvents();
+}
+} // namespace
+#endif
 
 class ScreenLockWatcherTest : public QObject
 {
@@ -229,7 +258,7 @@ private Q_SLOTS:
         };
 
         QVERIFY(impostor.send(lockSignal()));
-        QTest::qWait(200);
+        flush(impostor, session);
         QCOMPARE(engine->state(), TimerEngine::State::Working);
 
         QVERIFY(screenSaver.send(lockSignal()));
@@ -313,6 +342,8 @@ private Q_SLOTS:
         // is left here) and ActiveChanged(false) never comes. It starts again, and the next lock
         // must pause the work phase as the first one did.
         QDBusConnection::disconnectFromBus(QStringLiteral("locker"));
+        // The bus may handle the new owner's request before the old connection's end.
+        QVERIFY(nameReleased(session, QStringLiteral("org.freedesktop.ScreenSaver")));
         QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("locker-restarted"));
         QVERIFY(restarted.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
         QVERIFY(restarted.send(locked()));
@@ -367,7 +398,7 @@ private Q_SLOTS:
         QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("gone-restarted"));
         QVERIFY(restarted.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
         QVERIFY(restarted.send(activeChanged(false)));
-        QTest::qWait(200);
+        flush(restarted, session);
         QCOMPARE(unlockSpy.count(), 1);
 
         QDBusConnection::disconnectFromBus(QStringLiteral("gone-restarted"));
@@ -409,7 +440,7 @@ private Q_SLOTS:
 
         // The proxy restarting says nothing about gnome-shell's lock.
         QDBusConnection::disconnectFromBus(QStringLiteral("proxy"));
-        QTest::qWait(200);
+        QVERIFY(nameReleased(session, QStringLiteral("org.freedesktop.ScreenSaver")));
         QCOMPARE(unlockSpy.count(), 0);
 
         QVERIFY(gnomeShell.send(activeChanged(false)));
