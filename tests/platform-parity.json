@@ -28,10 +28,6 @@
     "welcome/2": {
       "row: Show an icon in the menu bar": "row: Show an icon in the tray"
     },
-    "settings/advanced": {
-      "button: Show in Finder": "button: Open folder",
-      "row: Links": "row: D-Bus commands"
-    },
     "timer-page": {
       "button: Set Up…": "switch: Silence notifications while working"
     },
@@ -196,7 +192,10 @@
         "setting: showDockBadge": "The Dock exists only on macOS."
       },
       "updateInstall": [
+        "button: Nightly",
+        "button: Stable",
         "row: Check for updates automatically",
+        "row: Update channel",
         "setting: autoCheckUpdates"
       ]
     },
@@ -311,38 +310,21 @@
         "button: Back up…",
         "button: Calendar",
         "button: Clear history…",
-        "button: Copy command",
         "button: Copy to Clipboard",
-        "button: Export Diagnostics…",
-        "button: Export…",
         "button: Focus",
         "button: General",
-        "button: Open folder",
         "button: Reset Settings…",
         "button: Restore…",
-        "button: Show the Welcome Tour",
         "button: Sounds",
         "button: Sync",
         "button: Timers",
-        "button: View Report…",
         "choice: Sessions to remove",
         "row: Allow other programs to control the timer",
         "row: Backup and restore",
-        "row: D-Bus commands",
-        "row: Database",
         "row: Diagnostic report",
-        "row: Export history",
         "row: Reset settings",
         "row: Session history",
-        "row: Verbose logging",
-        "row: Welcome tour",
-        "setting: allowExternalControl",
-        "setting: verboseLogging"
-      ],
-      "updateInstall": [
-        "button: Nightly",
-        "button: Stable",
-        "row: Update channel"
+        "setting: allowExternalControl"
       ]
     },
     "settings/about": {
