@@ -2264,16 +2264,6 @@ QQC2.Page {
                     }
                 }
                 SettingRow {
-                    title: i18n("Welcome tour")
-                    description: i18n("Go through the introduction to Sugo again.")
-                    SButton {
-                        kind: "ghost"
-                        text: i18n("Show the Welcome Tour")
-                        iconName: "info"
-                        onClicked: applicationWindow().navigate("welcome")
-                    }
-                }
-                SettingRow {
                     title: i18n("Reset settings")
                     description: i18n("Put the settings back to what they were when you first started Sugo. Your timers, session history and calendar account are kept.")
                     SButton {
