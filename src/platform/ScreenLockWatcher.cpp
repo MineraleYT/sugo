@@ -7,6 +7,8 @@
 #ifdef Q_OS_MACOS
 #include "MacSessionEvents.h"
 #else
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
 #endif
 
@@ -91,11 +93,18 @@ ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, const QDBusConn
         // A locker that crashes or restarts while the screen is locked never sends its unlock.
         auto *lockers = new QDBusServiceWatcher(kInterface, m_bus, QDBusServiceWatcher::WatchForOwnerChange, this);
         lockers->addWatchedService(kGnomeInterface);
-        connect(lockers, &QDBusServiceWatcher::serviceOwnerChanged, this, [this](const QString &name, const QString &oldOwner, const QString &) {
-            if (!oldOwner.isEmpty()) {
-                onLockerGone(name);
-            }
-        });
+        connect(lockers,
+                &QDBusServiceWatcher::serviceOwnerChanged,
+                this,
+                [this](const QString &name, const QString &oldOwner, const QString &newOwner) {
+                    m_lockerOwners.insert(name, newOwner);
+                    if (!oldOwner.isEmpty()) {
+                        onLockerGone(name);
+                    }
+                    if (!newOwner.isEmpty()) {
+                        askLockerState(name, newOwner);
+                    }
+                });
     }
 }
 
@@ -118,9 +127,31 @@ void ScreenLockWatcher::onLockerGone(const QString &name)
     }
     // Taken as an unlock: the lock screen is most likely gone with its owner. If the timer was
     // paused by the lock, the user is told as on an unlock and decides whether to resume; nothing
-    // is paused here. A locker that comes back still locked sends a new lock, which then counts.
+    // is paused here. A locker that comes back still locked sends a new lock, which then counts,
+    // and its unlock is reported too: the screen may have been locked again in between.
     qCDebug(lcScreenLock) << "The screen locker left the bus while locked:" << name;
     setScreenLocked(false, QString());
+}
+
+void ScreenLockWatcher::askLockerState(const QString &name, const QString &owner)
+{
+    // A locker that starts again with the screen still locked need not announce it. The call goes
+    // to the owner's own connection, so no other program can answer for it.
+    const QString path = name == kGnomeInterface ? QStringLiteral("/org/gnome/ScreenSaver") : QStringLiteral("/org/freedesktop/ScreenSaver");
+    const QDBusMessage call = QDBusMessage::createMethodCall(owner, path, name, QStringLiteral("GetActive"));
+    auto *pending = new QDBusPendingCallWatcher(m_bus.asyncCall(call), this);
+    connect(pending, &QDBusPendingCallWatcher::finished, this, [this, pending, name, owner]() {
+        pending->deleteLater();
+        const QDBusPendingReply<bool> reply = *pending;
+        // An error (gsd-screensaver-proxy only forwards Inhibit) or "unlocked" changes nothing: a
+        // lock reported by the old owner was already dropped when it left. An answer from an owner
+        // that has since left is stale.
+        if (reply.isError() || !reply.value() || m_lockerOwners.value(name) != owner) {
+            return;
+        }
+        qCDebug(lcScreenLock) << "The screen locker came back with the screen locked:" << name;
+        setScreenLocked(true, name);
+    });
 }
 #endif
 

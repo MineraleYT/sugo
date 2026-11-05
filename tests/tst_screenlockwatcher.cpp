@@ -2,8 +2,10 @@
 #include <QtGlobal>
 #ifndef Q_OS_MACOS
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #endif
+#include <QCoreApplication>
 #include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -18,6 +20,57 @@
 #include "PrivateDBus.h"
 #include "ScreenLockWatcher.h"
 #include "TimerEngine.h"
+
+#ifndef Q_OS_MACOS
+namespace
+{
+// True once `name` has no owner, as `bus` sees it. The bus sends NameOwnerChanged to `bus` before
+// the answer that says the name is free, so the watchers on `bus` have been told, and the events
+// that QtDBus posted for them are delivered before this returns.
+bool nameReleased(const QDBusConnection &bus, const QString &name)
+{
+    const bool released = QTest::qWaitFor([&] { return !bus.interface()->isServiceRegistered(name).value(); });
+    QCoreApplication::processEvents();
+    return released;
+}
+
+// Returns once `receiver` has handled every signal `sender` sent before: the bus handles each
+// connection's messages in order, so it has passed `sender`'s signals on when it answers its
+// call, and `receiver` gets them before the answer to its own call. Waiting a while instead
+// would prove nothing on a slow machine.
+void flush(const QDBusConnection &sender, const QDBusConnection &receiver)
+{
+    const QString bus = QStringLiteral("org.freedesktop.DBus");
+    sender.interface()->isServiceRegistered(bus);
+    receiver.interface()->isServiceRegistered(bus);
+    QCoreApplication::processEvents();
+}
+} // namespace
+#endif
+
+/// A screen locker's GetActive, for a locker that came back without announcing its state.
+class FakeLocker : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.ScreenSaver")
+
+public:
+    explicit FakeLocker(bool active)
+        : m_active(active)
+    {
+    }
+    int calls = 0;
+
+public Q_SLOTS:
+    bool GetActive()
+    {
+        ++calls;
+        return m_active;
+    }
+
+private:
+    bool m_active;
+};
 
 class ScreenLockWatcherTest : public QObject
 {
@@ -229,7 +282,7 @@ private Q_SLOTS:
         };
 
         QVERIFY(impostor.send(lockSignal()));
-        QTest::qWait(200);
+        flush(impostor, session);
         QCOMPARE(engine->state(), TimerEngine::State::Working);
 
         QVERIFY(screenSaver.send(lockSignal()));
@@ -313,6 +366,8 @@ private Q_SLOTS:
         // is left here) and ActiveChanged(false) never comes. It starts again, and the next lock
         // must pause the work phase as the first one did.
         QDBusConnection::disconnectFromBus(QStringLiteral("locker"));
+        // The bus may handle the new owner's request before the old connection's end.
+        QVERIFY(nameReleased(session, QStringLiteral("org.freedesktop.ScreenSaver")));
         QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("locker-restarted"));
         QVERIFY(restarted.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
         QVERIFY(restarted.send(locked()));
@@ -367,11 +422,101 @@ private Q_SLOTS:
         QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("gone-restarted"));
         QVERIFY(restarted.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
         QVERIFY(restarted.send(activeChanged(false)));
-        QTest::qWait(200);
+        flush(restarted, session);
         QCOMPARE(unlockSpy.count(), 1);
+
+        // It locks and unlocks before the user answered: the lock pauses nothing more, and the
+        // unlock, the user's real return, is reported again (Main.qml shows one prompt for both).
+        QVERIFY(restarted.send(activeChanged(true)));
+        flush(restarted, session);
+        QCOMPARE(pauseSpy.count(), 1);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(restarted.send(activeChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 2);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QCOMPARE(pauseSpy.count(), 1);
 
         QDBusConnection::disconnectFromBus(QStringLiteral("gone-restarted"));
         QDBusConnection::disconnectFromBus(QStringLiteral("gone-session"));
+#endif
+    }
+
+    void aLockerThatCameBackLockedIsAsked()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        const QString name = QStringLiteral("org.freedesktop.ScreenSaver");
+        const QString path = QStringLiteral("/org/freedesktop/ScreenSaver");
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("asked-session"));
+        const auto activeChanged = [&](bool active) {
+            QDBusMessage signal = QDBusMessage::createSignal(path, name, QStringLiteral("ActiveChanged"));
+            signal << active;
+            return signal;
+        };
+
+        ScreenLockWatcher lockWatcher(session);
+        lockWatcher.attach(engine.get(), settings.get());
+        QSignalSpy unlockSpy(&lockWatcher, &ScreenLockWatcher::screenUnlockedAfterPause);
+        engine->start();
+        {
+            QDBusConnection locker = QDBusConnection::connectToBus(bus.address(), QStringLiteral("asked-locker"));
+            QVERIFY(locker.registerService(name));
+            QVERIFY(locker.send(activeChanged(true)));
+            QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        }
+        engine->resume();
+        QDBusConnection::disconnectFromBus(QStringLiteral("asked-locker"));
+        QVERIFY(nameReleased(session, name));
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+
+        // It comes back with the screen locked and says nothing: asked, it answers it is locked.
+        FakeLocker stillLocked(true);
+        QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("asked-restarted"));
+        QVERIFY(restarted.registerObject(path, &stillLocked, QDBusConnection::ExportAllSlots));
+        QVERIFY(restarted.registerService(name));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+        QCOMPARE(stillLocked.calls, 1);
+
+        QVERIFY(restarted.send(activeChanged(false)));
+        QTRY_COMPARE(unlockSpy.count(), 1);
+
+        QDBusConnection::disconnectFromBus(QStringLiteral("asked-restarted"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("asked-session"));
+#endif
+    }
+
+    void aLockerAnsweringUnlockedChangesNothing()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("unlocked-session"));
+        ScreenLockWatcher lockWatcher(session);
+        lockWatcher.attach(engine.get(), settings.get());
+        engine->start();
+
+        FakeLocker unlocked(false);
+        QDBusConnection locker = QDBusConnection::connectToBus(bus.address(), QStringLiteral("unlocked-locker"));
+        QVERIFY(locker.registerObject(QStringLiteral("/org/freedesktop/ScreenSaver"), &unlocked, QDBusConnection::ExportAllSlots));
+        QVERIFY(locker.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
+        QTRY_COMPARE(unlocked.calls, 1);
+        // The answer left before the locker's call to the bus: the watcher has it after flush().
+        flush(locker, session);
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(!lockWatcher.isPausedByScreenLock());
+
+        QDBusConnection::disconnectFromBus(QStringLiteral("unlocked-locker"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("unlocked-session"));
 #endif
     }
 
@@ -409,7 +554,7 @@ private Q_SLOTS:
 
         // The proxy restarting says nothing about gnome-shell's lock.
         QDBusConnection::disconnectFromBus(QStringLiteral("proxy"));
-        QTest::qWait(200);
+        QVERIFY(nameReleased(session, QStringLiteral("org.freedesktop.ScreenSaver")));
         QCOMPARE(unlockSpy.count(), 0);
 
         QVERIFY(gnomeShell.send(activeChanged(false)));

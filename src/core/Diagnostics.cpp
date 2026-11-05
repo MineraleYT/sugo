@@ -25,6 +25,7 @@
 #include <QLoggingCategory>
 #include <QMetaEnum>
 
+#include <algorithm>
 #include <atomic>
 #include <deque>
 
@@ -184,6 +185,36 @@ QList<QRegularExpression> &accountRedactions()
     static auto *patterns = new QList<QRegularExpression>;
     return *patterns;
 }
+
+// Puts `placeholder` in place of each match of `word`, but leaves the placeholders already put in
+// alone: a user named "user" (or an account word "account") must not turn "<user>" into
+// "<<user>>".
+void replaceWord(QString &text, const QRegularExpression &word, const QString &placeholder)
+{
+    static const QRegularExpression &placeholders = *new QRegularExpression(QStringLiteral("<(?:user|account|redacted)>"));
+    QList<std::pair<qsizetype, qsizetype>> kept;
+    for (auto it = placeholders.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        kept.append({match.capturedStart(), match.capturedEnd()});
+    }
+    QString result;
+    qsizetype done = 0;
+    for (auto it = word.globalMatch(text); it.hasNext();) {
+        const QRegularExpressionMatch match = it.next();
+        const bool inPlaceholder = std::any_of(kept.cbegin(), kept.cend(), [&match](const std::pair<qsizetype, qsizetype> &span) {
+            return match.capturedStart() < span.second && match.capturedEnd() > span.first;
+        });
+        if (!inPlaceholder) {
+            result.append(QStringView(text).mid(done, match.capturedStart() - done));
+            result.append(placeholder);
+            done = match.capturedEnd();
+        }
+    }
+    if (done > 0) {
+        result.append(QStringView(text).mid(done));
+        text = result;
+    }
+}
 } // namespace
 
 void Diagnostics::setAccountRedactions(const QStringList &words)
@@ -233,7 +264,7 @@ QString Diagnostics::redact(const QString &text)
         accounts = accountRedactions();
     }
     for (const QRegularExpression &pattern : std::as_const(accounts)) {
-        result.replace(pattern, QStringLiteral("<account>"));
+        replaceWord(result, pattern, QStringLiteral("<account>"));
     }
 
     // 1. Redact the home directory path (and its resolved form, if it is a symlink)
@@ -261,7 +292,7 @@ QString Diagnostics::redact(const QString &text)
     if (user.length() > 2) {
         const QRegularExpression userRegex(QStringLiteral(R"((?<![A-Za-z0-9_.-])%1(?![A-Za-z0-9_-]))")
                                                .arg(QRegularExpression::escape(user)));
-        result.replace(userRegex, QStringLiteral("<user>"));
+        replaceWord(result, userRegex, QStringLiteral("<user>"));
     }
 
     return result;

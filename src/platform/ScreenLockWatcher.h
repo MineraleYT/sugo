@@ -11,6 +11,7 @@ class AppSettings;
 class MacSessionEvents;
 #else
 #include <QDBusConnection>
+#include <QHash>
 #include <QString>
 #endif
 class TimerEngine;
@@ -25,6 +26,10 @@ class TimerEngine;
  * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
  * as a repeat. The locker going away most likely means the session is usable again, and a locker
  * that comes back locked reports a new lock, which pauses nothing (the phase is already paused).
+ * Its unlock is then reported once more while the phase is still paused by the first lock: that
+ * one is the real return of the user, and the window shows a single resume prompt for both.
+ * A new owner of either name is also asked GetActive, in case it started with the screen locked
+ * without announcing it; only a "locked" answer counts, and only from the owner still in place.
  *
  * Also pauses whatever phase is running when the computer goes to sleep (logind's
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
@@ -93,10 +98,12 @@ private:
 
 #ifndef Q_OS_MACOS
     void onLockerGone(const QString &name);
+    void askLockerState(const QString &name, const QString &owner);
 
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
     QString m_lockSource; // the name whose owner reported the current lock
+    QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
