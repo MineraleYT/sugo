@@ -134,13 +134,28 @@ private Q_SLOTS:
         QCOMPARE(conflict.extra.value(QLatin1String("etag")).toString(), QStringLiteral("abc"));
     }
 
+    void retryAfter_data()
+    {
+        QTest::addColumn<QByteArray>("header");
+        QTest::addColumn<int>("seconds");
+        QTest::newRow("seconds") << QByteArray("60") << 60;
+        // More than an hour would overflow the retry timers' milliseconds (2500000 s: 2.5e9 ms).
+        QTest::newRow("huge") << QByteArray("2500000") << 3600;
+        QTest::newRow("beyond_int") << QByteArray("99999999999") << 0;
+        QTest::newRow("negative") << QByteArray("-5") << 0;
+        QTest::newRow("http_date") << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 0; // the caller's own delay
+    }
+
     void retryAfter()
     {
+        QFETCH(QByteArray, header);
+        QFETCH(int, seconds);
         link();
+        server->retryAfter = header;
         server->failNext("/v1/devices", 429);
         const SyncReply reply = wait([&](auto cb) { api->listDevices(cb); });
         QCOMPARE(int(reply.error.kind), int(SyncError::Kind::RateLimited));
-        QCOMPARE(reply.error.retryAfter, 60);
+        QCOMPARE(reply.error.retryAfter, seconds);
     }
 
     void baseUrl()
