@@ -18,61 +18,16 @@ QQC2.Page {
     readonly property bool isWorkPhase: TimerEngine.phase === TimerEngine.Phase.Work
     readonly property bool running: TimerEngine.active && !TimerEngine.paused
 
-    // Stop and Skip end the phase at once, unless that would cut short a work session that has
-    // already run for a while: then they ask first. A quick mis-start stays one click away.
-    property int confirmAfterSeconds: 60
-    readonly property bool workUnderWay: TimerEngine.active && isWorkPhase
-        && TimerEngine.totalSeconds - TimerEngine.remainingSeconds >= confirmAfterSeconds
-    readonly property bool endConfirming: endPhaseDialog.visible
+    // Stop and Skip ask first when work under way would be cut short: the window asks
+    // (Main.qml), as for the search and the menu bar.
+    readonly property bool endConfirming: applicationWindow().endPhaseConfirming
 
     function requestStop(): void {
-        if (workUnderWay) {
-            endPhaseDialog.skipping = false;
-            endPhaseDialog.open();
-        } else {
-            TimerEngine.stop();
-        }
+        applicationWindow().requestEndPhase(false);
     }
 
     function requestSkip(): void {
-        if (workUnderWay) {
-            endPhaseDialog.skipping = true;
-            endPhaseDialog.open();
-        } else {
-            TimerEngine.skip();
-        }
-    }
-
-    ConfirmDialog {
-        id: endPhaseDialog
-        property bool skipping: false
-        // The question is about the work session it was asked for: once that ends some other
-        // way (elapsed, tray, shortcut), confirming late must not stop or skip the next phase.
-        Connections {
-            target: TimerEngine
-            function onPhaseChanged() {
-                endPhaseDialog.close();
-            }
-            function onStateChanged() {
-                if (!TimerEngine.active) {
-                    endPhaseDialog.close();
-                }
-            }
-        }
-        title: skipping ? i18n("Skip This Work Session?") : i18n("Stop This Work Session?")
-        text: skipping ? i18n("The rest of this work session is skipped and it is saved as interrupted.")
-                       : i18n("The work session ends now and is saved as interrupted.")
-        confirmText: skipping ? i18n("Skip") : i18n("Stop")
-        confirmKind: "danger"
-        cancelText: i18n("Keep Working")
-        onConfirmed: {
-            endPhaseDialog.close();
-            if (skipping) {
-                TimerEngine.skip();
-            } else {
-                TimerEngine.stop();
-            }
-        }
+        applicationWindow().requestEndPhase(true);
     }
 
     // --- The cycle, as segments: work, break, work, break… and the long break at the end ---
@@ -239,6 +194,9 @@ QQC2.Page {
                     }
                 }
                 Text {
+                    // A long category is cut: the pill is never wider than the track below.
+                    Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.spaceLg * 2 - Theme.spaceSm - phaseRow.spacing)
+                    elide: Text.ElideRight
                     text: page.phaseText
                     color: page.isIdle ? Theme.muted : Qt.lighter(page.phaseColor, Theme.dark ? 1.3 : 0.8)
                     font.pixelSize: Theme.fontBody
@@ -252,7 +210,18 @@ QQC2.Page {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: -Theme.spaceMd
             Accessible.role: Accessible.StaticText
-            Accessible.name: i18nc("time left", "%1 minutes %2 seconds left", page.minutesText, page.secondsText)
+            // In words, unit by unit ("1 hour 5 minutes 3 seconds left"), not the clock's "1:05".
+            Accessible.name: {
+                const total = TimerEngine.remainingSeconds;
+                const minutes = Math.floor((total % 3600) / 60);
+                const parts = [];
+                if (page.hours > 0) {
+                    parts.push(i18np("%1 hour", "%1 hours", page.hours));
+                }
+                parts.push(i18np("%1 minute", "%1 minutes", minutes));
+                parts.push(i18np("%1 second", "%1 seconds", total % 60));
+                return i18nc("time left, e.g. 5 minutes 3 seconds", "%1 left", parts.join(" "));
+            }
             opacity: TimerEngine.paused ? 0.55 : 1
             Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
 
@@ -290,14 +259,32 @@ QQC2.Page {
 
             Item {
                 id: track
+                objectName: "cycleTrack"
                 Layout.fillWidth: true
                 implicitHeight: Theme.spaceSm
+                // A long set (up to 99 work phases) still fits: the gaps take at most half the
+                // track, the segments' minimum width shrinks to their share of the rest, and the
+                // track clips what rounding leaves over.
+                clip: true
+                readonly property int count: page.segments.length
                 readonly property real total: page.segments.reduce((sum, s) => sum + s.seconds, 0)
-                readonly property real gaps: Theme.spaceXs * (page.segments.length - 1)
+                readonly property real gap: count > 1 ? Math.min(Theme.spaceXs, width / 2 / (count - 1)) : 0
+                readonly property real available: Math.max(0, width - gap * (count - 1))
+                readonly property real minSegment: Math.min(Theme.spaceSm, available / Math.max(1, count))
+                // Each segment as long as its phase, at least minSegment; when those minimums would
+                // push the row past the track, each gets the minimum plus its share of what is left
+                // (the hairline only absorbs floating-point error in a sum that fits).
+                readonly property bool crowded: page.segments.reduce(
+                    (sum, s) => sum + Math.max(minSegment, available * s.seconds / Math.max(1, total)), 0) > available + Theme.hairline
+                function segmentWidth(seconds: real): real {
+                    return crowded ? minSegment + (available - minSegment * count) * seconds / Math.max(1, total)
+                                   : Math.max(minSegment, available * seconds / Math.max(1, total));
+                }
 
                 Row {
+                    objectName: "cycleSegments"
                     anchors.fill: parent
-                    spacing: Theme.spaceXs
+                    spacing: track.gap
 
                     Repeater {
                         model: page.segments
@@ -306,9 +293,13 @@ QQC2.Page {
                             id: segment
                             required property var modelData
                             required property int index
-                            readonly property bool done: index < page.currentSegment && !page.isIdle
+                            objectName: "cycleSegment-" + index
+                            // Also while the next phase waits for Start (Manual mode): the work
+                            // done in this set stays done. Stop and the end of the set reset the
+                            // count, so nothing shows done then, nor before any work is counted.
+                            readonly property bool done: index < page.currentSegment && TimerEngine.completedCycles > 0
                             readonly property bool current: index === page.currentSegment
-                            width: Math.max(Theme.spaceSm, (track.width - track.gaps) * modelData.seconds / Math.max(1, track.total))
+                            width: track.segmentWidth(modelData.seconds)
                             height: track.height
                             radius: height / 2
                             color: Theme.track

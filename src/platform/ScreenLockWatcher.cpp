@@ -16,6 +16,7 @@ Q_LOGGING_CATEGORY(lcScreenLock, "sugo.platform.screenlock")
 #ifndef Q_OS_MACOS
 const QString kInterface = QStringLiteral("org.freedesktop.ScreenSaver");
 const QString kSignal = QStringLiteral("ActiveChanged");
+const QString kGnomeInterface = QStringLiteral("org.gnome.ScreenSaver");
 #endif
 } // namespace
 
@@ -61,8 +62,10 @@ ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, const QDBusConn
                             SLOT(onPrepareForSleep(bool)));
     }
 
-    // Plasma emits ActiveChanged on both paths; onActiveChanged() drops the repeat. Only the owner
-    // of the screen saver's name is listened to: another program on the bus cannot fake a lock.
+    // Plasma emits ActiveChanged on both paths; onActiveChanged() drops the repeat. GNOME owns
+    // org.freedesktop.ScreenSaver only to forward Inhibit and announces locks on its own name
+    // instead. Only the owner of a screen saver's name is listened to: another program on the bus
+    // cannot fake a lock.
     if (m_bus.isConnected()) {
         m_bus.connect(kInterface,
                       QStringLiteral("/org/freedesktop/ScreenSaver"),
@@ -73,6 +76,12 @@ ScreenLockWatcher::ScreenLockWatcher(const QDBusConnection &bus, const QDBusConn
         m_bus.connect(kInterface,
                       QStringLiteral("/ScreenSaver"),
                       kInterface,
+                      kSignal,
+                      this,
+                      SLOT(onActiveChanged(bool)));
+        m_bus.connect(kGnomeInterface,
+                      QStringLiteral("/org/gnome/ScreenSaver"),
+                      kGnomeInterface,
                       kSignal,
                       this,
                       SLOT(onActiveChanged(bool)));
@@ -149,7 +158,7 @@ void ScreenLockWatcher::onPrepareForSleep(bool start)
 void ScreenLockWatcher::onActiveChanged(bool active)
 {
     if (active == m_screenLocked) {
-        return; // the same change, reported again on the other object path
+        return; // the same change, reported again on another object path or name
     }
     m_screenLocked = active;
     qCDebug(lcScreenLock) << "Screen lock state changed:" << active;

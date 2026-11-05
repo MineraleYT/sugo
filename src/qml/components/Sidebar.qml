@@ -23,6 +23,9 @@ Rectangle {
     /// are here.
     signal moveRequested()
     property bool maximized: false
+    /// The window buttons the desktop puts on the left; off where the sidebar is not part of the
+    /// window's frame (the drawer of a narrow window).
+    property bool showWindowButtons: true
     signal minimizeRequested()
     signal toggleMaximizeRequested()
     signal closeRequested()
@@ -65,7 +68,7 @@ Rectangle {
 
         // The window buttons the desktop puts on the left.
         WindowButtons {
-            visible: DesktopStyle.leftButtons.length > 0
+            visible: sidebar.showWindowButtons && DesktopStyle.leftButtons.length > 0
             Layout.leftMargin: Theme.spaceSm
             Layout.topMargin: Theme.spaceXs
             Layout.bottomMargin: Theme.spaceSm
@@ -102,7 +105,7 @@ Rectangle {
             Text {
                 text: i18n("Sugo")
                 color: Theme.foreground
-                font.pixelSize: Theme.fontTitle + 2
+                font.pixelSize: Theme.fontTitleLg
                 font.weight: Font.DemiBold
                 Layout.fillWidth: true
             }
@@ -169,11 +172,16 @@ Rectangle {
             Layout.bottomMargin: Theme.spaceXs
         }
 
+        // The one part that gives way when the column is short: as tall as its rows, but it
+        // shrinks (down to two rows, then scrolls) so that what follows stays in the window,
+        // whatever else is shown (window buttons, the update entry, macOS's title strip).
         ListView {
             id: timerList
             Layout.fillWidth: true
+            Layout.fillHeight: true
             Layout.preferredHeight: contentHeight
-            Layout.maximumHeight: Math.max(Theme.navHeight * 3, sidebar.height - Theme.navHeight * 9)
+            Layout.maximumHeight: contentHeight
+            Layout.minimumHeight: Math.min(contentHeight, Theme.navHeight * 2 + spacing)
             clip: true
             model: PresetModel
             spacing: Theme.hairline * 2

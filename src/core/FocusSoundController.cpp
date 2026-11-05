@@ -537,9 +537,14 @@ void FocusSoundController::feedAudio()
     }
     m_output->pump();
 
-    const int activeMode = m_previewing ? m_previewMode : m_mode;
-    if (activeMode > 0) {
-        m_soundMode = activeMode;
+    // A fade-out ends the sound that was playing, as loud as it was: the end of a preview fades
+    // out the preview, not the sound and volume set meanwhile.
+    if (!m_stopping) {
+        const int activeMode = m_previewing ? m_previewMode : m_mode;
+        if (activeMode > 0) {
+            m_soundMode = activeMode;
+        }
+        m_soundVolume = playbackVolume();
     }
     if (m_soundMode <= 0) {
         return;
@@ -577,7 +582,7 @@ QByteArray FocusSoundController::generateChunk(int numSamples)
     data.resize(numSamples * sizeof(qint16));
     auto *samples = reinterpret_cast<qint16 *>(data.data());
 
-    const float volFactor = (playbackVolume() / 100.0f);
+    const float volFactor = (m_soundVolume / 100.0f);
     const int currentMode = m_soundMode;
 
     for (int i = 0; i < numSamples; ++i, ++m_sampleIndex) {

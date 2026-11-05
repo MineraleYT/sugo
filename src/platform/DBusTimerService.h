@@ -57,6 +57,9 @@ public:
 
     /// Asked before every command; without one, commands are always allowed.
     void setControlAllowed(std::function<bool()> allowed) { m_commands.setControlAllowed(std::move(allowed)); }
+    /// For a service created (and registered) before the timer exists: until then its commands
+    /// do nothing.
+    void attach(TimerEngine *engine, PresetModel *presets) { m_commands.attach(engine, presets); }
 
 public Q_SLOTS:
     void toggle();

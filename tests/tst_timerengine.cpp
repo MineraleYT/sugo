@@ -601,6 +601,96 @@ private Q_SLOTS:
         QCOMPARE(engine->completedCycles(), 0);
     }
 
+    void pendingShortBreakSetToZeroGivesWayToWork()
+    {
+        engine->start();
+        elapse(25 * 60);
+        QCOMPARE(engine->state(), State::Idle);
+        QCOMPARE(engine->phase(), Phase::ShortBreak);
+
+        QSignalSpy phase(engine.get(), &TimerEngine::phaseChanged);
+        engine->setShortBreakSeconds(0);
+        // Not a 0:00 break that would start Work: Work is what waits now.
+        QCOMPARE(phase.count(), 1);
+        QCOMPARE(engine->state(), State::Idle);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->remainingSeconds(), 25 * 60);
+        QCOMPARE(engine->totalSeconds(), 25 * 60);
+        QCOMPARE(engine->completedCycles(), 1); // the work done still counts
+        engine->start();
+        QCOMPARE(engine->state(), State::Working);
+    }
+
+    void pendingLongBreakSetToZeroIsReplacedAtOnce()
+    {
+        engine->setCyclesBeforeLong(1);
+        engine->start();
+        elapse(25 * 60);
+        QCOMPARE(engine->phase(), Phase::LongBreak);
+        QCOMPARE(engine->completedCycles(), 1);
+
+        QSignalSpy phase(engine.get(), &TimerEngine::phaseChanged);
+        engine->setLongBreakSeconds(0);
+        // The set still ends here, with the ordinary break.
+        QCOMPARE(phase.count(), 1);
+        QCOMPARE(engine->state(), State::Idle);
+        QCOMPARE(engine->phase(), Phase::ShortBreak);
+        QCOMPARE(engine->remainingSeconds(), 5 * 60);
+        QCOMPARE(engine->completedCycles(), 0);
+
+        // With no ordinary break either, Work waits.
+        engine->setShortBreakSeconds(0);
+        QCOMPARE(phase.count(), 2);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->remainingSeconds(), 25 * 60);
+    }
+
+    void pendingLongBreakWithBothBreaksSetToZeroWaitsForWork()
+    {
+        engine->setCyclesBeforeLong(1);
+        engine->start();
+        elapse(25 * 60);
+        QCOMPARE(engine->phase(), Phase::LongBreak);
+        // The order the binding pushes them in: the short break first.
+        engine->setShortBreakSeconds(0);
+        QCOMPARE(engine->phase(), Phase::LongBreak);
+        engine->setLongBreakSeconds(0);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->completedCycles(), 0);
+    }
+
+    void breakThatIsNotPendingSetToZeroChangesNothing()
+    {
+        QSignalSpy phase(engine.get(), &TimerEngine::phaseChanged);
+        QSignalSpy cycles(engine.get(), &TimerEngine::cyclesChanged);
+
+        // Work waits: neither break is pending.
+        engine->setShortBreakSeconds(0);
+        engine->setLongBreakSeconds(0);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(phase.count(), 0);
+
+        // A short break waits: the long break is not the one pending.
+        engine->setShortBreakSeconds(5 * 60);
+        engine->setLongBreakSeconds(15 * 60);
+        engine->start();
+        elapse(25 * 60);
+        QCOMPARE(engine->phase(), Phase::ShortBreak);
+        phase.clear();
+        cycles.clear();
+        engine->setLongBreakSeconds(0);
+        QCOMPARE(engine->phase(), Phase::ShortBreak);
+        QCOMPARE(engine->completedCycles(), 1);
+        QCOMPARE(phase.count(), 0);
+        QCOMPARE(cycles.count(), 0);
+
+        // A running break is left alone: the change applies to the next one.
+        engine->start();
+        engine->setShortBreakSeconds(0);
+        QCOMPARE(engine->state(), State::ShortBreak);
+        QCOMPARE(engine->remainingSeconds(), 5 * 60);
+    }
+
     void timeSignalsFollowTheDisplayedSecondNotTheTicker()
     {
         // The ticker runs ten times a second; listeners (the progress ring repaints, the tray)
@@ -673,6 +763,23 @@ private Q_SLOTS:
         QCOMPARE(ended.count(), 1);
         QCOMPARE(ended.first().at(5).toBool(), true); // completed
         QCOMPARE(engine->state(), State::Idle);
+        // Still a stop: the break the finished phase left waiting is dropped, the set starts over.
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->completedCycles(), 0);
+    }
+
+    void resetAfterTheDeadlineButBeforeTheTickStartsAFreshSet()
+    {
+        engine->setCyclesBeforeLong(1); // the finished work phase would leave a long break waiting
+        QSignalSpy ended(engine.get(), &TimerEngine::sessionEnded);
+        engine->start();
+        clock.advanceSeconds(25 * 60 + 1);
+        engine->reset();
+        QCOMPARE(ended.count(), 1);
+        QCOMPARE(ended.first().at(5).toBool(), true);
+        QCOMPARE(engine->state(), State::Idle);
+        QCOMPARE(engine->phase(), Phase::Work);
+        QCOMPARE(engine->completedCycles(), 0);
     }
 
     void skipAfterTheDeadlineCompletesAndStartsTheNextPhase()

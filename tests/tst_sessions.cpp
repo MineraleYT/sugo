@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -410,6 +411,22 @@ private Q_SLOTS:
         QCOMPARE(recent.size(), 2);
         QCOMPARE(recent.at(0), QStringLiteral("Task 2 updated"));
         QCOMPARE(recent.at(1), QStringLiteral("Task 1"));
+    }
+
+    void noteForAMissingSessionIsRefused()
+    {
+        qint64 id = 0;
+        QVERIFY(sessions->insert(makeRecord(1000), &id));
+        QVERIFY(sessions->deleteAll());
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("there is no session")));
+        QVERIFY(!sessions->updateNote(id, QStringLiteral("Lost")));
+        QVERIFY(sessions->recentNotes(5).isEmpty());
+
+        // Saving the note a session already has still counts as stored.
+        QVERIFY(sessions->insert(makeRecord(2000), &id));
+        QVERIFY(sessions->updateNote(id, QStringLiteral("Same")));
+        QVERIFY(sessions->updateNote(id, QStringLiteral("Same")));
     }
 
     void recentNotesAreTrimmedDedupedAndOrderedByLastUse()

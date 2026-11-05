@@ -70,11 +70,10 @@ QQC2.Page {
 
     Connections {
         target: AppSettings
+        // Not cleared on startAtLoginChanged: AppSettings announces that after a failure too,
+        // right after this message. A new attempt clears it (the switch's `applying`).
         function onAutostartFailed(message) {
             page.autostartError = message;
-        }
-        function onStartAtLoginChanged() {
-            page.autostartError = "";
         }
         function onFocusShortcutNamesChanged() {
             page.focusShortcutNames = AppSettings.focusShortcutNames();
@@ -271,7 +270,10 @@ QQC2.Page {
         Accessible.name: accessibleName
         Accessible.description: row.description
         checked: AppSettings[setting]
+        // Just before the new value goes to AppSettings: the page clears an earlier attempt's message.
+        signal applying()
         onToggled: {
+            sw.applying();
             AppSettings[setting] = checked;
             checked = Qt.binding(() => AppSettings[sw.setting]);
         }
@@ -655,7 +657,11 @@ QQC2.Page {
                         description: i18n("Sugo is ready as soon as you log in.")
                         opacity: setupStep.reveal(6)
                         transform: Translate { y: setupStep.rise(6) }
-                        SettingSwitch { setting: "startAtLogin"; row: loginRow }
+                        SettingSwitch {
+                            setting: "startAtLogin"
+                            row: loginRow
+                            onApplying: page.autostartError = ""
+                        }
                     }
                     // macOS: the two shortcuts that turn Do Not Disturb on and off while working.
                     // Optional: the tour goes on without them.

@@ -162,6 +162,9 @@ Q_SIGNALS:
     void lastSuccessChanged();
     void pendingCountChanged();
     void calendarsChanged();
+    /// An address typed in (setServerUrl, setCalendarUrl) was refused and nothing was stored:
+    /// `message` says why, so the view can keep what was typed and explain it.
+    void inputRejected(const QString &message);
 
 private:
     struct Result {
@@ -209,6 +212,7 @@ private:
     void refreshIdleStatus();
     void setStatus(Status status, const QString &text);
     void setLastError(const QString &error);
+    void rejectInput(const QString &error);
     QString scrub(const QString &text) const;
     QString describeFailure(const Result &result) const;
 
@@ -216,9 +220,12 @@ private:
     void request(const QByteArray &verb, const QUrl &url, const QByteArray &body, const QList<QPair<QByteArray, QByteArray>> &headers,
                  bool withAuth, std::function<void(const Result &)> done);
     QUrl eventUrl(const QString &uid) const;
+    /// Where discovery looks for calendars (for Nextcloud, if the server does not say).
     QUrl discoveryUrl() const;
 
     void trySend();
+    /// trySend() from the event loop, once however often it is asked for meanwhile.
+    void trySendLater();
     void scheduleRetry();
     void onSendFinished(const Result &result, bool credentialsChangedMeanwhile);
     void rememberSent(const Pending &item);
@@ -226,6 +233,15 @@ private:
     void abortAll();
 
     void discover(std::function<void(bool)> done);
+    /// PROPFIND (depth 0) of one property whose value is an href, e.g. the user's principal.
+    /// `found` gets the address, or an empty one if the server does not give it (no such
+    /// property, 404, 405, 501); `failed` gets any other answer (a refused login, no connection).
+    void findHref(const QUrl &url, const QByteArray &property, const QString &name, std::function<void(const QUrl &)> found,
+                  std::function<void(const Result &)> failed);
+    /// The calendars in the collection `url`; `stale` says the account changed meanwhile.
+    void listCalendars(const QUrl &url, std::function<bool()> stale, std::function<void(bool)> done);
+    /// Reports a failed discovery request; a refused login pauses sending.
+    void discoveryFailed(const Result &r);
     void autoSelectCalendar();
 
     void pollLogin();
@@ -260,6 +276,7 @@ private:
     QList<Pending> m_queue;
     QList<Pending> m_sent; ///< The last events sent, oldest first, bounded.
     bool m_inFlight = false;
+    bool m_sendLater = false; ///< A trySendLater() call is waiting for the event loop.
     QString m_inFlightUid;
     /// Connection-test events the server did not let us remove yet.
     QList<LeftoverTest> m_leftoverTests;

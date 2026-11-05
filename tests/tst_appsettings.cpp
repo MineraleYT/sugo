@@ -2,8 +2,10 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSignalSpy>
-#include <QStandardPaths>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -25,6 +27,7 @@ struct FakeState {
     bool supported = true;
     bool enabled = false;
     bool failNext = false;
+    bool temporaryLocation = false;
     int setCalls = 0;
     int repairCalls = 0;
 };
@@ -50,6 +53,7 @@ public:
         return true;
     }
     void repair() override { ++m_state->repairCalls; }
+    bool runsFromTemporaryLocation() const override { return m_state->temporaryLocation; }
 
 private:
     std::shared_ptr<FakeState> m_state;
@@ -84,6 +88,9 @@ private:
 private Q_SLOTS:
     void initTestCase()
     {
+        // A developer's exported SUGO_DATA_DIR would turn off the login-entry repair these tests
+        // count; the test that needs the variable sets it itself.
+        qunsetenv("SUGO_DATA_DIR");
     }
 
     void init()
@@ -377,6 +384,40 @@ private Q_SLOTS:
         QCOMPARE(changed.count(), 1);        // announced, so a checkbox shows the real state again
     }
 
+    // Opened from the disk image: a message that says what to do, not a generic failure.
+    void enablingFromATemporaryLocationSaysToMoveTheApp()
+    {
+        const auto settings = make();
+        QSignalSpy failed(settings.get(), &AppSettings::autostartFailed);
+        state->temporaryLocation = true;
+
+        settings->setStartAtLogin(true);
+
+        QCOMPARE(state->setCalls, 0);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+        QVERIFY(failed.first().first().toString().contains(QStringLiteral("Applications folder")));
+
+        // Turning off an entry made by the installed copy still works from there.
+        state->enabled = true;
+        settings->setStartAtLogin(false);
+        QVERIFY(!settings->startAtLogin());
+        QCOMPARE(failed.count(), 1);
+    }
+
+    // The welcome tour clears its message on startAtLoginChanged: the failure must come after it.
+    void theFailureIsAnnouncedAfterTheStateChange()
+    {
+        QStringList order;
+        const auto settings = make();
+        connect(settings.get(), &AppSettings::startAtLoginChanged, this, [&order] { order << QStringLiteral("changed"); });
+        connect(settings.get(), &AppSettings::autostartFailed, this, [&order] { order << QStringLiteral("failed"); });
+
+        state->failNext = true;
+        settings->setStartAtLogin(true);
+        QCOMPARE(order, QStringList({QStringLiteral("changed"), QStringLiteral("failed")}));
+    }
+
     void aStaleEntryIsRepairedAtStartup()
     {
         make();
@@ -486,6 +527,56 @@ private Q_SLOTS:
         QCOMPARE(reloaded->trayBadgeStyle(), 0);
         QCOMPARE(reloaded->focusSoundMode(), 0);
         QCOMPARE(reloaded->soundVolume(), 0);
+    }
+
+    void emptyOrNonNumericValuesUseTheDefaults()
+    {
+        // A hand-edited or half-written file: such a value must not read as 0 (muting the alerts).
+        // A file of its own: QSettings keeps the parse of a path it has seen before when the
+        // file's size and time stamp have not changed, which a test writing the same path at
+        // once can hit (seen on macOS).
+        const QString path = dir.filePath(QStringLiteral("hand-edited.conf"));
+        {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            file.write("[General]\nSoundVolume=\nFocusSoundVolume=loud\nTrayBadgeStyle=two\nFocusSoundMode=\n");
+        }
+        const auto settings = std::make_unique<AppSettings>(Settings::open(path), std::make_unique<FakeAutostart>(state), true);
+        QCOMPARE(settings->soundVolume(), 80);
+        QCOMPARE(settings->focusSoundVolume(), 30);
+        QCOMPARE(settings->trayBadgeStyle(), 0);
+        QCOMPARE(settings->focusSoundMode(), 0);
+    }
+
+    void aFailedSaveIsLoggedOnce()
+    {
+        QTemporaryDir parent;
+        QVERIFY(parent.isValid());
+        const QString folder = parent.filePath(QStringLiteral("read-only"));
+        QVERIFY(QDir().mkpath(folder));
+        QVERIFY(QFile::setPermissions(folder, QFile::ReadOwner | QFile::ExeOwner));
+        const auto restore = qScopeGuard([&folder]() {
+            QFile::setPermissions(folder, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        });
+        {
+            // Root (some containers) writes anywhere: nothing to test there.
+            QFile probe(folder + QStringLiteral("/probe"));
+            if (probe.open(QIODevice::WriteOnly)) {
+                probe.remove();
+                QSKIP("The read-only folder can be written to (running as root?)");
+            }
+        }
+
+        const Settings::Ptr settings = Settings::open(folder + QStringLiteral("/sugo.conf"));
+        settings->setValue(QStringLiteral("SoundVolume"), 7);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot save the settings to .*sugo\\.conf")));
+        Settings::sync(*settings);
+        QVERIFY(settings->status() != QSettings::NoError);
+
+        // The next change fails the same way, without a second message.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral("^Cannot save the settings")));
+        settings->setValue(QStringLiteral("SoundVolume"), 8);
+        Settings::sync(*settings);
     }
 
     void colorSchemeDefaultsToSystemAndPersists()
@@ -673,8 +764,13 @@ private Q_SLOTS:
 
     void defaultSettingsAreSharedAndPrivate()
     {
-        QStandardPaths::setTestModeEnabled(true);
-        QFile::remove(Settings::defaultPath());
+        // The default file in a directory of its own: never the user's real settings, and
+        // nothing left behind in ~/.qttest.
+        QTemporaryDir dataDir;
+        QVERIFY(dataDir.isValid());
+        qputenv("SUGO_DATA_DIR", QFile::encodeName(dataDir.path()));
+        const auto unset = qScopeGuard([] { qunsetenv("SUGO_DATA_DIR"); });
+        QCOMPARE(Settings::defaultPath(), dataDir.filePath(QStringLiteral("sugo.conf")));
         QVERIFY(QDir().mkpath(QFileInfo(Settings::defaultPath()).absolutePath()));
         {
             const Settings::Ptr settings = Settings::openDefault();
@@ -684,9 +780,40 @@ private Q_SLOTS:
         }
         QCOMPARE(QFile::permissions(Settings::defaultPath()) & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions());
         QCOMPARE(Settings::openDefault()->value(QStringLiteral("SoundVolume")).toInt(), 7);
+    }
 
-        QFile::remove(Settings::defaultPath());
-        QStandardPaths::setTestModeEnabled(false);
+    void syncKeepsANewFilePrivate()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QFile::Permissions others = QFile::ReadGroup | QFile::WriteGroup | QFile::ReadOther | QFile::WriteOther;
+
+        // A new file, in a folder that does not exist yet.
+        const QString path = dir.filePath(QStringLiteral("sugo/sugo.conf"));
+        {
+            const Settings::Ptr settings = Settings::open(path);
+            settings->setValue(QStringLiteral("SoundVolume"), 7);
+            Settings::sync(*settings);
+        }
+        QVERIFY(QFileInfo::exists(path));
+        QCOMPARE(QFile::permissions(path) & others, QFile::Permissions());
+        QVERIFY(QFile::permissions(path) & QFile::ReadOwner);
+        QCOMPARE(Settings::open(path)->value(QStringLiteral("SoundVolume")).toInt(), 7);
+
+        // An existing file readable by others is made private.
+        const QString shared = dir.filePath(QStringLiteral("shared.conf"));
+        {
+            QFile file(shared);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        QVERIFY(QFile::setPermissions(shared, QFile::ReadOwner | QFile::WriteOwner | QFile::ReadGroup | QFile::ReadOther));
+        {
+            const Settings::Ptr settings = Settings::open(shared);
+            settings->setValue(QStringLiteral("SoundVolume"), 9);
+            Settings::sync(*settings);
+        }
+        QCOMPARE(QFile::permissions(shared) & others, QFile::Permissions());
+        QCOMPARE(Settings::open(shared)->value(QStringLiteral("SoundVolume")).toInt(), 9);
     }
 
     void dataDirVariableReplacesDefaultLocation()
@@ -731,10 +858,24 @@ private Q_SLOTS:
 
     void canberraGetsTheSoundNameAsOneOptionValue()
     {
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete")), QStringList{QStringLiteral("--id=complete")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 100),
+                 (QStringList{QStringLiteral("--id=complete"), QStringLiteral("--volume=0")}));
         // A name read from the configuration that looks like an option stays a value.
-        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd")),
-                 QStringList{QStringLiteral("--id=--file=/etc/passwd")});
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("--file=/etc/passwd"), 100).constFirst(),
+                 QStringLiteral("--id=--file=/etc/passwd"));
+    }
+
+    void canberraGetsTheVolumeInDecibels()
+    {
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 50).constLast(), QStringLiteral("--volume=-6"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 10).constLast(), QStringLiteral("--volume=-20"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 1).constLast(), QStringLiteral("--volume=-40"));
+        QCOMPARE(AppSettings::canberraArguments(QStringLiteral("complete"), 150).constLast(), QStringLiteral("--volume=0"));
+        // No decimal separator, which strtod would read by the user's locale.
+        for (int volume = 1; volume <= 100; ++volume) {
+            const QString argument = AppSettings::canberraArguments(QStringLiteral("complete"), volume).constLast();
+            QVERIFY2(!argument.contains(QLatin1Char('.')) && !argument.contains(QLatin1Char(',')), qPrintable(argument));
+        }
     }
 
     void alertSoundsFadeInAndOut()

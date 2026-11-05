@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Sizes in the interface come from theme/Theme.qml: fails on a literal width, height, spacing,
-# margin, radius, pixel size or line width of 2 px or more, and on "Units.x + 4" style offsets.
+# margin, radius, pixel size or line width of 2 px or more, and on "Theme.x + 4" style offsets.
 # Allowed: 0 and 1 (no spacing, layout weights, 1 px borders), and artwork drawn in its own
 # coordinates and scaled as a whole, between "// artwork-begin" and "// artwork-end".
 set -euo pipefail
 
 qml_dir=${1:?usage: check_qml_sizes.sh <qml directory>}
-pattern='\b(width|height|spacing|[a-zA-Z]*[mM]argin|radius|[a-zA-Z]*Radius|pixelSize|lineWidth|border\.width)\s*:\s*([2-9]|[1-9][0-9]+)(\.[0-9]+)?\s*(;|$)|(Units\.[a-zA-Z.]+|gridUnit)\s*[-+]\s*[2-9]'
+pattern='\b(width|height|spacing|[a-zA-Z]*[mM]argin|radius|[a-zA-Z]*Radius|pixelSize|lineWidth|border\.width)\s*:\s*([2-9]|[1-9][0-9]+)(\.[0-9]+)?\s*(;|$)|(Theme\.[a-zA-Z.]+|Units\.[a-zA-Z.]+|gridUnit)\s*[-+]\s*([2-9]|[1-9][0-9]+)(\.[0-9]+)?\b'
 
 found=0
 while IFS= read -r -d '' file; do

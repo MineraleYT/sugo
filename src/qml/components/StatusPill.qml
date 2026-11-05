@@ -12,6 +12,8 @@ Rectangle {
     property bool pulsing: false
 
     implicitWidth: row.implicitWidth + Theme.spaceLg * 2
+    /// The narrowest it gets, the dot alone: given less than its implicit width, the text is cut.
+    readonly property real compactWidth: Theme.spaceSm + Theme.spaceLg * 2
     implicitHeight: row.implicitHeight + Theme.spaceXs * 2
     radius: height / 2
     color: "transparent"
@@ -23,6 +25,7 @@ Rectangle {
     RowLayout {
         id: row
         anchors.centerIn: parent
+        width: Math.max(0, Math.min(implicitWidth, pill.width - Theme.spaceLg * 2))
         spacing: Theme.spaceSm
         Rectangle {
             id: dot
@@ -43,6 +46,10 @@ Rectangle {
             color: Theme.muted
             font.pixelSize: Theme.fontCaption
             font.features: { "tnum": 1 }
+            elide: Text.ElideRight
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: implicitWidth + 1
+            Layout.fillWidth: true
         }
     }
 }

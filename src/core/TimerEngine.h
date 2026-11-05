@@ -178,6 +178,9 @@ private:
     qint64 remainingMs() const;
     static State stateFor(Phase phase);
 
+    /// The phase that really runs in place of `phase`: a zero long break becomes a short break
+    /// (ending the set, so the cycles reset), a zero break becomes Work.
+    Phase phaseToRun(Phase phase);
     /// `plannedMs` < 0 uses the configured duration of the phase.
     void startPhase(Phase phase, qint64 plannedMs = -1);
     bool shouldAutoStart(Phase next) const;
@@ -195,6 +198,7 @@ private:
     void setPhase(Phase phase);
     void setCycles(int cycles);
     void notifyTime(bool force);
+    /// Refreshes the shown time while Idle, replacing a pending break that now lasts 0.
     void refreshIdleDisplay();
 
     std::unique_ptr<Clock> m_ownedClock;

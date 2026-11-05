@@ -276,6 +276,12 @@ private Q_SLOTS:
         QVERIFY(redacted.contains(QStringLiteral("/remote.php/dav/calendars/")));
         Diagnostics::setAccountRedactions({});
         QVERIFY(Diagnostics::redact(QStringLiteral("cloud.example.org")).contains(QStringLiteral("cloud.example.org")));
+
+        // An account word is redacted only where it stands on its own, in any case.
+        Diagnostics::setAccountRedactions({QStringLiteral("tim")});
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Timer for tim started")), QStringLiteral("Timer for <account> started"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("Tim: login failed")), QStringLiteral("<account>: login failed"));
+        Diagnostics::setAccountRedactions({});
     }
 
     void testExportRejectsNonLocalUrls()
@@ -391,6 +397,23 @@ private Q_SLOTS:
             QVERIFY2(!report.contains(secret, Qt::CaseInsensitive), qPrintable(QStringLiteral("The report shows ") + secret));
         }
         QVERIFY(!report.contains(QStringLiteral("dev_")));
+    }
+
+    void testReportRedactsSoundFilePaths()
+    {
+        QTemporaryDir configDir;
+        AppSettings settings(Settings::open(configDir.filePath(QStringLiteral("settings.conf"))), nullptr, false);
+        // Sounds may be files of the user's, given by their absolute path.
+        settings.setSoundTheme(QStringLiteral("/home/alice/Music/bell.oga"));
+        settings.setPreAlarmSound(QDir::homePath() + QStringLiteral("/Sounds/chime.ogg"));
+
+        Diagnostics diag;
+        diag.attach(&settings, nullptr);
+        const QString report = diag.generateReport();
+        QVERIFY(report.contains(QStringLiteral("Sound Theme: /home/<user>/Music/bell.oga")));
+        QVERIFY(!report.contains(QStringLiteral("alice")));
+        QVERIFY(report.contains(QStringLiteral("~/Sounds/chime.ogg")));
+        QVERIFY(!report.contains(QDir::homePath() + QStringLiteral("/Sounds")));
     }
 };
 

@@ -52,6 +52,7 @@ sugo_add_test(tst_themeicons Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
 set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
+sugo_add_test(tst_unixsignals Qt6::Core)
 
 # Sugo Sync: no D-Bus, the same tests on Linux and macOS.
 sugo_add_test(tst_synccrypto Qt6::Core)
@@ -65,13 +66,18 @@ sugo_add_test(tst_synccontroller Qt6::Core Qt6::Qml Qt6::Network Qt6::Sql)
 add_test(NAME tst_runner_version
     COMMAND grep -qx "X-KDE-PluginInfo-Version=${PROJECT_VERSION}" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
 )
+# KRunner skips a query shorter than the runner's minimum: it must let the bare keyword "sugo" through.
+add_test(NAME tst_runner_min_letters
+    COMMAND grep -qx "X-Plasma-Runner-Min-Letter-Count=[1-4]" ${CMAKE_BINARY_DIR}/io.github.mineraleyt.sugo.runner.desktop
+)
 
 # Linux only: the freedesktop services over D-Bus (notifications, inhibition, KRunner, Secret Service,
 # the single-instance bus name and the /Timer service), and the shutdown test (D-Bus, GNU tools).
 if(NOT APPLE)
     # macOS keeps the screen awake with IOKit power assertions (tst_macpowerassertion).
     sugo_add_test(tst_powerinhibitor Qt6::Core Qt6::Gui Qt6::Qml Qt6::DBus)
-    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::DBus)
+    # Gui: the factory it also checks names the inhibitor after the application's desktop file.
+    sugo_add_test(tst_freedesktopinhibitor Qt6::Core Qt6::Gui Qt6::DBus)
     sugo_add_test(tst_singleinstance Qt6::Core Qt6::DBus)
     sugo_add_test(tst_krunnerservice Qt6::Core Qt6::Qml Qt6::DBus)
     sugo_add_test(tst_freedesktopnotifier Qt6::Core Qt6::DBus)
@@ -105,32 +111,38 @@ set_tests_properties(tst_app_startup PROPERTIES TIMEOUT 30)
 add_test(NAME tst_stats_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> stats
 )
-set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_stats_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_about_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> about
 )
-set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_about_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_settings_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> settings
 )
-set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_settings_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_presets_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> presets
 )
-set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_presets_page_ui PROPERTIES TIMEOUT 15)
 
 add_test(NAME tst_timer_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> timer
 )
-set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_timer_page_ui PROPERTIES TIMEOUT 15)
+
+# Started on a damaged sugo.db: it is moved aside, and the window says so.
+add_test(NAME tst_damaged_database_ui
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> damaged-db
+)
+set_tests_properties(tst_damaged_database_ui PROPERTIES TIMEOUT 10)
 
 add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )
-set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 10)
+set_tests_properties(tst_welcome_page_ui PROPERTIES TIMEOUT 15)
 
 # Ended with SIGTERM, Sugo quits cleanly by itself (on every system; without D-Bus).
 add_test(NAME tst_app_quit

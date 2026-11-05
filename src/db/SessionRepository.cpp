@@ -90,6 +90,11 @@ bool SessionRepository::updateNote(qint64 sessionId, const QString &note)
         qCWarning(lcSessionRepo) << "Cannot update session note:" << query.lastError().text();
         return false;
     }
+    // No such session (e.g. the history was cleared since): the note has nowhere to go.
+    if (query.numRowsAffected() < 1) {
+        qCWarning(lcSessionRepo) << "Cannot update session note: there is no session" << sessionId;
+        return false;
+    }
     return true;
 }
 
@@ -121,8 +126,11 @@ QStringList SessionRepository::recentNotes(int limit) const
     return result;
 }
 
-QList<SessionRecord> SessionRepository::between(qint64 fromMs, qint64 toMs) const
+QList<SessionRecord> SessionRepository::between(qint64 fromMs, qint64 toMs, bool *ok) const
 {
+    if (ok) {
+        *ok = false;
+    }
     QSqlDatabase db = QSqlDatabase::database(m_connection, false);
     QSqlQuery query(db);
     query.prepare(QStringLiteral(
@@ -152,6 +160,14 @@ QList<SessionRecord> SessionRepository::between(qint64 fromMs, qint64 toMs) cons
         r.category = query.value(9).toString();
         r.note = query.value(10).toString();
         result.append(r);
+    }
+    // next() also ends the loop on an error (an I/O error or a damaged page met halfway).
+    if (query.lastError().isValid()) {
+        qCWarning(lcSessionRepo) << query.lastError().text();
+        return result;
+    }
+    if (ok) {
+        *ok = true;
     }
     return result;
 }

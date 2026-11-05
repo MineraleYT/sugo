@@ -21,6 +21,16 @@ PeriodRange rangeFor(StatsPeriod kind, const QDate &anchor, Qt::DayOfWeek firstD
 /// `anchor` moved by whole periods. Months and years clamp the day (31 Jan + 1 month = 28/29 Feb).
 QDate shifted(StatsPeriod kind, const QDate &anchor, int steps);
 
+/// The instant of the period before the one around `anchor` that matches `now`, which lies in
+/// the period around `anchor`: the same local time on the day one period back (yesterday, the
+/// same weekday, the same day of the month or year), within that period. A day the period
+/// before does not have (31 March, 29 February) matches the end of the day it is clamped to,
+/// like shifted(), so the whole of that day counts and the point never goes back as `now`
+/// moves on. A calendar position rather than the time elapsed, which differs across a clock
+/// change or a leap day.
+qint64 samePointInPreviousPeriod(StatsPeriod kind, const QDate &anchor, Qt::DayOfWeek firstDayOfWeek,
+                                 const QTimeZone &timeZone, const QDateTime &now);
+
 /**
  * Totals, chart buckets and breakdowns of `records` within the period around `anchor`.
  *
