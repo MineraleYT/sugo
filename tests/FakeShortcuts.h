@@ -8,9 +8,11 @@
 /**
  * A stand-in for macOS's /usr/bin/shortcuts, as a shell script in a temporary directory: it
  * records every call in calls.log (one line per call, arguments separated by '|'), prints
- * list.txt for `list`, and for `run` waits `delay` seconds, never answers if `hang` exists or
- * while `hang-runs` counts down (one run each), and fails if `fail-<name>` exists. Nothing real
- * is ever run.
+ * list.txt for `list` (with `--show-identifiers`, each name followed by its identifierOf(),
+ * unless `no-identifiers` exists: then it fails as an older tool would), and for `run` waits
+ * `delay` seconds, never answers if `hang` exists or while `hang-runs` counts down (one run
+ * each), and fails if `fail-<name>` exists. Like the real tool, `run` takes an argument that
+ * starts with "-" for an option and fails with exit code 64. Nothing real is ever run.
  */
 class FakeShortcuts
 {
@@ -27,9 +29,17 @@ echo "$line" >> "$dir/calls.log"
 case "$1" in
 list)
     [ -f "$dir/fail-list" ] && { echo "list failed" >&2; exit 1; }
+    if [ "$2" = "--show-identifiers" ]; then
+        [ -f "$dir/no-identifiers" ] && { echo "Error: Unknown option '--show-identifiers'" >&2; exit 64; }
+        [ -f "$dir/list.txt" ] && awk 'length($0) > 0 { printf "%s (00000000-0000-4000-8000-%012d)\n", $0, NR }' "$dir/list.txt"
+        exit 0
+    fi
     [ -f "$dir/list.txt" ] && cat "$dir/list.txt"
     exit 0 ;;
 run)
+    case "$2" in
+    -*) echo "Error: Missing expected argument '<shortcut-name-or-identifier>'" >&2; exit 64 ;;
+    esac
     [ -f "$dir/hang" ] && exec sleep 30
     if [ -f "$dir/hang-runs" ]; then
         left=$(cat "$dir/hang-runs")
@@ -49,7 +59,18 @@ exit 2
     bool isValid() const { return m_dir.isValid() && QFile::exists(program()); }
     QString program() const { return m_dir.filePath(QStringLiteral("shortcuts")); }
 
-    void setList(const QStringList &names) { write(QStringLiteral("list.txt"), names.join(QLatin1Char('\n')).toUtf8() + "\n"); }
+    void setList(const QStringList &names)
+    {
+        m_list = names;
+        write(QStringLiteral("list.txt"), names.join(QLatin1Char('\n')).toUtf8() + "\n");
+    }
+    /// The identifier `list --show-identifiers` prints for `name` (its place in the last setList()).
+    QString identifierOf(const QString &name) const
+    {
+        return QStringLiteral("00000000-0000-4000-8000-%1").arg(m_list.indexOf(name) + 1, 12, 10, QLatin1Char('0'));
+    }
+    /// `list --show-identifiers` fails, as with a tool that does not know the option.
+    void setNoIdentifiers(bool none) { flag(QStringLiteral("no-identifiers"), none); }
     void setDelay(const QString &seconds) { write(QStringLiteral("delay"), seconds.toUtf8()); }
     void setHang(bool hang) { flag(QStringLiteral("hang"), hang); }
     /// The next `count` runs never answer, the ones after them do.
@@ -85,4 +106,5 @@ private:
     }
 
     QTemporaryDir m_dir;
+    QStringList m_list;
 };
