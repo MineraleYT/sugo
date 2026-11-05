@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QRegularExpression>
 #include <QTest>
 
 #include <algorithm>
@@ -207,8 +208,10 @@ private Q_SLOTS:
 
         const SyncCrypto::KeyPair other = SyncCrypto::generateKeyPair();
         const QString code = SyncCrypto::verificationCode(other.publicKey, kPublicB);
-        QCOMPARE(code.size(), 6);
-        QVERIFY(std::all_of(code.cbegin(), code.cend(), [](QChar c) { return c.isDigit(); }));
+        // 16 characters of Crockford's Base32 (80 bits) in four groups: a server that relays the
+        // keys cannot grind keys of its own until both screens show the same code.
+        QCOMPARE(code.size(), 19);
+        QVERIFY(QRegularExpression(QStringLiteral("^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$")).match(code).hasMatch());
         QCOMPARE(SyncCrypto::verificationCode(kPublicB, other.publicKey), code);
         QVERIFY(SyncCrypto::verificationCode(kPublicA, QByteArray(31, 'x')).isEmpty());
     }
