@@ -53,48 +53,72 @@ QQC2.Page {
             return i18nc("change against the year before", "%1%2% vs the year before", sign, change);
         }
     }
-    readonly property int change: StatsModel.previousWorkSeconds > 0
-        ? Math.round((StatsModel.workSeconds - StatsModel.previousWorkSeconds) * 100 / StatsModel.previousWorkSeconds) : 0
-
-    /// The bucket with the most work ("Thursday", "14:00", "March"), or "".
-    readonly property string bestBucket: {
-        let best = null;
-        for (const bucket of StatsModel.buckets) {
-            if (bucket.workSeconds > 0 && (!best || bucket.workSeconds > best.workSeconds)) {
-                best = bucket;
-            }
-        }
-        return best ? best.name : "";
-    }
-    readonly property string bestLabel: StatsModel.period === StatsModel.Period.Day ? i18n("Best hour")
-                                      : StatsModel.period === StatsModel.Period.Year ? i18n("Best month") : i18n("Best day")
-
-    /// A small number with its label under it.
-    component Figure: ColumnLayout {
+    /// One cell of the figures strip: a number, its label, and a quieter line under them.
+    /// `index` places it in the strip, for the lines between the cells.
+    component Figure: Item {
         id: figure
+        property int index
         property string value
+        /// A word after the value, in the same size ("days").
+        property string unit
         property string label
         property string note
-        spacing: Theme.hairline * 2
-        Text {
-            text: figure.value
-            color: Theme.foreground
-            font.pixelSize: Theme.fontFigure
-            font.weight: Font.Medium
-            font.features: { "tnum": 1 }
+        readonly property int columns: figures.columns
+        Layout.fillWidth: true
+        // The first cell is a little wider, for the total and its comparison.
+        Layout.preferredWidth: !page.compact && index === 0 ? 7 : 5
+        implicitHeight: figureColumn.implicitHeight + Theme.spaceLg * 2
+
+        // The lines between the cells.
+        Rectangle {
+            visible: figure.index % figure.columns > 0
+            width: Theme.hairline
+            height: parent.height
+            color: Theme.border
         }
-        Text {
-            text: figure.label
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
+        Rectangle {
+            visible: figure.index >= figure.columns
+            width: parent.width
+            height: Theme.hairline
+            color: Theme.border
         }
-        // Faded rather than hidden: its line stays, so the chart below does not move when a
-        // period has a note and the next has none.
-        Text {
-            opacity: figure.note.length > 0 ? 1 : 0
-            text: figure.note.length > 0 ? figure.note : " "
-            color: Theme.subtle
-            font.pixelSize: Theme.fontSmall
+
+        ColumnLayout {
+            id: figureColumn
+            anchors.fill: parent
+            anchors.topMargin: Theme.spaceLg
+            anchors.bottomMargin: Theme.spaceLg
+            anchors.leftMargin: Theme.spaceLg + Theme.hairline * 2
+            anchors.rightMargin: Theme.spaceLg + Theme.hairline * 2
+            spacing: Theme.hairline * 2
+
+            Text {
+                text: figure.unit.length > 0 ? figure.value + " " + figure.unit : figure.value
+                color: Theme.foreground
+                font.pixelSize: Theme.fontHeading
+                font.weight: Font.Medium
+                font.letterSpacing: -Theme.hairline / 2
+                font.features: { "tnum": 1 }
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            Text {
+                text: figure.label
+                color: Theme.muted
+                font.pixelSize: Theme.fontCaption
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            // Faded rather than hidden: its line stays, so nothing below moves when a period
+            // has a note and the next has none.
+            Text {
+                opacity: figure.note.length > 0 ? 1 : 0
+                text: figure.note.length > 0 ? figure.note : " "
+                color: Theme.subtle
+                font.pixelSize: Theme.fontSmall
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
         }
     }
 
@@ -207,53 +231,50 @@ QQC2.Page {
                 }
             }
 
-            // The total, how it compares, and three numbers.
-            RowLayout {
+            // The total and how it compares, the sessions, the breaks and the streak, in one strip
+            // (two by two in a narrow window).
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: Theme.space3xl
+                implicitHeight: figures.implicitHeight
+                radius: Theme.radiusLg
+                color: Theme.card
+                border.width: Theme.hairline
+                border.color: Theme.border
 
-                ColumnLayout {
-                    spacing: Theme.spaceXs
-                    Text {
-                        text: StatsModel.formatDuration(StatsModel.workSeconds)
-                        color: Theme.foreground
-                        font.pixelSize: Theme.fontDisplay + Theme.spaceSm
-                        font.weight: Font.Medium
-                        font.letterSpacing: -Theme.hairline
-                        font.features: { "tnum": 1 }
+                GridLayout {
+                    id: figures
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    columns: page.compact ? 2 : 4
+                    columnSpacing: 0
+                    rowSpacing: 0
+
+                    Figure {
+                        index: 0
+                        value: StatsModel.formatDuration(StatsModel.workSeconds)
+                        label: i18n("Focused")
+                        note: page.comparison
                     }
-                    RowLayout {
-                        spacing: Theme.spaceSm
-                        Text {
-                            text: i18n("Focused")
-                            color: Theme.muted
-                            font.pixelSize: Theme.fontCaption
-                        }
-                        Text {
-                            visible: page.comparison.length > 0
-                            text: page.comparison
-                            color: page.change > 0 ? Theme.positive : page.change < 0 ? Theme.danger : Theme.muted
-                            font.pixelSize: Theme.fontCaption
-                        }
+                    Figure {
+                        index: 1
+                        value: String(StatsModel.completedWorkSessions)
+                        label: i18n("Sessions")
+                        note: StatsModel.interruptedWorkSessions > 0
+                              ? i18np("+%1 interrupted", "+%1 interrupted", StatsModel.interruptedWorkSessions) : ""
                     }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                Figure {
-                    value: String(StatsModel.completedWorkSessions)
-                    label: i18n("Sessions")
-                    note: StatsModel.interruptedWorkSessions > 0
-                          ? i18np("+%1 interrupted", "+%1 interrupted", StatsModel.interruptedWorkSessions) : ""
-                }
-                Figure {
-                    value: StatsModel.formatDuration(StatsModel.breakSeconds)
-                    label: i18n("Breaks")
-                }
-                // Always there ("—" until there is a best one), so the figures beside it stay put.
-                Figure {
-                    value: page.bestBucket.length > 0 ? page.bestBucket : "—"
-                    label: page.bestLabel
+                    Figure {
+                        index: 2
+                        value: StatsModel.formatDuration(StatsModel.breakSeconds)
+                        label: i18n("Breaks")
+                    }
+                    // Days in a row, whatever the period shown.
+                    Figure {
+                        index: 3
+                        value: String(StatsModel.currentStreak)
+                        unit: i18np("day", "days", StatsModel.currentStreak)
+                        label: i18n("Streak")
+                        note: i18n("Best %1", StatsModel.bestStreak)
+                    }
                 }
             }
 
