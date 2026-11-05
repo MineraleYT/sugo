@@ -139,6 +139,16 @@ add_test(NAME tst_damaged_database_ui
 )
 set_tests_properties(tst_damaged_database_ui PROPERTIES TIMEOUT 10)
 
+# Started next to a database of Sugo 1.0.0 that 1.0.1 moved aside: its data is taken back, and the
+# window says so. The script writes that database with Python's sqlite3.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME tst_sugo100_database_ui
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> sugo100-db ${Python3_EXECUTABLE}
+    )
+    set_tests_properties(tst_sugo100_database_ui PROPERTIES TIMEOUT 15)
+endif()
+
 add_test(NAME tst_welcome_page_ui
     COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/smoke_app.sh $<TARGET_FILE:sugo> welcome
 )

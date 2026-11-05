@@ -103,6 +103,7 @@ DataManager::DataManager(Database *database, SessionRepository *sessions, Preset
     if (m_database) {
         m_movedAsidePath = m_database->movedAsidePath();
         m_movedAsideCorrupt = m_database->movedAsideWasCorrupt();
+        m_sugo100ReplacedPath = m_database->replacedPath();
     }
 }
 

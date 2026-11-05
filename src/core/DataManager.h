@@ -29,6 +29,9 @@ class DataManager : public QObject
     Q_PROPERTY(QString movedAsideDatabasePath READ movedAsideDatabasePath CONSTANT FINAL)
     /// True if that file was damaged, false if it belonged to another program.
     Q_PROPERTY(bool movedAsideDatabaseWasCorrupt READ movedAsideDatabaseWasCorrupt CONSTANT FINAL)
+    /// Where the empty database was kept when the timers and history of Sugo 1.0.0, which an
+    /// earlier version had moved aside, took its place at startup; empty if that did not happen.
+    Q_PROPERTY(QString sugo100RecoveryReplacedPath READ sugo100RecoveryReplacedPath CONSTANT FINAL)
 
 public:
     DataManager(Database *database, SessionRepository *sessions, PresetRepository *presetsRepository,
@@ -40,6 +43,7 @@ public:
     bool saveFailing() const;
     QString movedAsideDatabasePath() const { return m_movedAsidePath; }
     bool movedAsideDatabaseWasCorrupt() const { return m_movedAsideCorrupt; }
+    QString sugo100RecoveryReplacedPath() const { return m_sugo100ReplacedPath; }
     /// Taken from the database at construction; main() sets it when that database was replaced
     /// by a temporary one after the move. Call before the interface reads it.
     void setMovedAsideDatabase(const QString &path, bool corrupt);
@@ -85,6 +89,7 @@ private:
     StatsModel *m_stats;
     QString m_movedAsidePath;
     bool m_movedAsideCorrupt = false;
+    QString m_sugo100ReplacedPath;
     SessionRecorder *m_recorder = nullptr;
     PresetPersistence *m_presetPersistence = nullptr;
     std::function<QDateTime()> m_now;
