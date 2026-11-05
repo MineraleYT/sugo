@@ -16,7 +16,9 @@ class QSystemTrayIcon;
  * front. The handlers are found again by request identifier (MacNotificationRegistry) and run on
  * the Qt main thread. They are forgotten when the user answers or dismisses the notification, or
  * when the same context shows a new one: that one replaces the earlier banners, which are taken
- * out of the Notification Center.
+ * out of the Notification Center. As the handlers live only as long as Sugo runs, its
+ * notifications leave the Notification Center when it quits, and those an earlier run left there
+ * (a crash) when it starts.
  *
  * The permission is asked for once, at construction. Before each notification the current
  * setting is read again (the user may change it in System Settings at any time): while
