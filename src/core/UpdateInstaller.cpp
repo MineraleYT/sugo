@@ -3,6 +3,7 @@
 
 #include "Localization.h"
 #include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -337,6 +338,11 @@ void MacBundleInstaller::cancel()
     removeLeftovers();
 }
 
+bool MacBundleInstaller::rename(const QString &from, const QString &to) const
+{
+    return m_tools.rename ? m_tools.rename(from, to) : QDir().rename(from, to);
+}
+
 bool MacBundleInstaller::finish(bool launch, qint64 pid)
 {
     const QString fresh = newBundlePath();
@@ -349,12 +355,19 @@ bool MacBundleInstaller::finish(bool launch, qint64 pid)
     if (QFileInfo::exists(backup) && !QDir(backup).removeRecursively()) {
         return false;
     }
-    QDir folder;
-    if (!folder.rename(m_bundle, backup)) {
+    if (!rename(m_bundle, backup)) {
+        qWarning().noquote() << "Cannot install the update: cannot move" << m_bundle << "to" << backup;
         return false;
     }
-    if (!folder.rename(fresh, m_bundle)) {
-        folder.rename(backup, m_bundle);
+    if (!rename(fresh, m_bundle)) {
+        if (rename(backup, m_bundle)) {
+            qWarning().noquote() << "Cannot install the update: cannot move" << fresh << "to" << m_bundle
+                                 << "; the installed version was kept";
+        } else {
+            // No Sugo.app any more: say where it is, it is the only copy left.
+            qCritical().noquote() << "Cannot install the update, nor put the installed version back: Sugo is now"
+                                  << backup << "(rename it to" << m_bundle << "), the update" << fresh;
+        }
         return false;
     }
     // The old bundle goes, and the new one starts, once this process has ended (a second Sugo

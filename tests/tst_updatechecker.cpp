@@ -6,10 +6,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <functional>
 #include <memory>
 
 #include "AppSettings.h"
@@ -89,6 +91,17 @@ struct LocalRelease {
         return names;
     }
 };
+
+/// The id of a process that has ended: what the restart waits for in the tests.
+qint64 endedProcessId()
+{
+    QProcess process;
+    process.start(QStringLiteral("true"), {});
+    process.waitForStarted();
+    const qint64 pid = process.processId();
+    process.waitForFinished();
+    return pid;
+}
 
 /// An Info.plist like the disk image's (installsUpdates) or a build from source's.
 QByteArray infoPlist(const QString &identifier, bool installsUpdates = true)
@@ -216,6 +229,23 @@ struct LocalMacRelease {
 
     QString executable(const QString &app) const { return QString::fromUtf8(readFile(app + QStringLiteral("/Contents/MacOS/Sugo"))); }
 
+    /// What install() leaves for the restart: the new version checked, at "Sugo.app.new".
+    bool stageUpdate() const
+    {
+        const QString staged = dir.filePath(QStringLiteral("staged"));
+        return makeBundle(staged, newContent) && QDir().rename(staged + QStringLiteral("/Sugo.app"), bundle + QStringLiteral(".new"));
+    }
+
+    /// Stand-ins whose renames fail when `fails(from, to)`.
+    MacBundleInstaller::Tools failingRenames(const std::function<bool(const QString &, const QString &)> &fails) const
+    {
+        MacBundleInstaller::Tools t = standIns(endedProcessId());
+        t.rename = [fails](const QString &from, const QString &to) {
+            return !fails(from, to) && QDir().rename(from, to);
+        };
+        return t;
+    }
+
     /// What the folder of applications holds besides Sugo.app.
     QStringList leftovers() const
     {
@@ -238,16 +268,6 @@ struct LocalMacRelease {
     }
 };
 
-/// The id of a process that has ended: what the restart waits for in the tests.
-qint64 endedProcessId()
-{
-    QProcess process;
-    process.start(QStringLiteral("true"), {});
-    process.waitForStarted();
-    const qint64 pid = process.processId();
-    process.waitForFinished();
-    return pid;
-}
 } // namespace
 
 class UpdateCheckerTest : public QObject
@@ -765,6 +785,42 @@ private Q_SLOTS:
         QTest::qWait(300);
         QVERIFY(!release.calls().constLast().startsWith(QLatin1String("open")));
         qunsetenv("SUGO_OVERRIDE_VERSION");
+    }
+
+    void macFailedSwapPutsTheInstalledVersionBack()
+    {
+        LocalMacRelease release;
+        QVERIFY(release.stageUpdate());
+        const QString fresh = release.bundle + QStringLiteral(".new");
+        MacBundleInstaller installer(release.bundle, release.failingRenames([fresh](const QString &from, const QString &) {
+            return from == fresh;
+        }));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot install the update: .*the installed version was kept$")));
+        QVERIFY(!installer.finish(true, 0));
+        QCOMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
+        QCOMPARE(release.leftovers(), QStringList{QStringLiteral("Sugo.app.new")});
+        QTest::qWait(300);
+        QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(release.bundle)));
+    }
+
+    void macFailedRollbackSaysWhereSugoIs()
+    {
+        // The new bundle cannot take Sugo.app's place, and the old one cannot come back either.
+        LocalMacRelease release;
+        QVERIFY(release.stageUpdate());
+        const QString bundle = release.bundle;
+        MacBundleInstaller installer(bundle, release.failingRenames([bundle](const QString &, const QString &to) {
+            return to == bundle;
+        }));
+        const QString backup = bundle + QStringLiteral(".old");
+        QTest::ignoreMessage(QtCriticalMsg, qPrintable(QStringLiteral("Cannot install the update, nor put the installed version back: Sugo is now %1 "
+                                                                      "(rename it to %2 ), the update %2.new")
+                                                           .arg(backup, bundle)));
+        QVERIFY(!installer.finish(true, 0));
+        QTest::qWait(300);
+        QCOMPARE(release.executable(backup), QStringLiteral("old Sugo")); // never removed: the only copy
+        QCOMPARE(release.executable(bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
+        QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(bundle)));
     }
 
     void macFeedWithoutDiskImageIsOnlyReported()

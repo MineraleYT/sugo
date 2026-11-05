@@ -74,6 +74,8 @@ struct MacUpdateTools {
     QString open = QStringLiteral("/usr/bin/open");
     /// The process finish() waits for instead of the one it is given (tests); 0 for none.
     qint64 waitPid = 0;
+    /// Renames the bundles in finish(); empty for QDir::rename (tests make it fail).
+    std::function<bool(const QString &from, const QString &to)> rename;
 };
 
 class MacBundleInstaller : public QObject, public UpdateInstaller
@@ -114,6 +116,7 @@ private:
     void detach(const std::function<void()> &then);
     void conclude(const QString &error);
     void removeLeftovers();
+    bool rename(const QString &from, const QString &to) const;
 
     QString m_bundle;
     Tools m_tools;
