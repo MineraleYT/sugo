@@ -945,6 +945,34 @@ private Q_SLOTS:
 #endif
     }
 
+    void aLockRequestNeverUnlockedEndsWhenTheUserStartsOrSkips()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // swaylock unlocks without a word. A lock asked while nothing ran to pause is over when the
+        // user starts the timer, or skips the break it came during: the next request pauses Work.
+        const auto lockRequest = [this]() {
+            return QMetaObject::invokeMethod(watcher.get(), "onLogindLockRequested", Qt::DirectConnection);
+        };
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Idle);
+        engine->start();
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(watcher->isPausedByScreenLock());
+
+        engine->skip(); // the user is back and moves on to the break
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        engine->skip();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+#endif
+    }
+
     void otherDesktopScreenSaversPauseTheTimer_data()
     {
         QTest::addColumn<QString>("name");
