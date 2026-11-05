@@ -56,6 +56,33 @@ QtObject {
     readonly property color dangerFill: dark ? Qt.rgba(0.97, 0.44, 0.44, 0.12) : Qt.rgba(0.86, 0.15, 0.15, 0.08)
     readonly property color warningFill: dark ? Qt.rgba(0.98, 0.75, 0.14, 0.1) : Qt.rgba(0.85, 0.47, 0.02, 0.08)
 
+    // --- Accent ------------------------------------------------------------------------------
+    /// The colours of the "Accent colour" setting (ids in AppSettings.accentColors): a shade for
+    /// the dark theme, one for the light theme, and the text and icons drawn on each.
+    readonly property var accentPalette: ({
+        red: { dark: "#ff4d4d", light: "#e5383b", textDark: "#ffffff", textLight: "#ffffff" },
+        orange: { dark: "#fb923c", light: "#ea580c", textDark: "#1a0d04", textLight: "#ffffff" },
+        yellow: { dark: "#facc15", light: "#ca8a04", textDark: "#1a1406", textLight: "#1a1406" },
+        lime: { dark: "#a3e635", light: "#65a30d", textDark: "#0f1a04", textLight: "#ffffff" },
+        green: { dark: "#4ade80", light: "#16a34a", textDark: "#04190c", textLight: "#ffffff" },
+        teal: { dark: "#2dd4bf", light: "#0d9488", textDark: "#041a17", textLight: "#ffffff" },
+        cyan: { dark: "#22d3ee", light: "#0891b2", textDark: "#04171a", textLight: "#ffffff" },
+        blue: { dark: "#60a5fa", light: "#2563eb", textDark: "#04101f", textLight: "#ffffff" },
+        violet: { dark: "#a78bfa", light: "#7c3aed", textDark: "#14072e", textLight: "#ffffff" },
+        pink: { dark: "#f472b6", light: "#db2777", textDark: "#1f0512", textLight: "#ffffff" }
+    })
+    /// The chosen accent, for work and the main controls.
+    readonly property color accent: theme.accentSwatch(AppSettings.accentColor)
+    /// Text and icons on the accent.
+    readonly property color accentText: {
+        const shades = accentPalette[AppSettings.accentColor] ?? accentPalette.red;
+        return dark ? shades.textDark : shades.textLight;
+    }
+    /// Breaks: the break green, or blue when the accent is itself green (lime, green, teal), so
+    /// work and break never look alike.
+    readonly property color breakAccent: ["lime", "green", "teal"].includes(AppSettings.accentColor)
+                                         ? (dark ? "#60a5fa" : "#2563eb") : breakColor
+
     // --- Window buttons of other systems ---------------------------------------------------
     readonly property color windowsClose: "#c42b1c"
     readonly property color macClose: "#ff5f57"
@@ -137,6 +164,13 @@ QtObject {
     /// Between one element and the next when a group comes in one after the other.
     readonly property int durationStagger: 60
     readonly property int toolTipDelay: 600
+
+    /// The colour of an accent id in the current theme (the dots of the colour menu); red for
+    /// an unknown id.
+    function accentSwatch(id: string): color {
+        const shades = accentPalette[id] ?? accentPalette.red;
+        return dark ? shades.dark : shades.light;
+    }
 
     /// `c` with its alpha multiplied by `a` (for washes of the brand and state colours).
     function alpha(c: color, a: real): color {
