@@ -65,6 +65,10 @@ public:
      * its own. A converted copy of that file then takes this one's place, which is kept as
      * `<path>.replaced-<timestamp>`; the `.foreign-*` file itself is only copied, never changed.
      *
+     * It looks once per database: the first look leaves the meta key `sugo100_recovery` (the name of
+     * the file taken back, or "checked"), and a `<path>.replaced-*` file next to it also ends the
+     * search, so that data the user cleared afterwards does not come back.
+     *
      * Returns false only if no database is open any more (lastError() says why); whether the data
      * was taken back is recoveredFromPath().
      */

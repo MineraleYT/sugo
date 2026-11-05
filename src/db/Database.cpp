@@ -123,6 +123,29 @@ int userRows(QSqlDatabase &db)
     return query.value(0).toInt();
 }
 
+/// The meta key that makes recoverSugo100Database() a one-time look: the name of the file whose
+/// data was taken back, or "checked" if none was.
+const QString kSugo100RecoveryKey = QStringLiteral("sugo100_recovery");
+
+bool hasMeta(QSqlDatabase &db, const QString &key, bool *readable)
+{
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("SELECT 1 FROM meta WHERE key = ?"));
+    query.addBindValue(key);
+    *readable = query.exec();
+    return *readable && query.next();
+}
+
+bool setMeta(QSqlDatabase &db, const QString &key, const QString &value)
+{
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("INSERT INTO meta (key, value) VALUES (?, ?) "
+                                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
+    query.addBindValue(key);
+    query.addBindValue(value);
+    return query.exec();
+}
+
 /// The application id in a SQLite file's header (big-endian at offset 68), read without SQLite,
 /// so that a file is never opened, let alone changed, just to look at it. -1 if unreadable.
 qint64 headerApplicationId(const QString &path)
@@ -355,7 +378,18 @@ Database::Ownership Database::ownership(QSqlDatabase &db)
             return failed(versionQuery.lastError());
         }
         const int version = versionQuery.value(0).toInt();
-        return version >= 1 && version <= kSugo100SchemaVersion ? Ownership::Ours : Ownership::Foreign;
+        if (version < 1 || version > kSugo100SchemaVersion) {
+            return Ownership::Foreign;
+        }
+        // And it has 1.0.0's tables: another program's file that happens to carry the id is not
+        // converted (and then left failing on every start), it is moved aside.
+        QSqlQuery tables(db);
+        if (!tables.exec(QStringLiteral("SELECT count(*) FROM sqlite_master WHERE type = 'table' "
+                                        "AND name IN ('meta', 'preset', 'preset_option', 'session')"))
+            || !tables.next()) {
+            return failed(tables.lastError());
+        }
+        return tables.value(0).toInt() == 4 ? Ownership::Ours : Ownership::Foreign;
     }
     return Ownership::Foreign;
 }
@@ -407,12 +441,9 @@ int Database::schemaVersion() const
 
 bool Database::convertSugo100File(QSqlDatabase &db)
 {
-    // One transaction: the new id must never sit on top of 1.0.0's numbering, where version 2
-    // means "session.note added" rather than "ready for Sugo Sync".
-    if (!db.transaction()) {
-        m_error = db.lastError().text();
-        return false;
-    }
+    // Runs in migrate()'s transaction, with the migrations after it: the new id never sits on
+    // top of 1.0.0's numbering (where version 2 means "session.note added", not "ready for Sugo
+    // Sync"), and a file the migrations cannot bring up to date keeps 1.0.0's id and version.
     const int version = pragmaInt(db, QStringLiteral("user_version"));
     bool ok = version >= 1 && version <= kSugo100SchemaVersion;
     if (!ok) {
@@ -422,46 +453,51 @@ bool Database::convertSugo100File(QSqlDatabase &db)
     if (ok && version < 2) {
         ok = run(db, QStringLiteral("ALTER TABLE session ADD COLUMN note TEXT NOT NULL DEFAULT ''"), &m_error);
     }
-    ok = ok && run(db, QStringLiteral("PRAGMA user_version = 1"), &m_error)
+    return ok && run(db, QStringLiteral("PRAGMA user_version = 1"), &m_error)
         && run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error);
-    if (!ok) {
-        db.rollback();
-        return false;
-    }
-    if (!db.commit()) {
-        m_error = db.lastError().text();
-        return false;
-    }
-    return true;
 }
 
 bool Database::migrate(QSqlDatabase &db)
 {
-    // A file of Sugo 1.0.0 (ownership() accepted it): renumber it first. One without tables or
-    // version is simply stamped below, like any new file.
-    if (pragmaInt(db, QStringLiteral("application_id")) == kSugo100ApplicationId && schemaVersion() > 0
-        && !convertSugo100File(db)) {
-        return false;
+    // A file of Sugo 1.0.0 (ownership() accepted it): renumbered first, and brought up to date in
+    // the same transaction, all or nothing. One without tables or version is simply stamped
+    // below, like any new file.
+    const bool sugo100 = pragmaInt(db, QStringLiteral("application_id")) == kSugo100ApplicationId && schemaVersion() > 0;
+    if (sugo100) {
+        if (!db.transaction()) {
+            m_error = db.lastError().text();
+            return false;
+        }
+        if (!convertSugo100File(db)) {
+            db.rollback();
+            return false;
+        }
     }
+    const auto fail = [&db, sugo100]() {
+        if (sugo100) {
+            db.rollback();
+        }
+        return false;
+    };
 
     const int current = schemaVersion();
     if (current < 0) {
         m_error = QStringLiteral("Cannot read the schema version");
-        return false;
+        return fail();
     }
     if (current > latestSchemaVersion()) {
         m_error = QStringLiteral("The database was created by a newer version of Sugo (schema %1)").arg(current);
-        return false;
+        return fail();
     }
 
     // Stamp before the first table exists, so a file Sugo began to fill always reads as ours.
     if (pragmaInt(db, QStringLiteral("application_id")) != kApplicationId
         && !run(db, QStringLiteral("PRAGMA application_id = %1").arg(kApplicationId), &m_error)) {
-        return false;
+        return fail();
     }
 
     for (int version = current; version < latestSchemaVersion(); ++version) {
-        if (!db.transaction()) {
+        if (!sugo100 && !db.transaction()) {
             m_error = db.lastError().text();
             return false;
         }
@@ -479,10 +515,15 @@ bool Database::migrate(QSqlDatabase &db)
             db.rollback();
             return false;
         }
-        if (!db.commit()) {
+        if (!sugo100 && !db.commit()) {
             m_error = db.lastError().text();
             return false;
         }
+    }
+    if (sugo100 && !db.commit()) {
+        m_error = db.lastError().text();
+        db.rollback();
+        return false;
     }
     return true;
 }
@@ -492,30 +533,48 @@ bool Database::recoverSugo100Database()
     if (isTemporary() || !m_movedAsidePath.isEmpty() || !m_recoveredFromPath.isEmpty()) {
         return true;
     }
+    const QFileInfo info(m_path);
+    const QDir dir = info.absoluteDir();
     {
+        // Once per database: data taken back must not come back again after the user cleared it.
+        // A database replaced earlier (sugo.db.replaced-*) also says it was done, should a
+        // restored backup have taken the key away.
         QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
-        if (!db.isOpen() || userRows(db) != 0) {
-            return true; // the user has data here (or it cannot be read): never replace it
+        bool readable = false;
+        if (!db.isOpen() || hasMeta(db, kSugo100RecoveryKey, &readable) || !readable) {
+            return true;
+        }
+        if (!dir.entryList({info.fileName() + QStringLiteral(".replaced-*")}, QDir::Files).isEmpty()
+            || userRows(db) != 0) {
+            // The user has data here (or it cannot be read): never replace it, nor look again.
+            setMeta(db, kSugo100RecoveryKey, QStringLiteral("checked"));
+            return true;
         }
     }
+    const auto checked = [this]() {
+        QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
+        setMeta(db, kSugo100RecoveryKey, QStringLiteral("checked"));
+        return true;
+    };
 
     // Candidates: the files Sugo moved aside as foreign, whose header carries 1.0.0's id. Each is
     // copied (with its write-ahead log) into a private directory and converted there.
-    const QFileInfo info(m_path);
-    const QDir dir = info.absoluteDir();
+    QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
+    names.removeIf([](const QString &name) {
+        return name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"));
+    });
+    if (names.isEmpty()) {
+        return checked(); // the usual case: nothing was ever moved aside
+    }
     QTemporaryDir work;
     if (!work.isValid()) {
-        return true;
+        return true; // try again next time
     }
     QString found;
     QString foundCopy;
     int candidates = 0;
     int copies = 0;
-    const QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
-    for (const QString &name : names) {
-        if (name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"))) {
-            continue;
-        }
+    for (const QString &name : std::as_const(names)) {
         const QString original = dir.filePath(name);
         // A file whose header still reads 0 may have its stamp in the write-ahead log.
         const qint64 headerId = headerApplicationId(original);
@@ -562,12 +621,16 @@ bool Database::recoverSugo100Database()
         if (userRows(db) <= 0) {
             continue; // nothing worth taking back
         }
+        // Marked in the copy itself, so the database that takes this one's place already says so.
+        if (!setMeta(db, kSugo100RecoveryKey, name)) {
+            continue;
+        }
         ++candidates;
         found = original;
         foundCopy = copy;
     }
     if (candidates != 1) {
-        return true; // none, or several and no way to tell which one the user wants
+        return checked(); // none, or several and no way to tell which one the user wants
     }
 
     // Swap: this (empty) database is kept aside, the converted copy takes its place.
