@@ -94,3 +94,5 @@ Run the sync server locally (`sugo-sync/worker`: `npm run db:migrate:local`, `np
 - [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.
 - [ ] macOS: minimise the window (Cmd+M), then choose Window › Sugo in the menu bar: the window comes out of the Dock, maximised (zoomed) again if it was.
 - [ ] macOS: start a work phase, close the window (Cmd+W), then press Cmd+Q (or choose Sugo › Quit Sugo): the window comes back with "Quit Sugo?". Do the same with the window minimised.
+- [ ] macOS: start a work phase, close the window (Cmd+W) and switch to another application, then right-click Sugo in the Dock and choose Quit: Sugo comes to the front with "Quit Sugo?", "Keep Running" keeps the phase going and Sugo running; Dock › Quit again and "Quit" ends it (saved as interrupted). Pause the phase and try again: it asks too. With no phase, Dock › Quit quits at once.
+- [ ] macOS: with a work phase running, log out (or restart): Sugo does not hold up the logout with a question, and after logging in again the phase is in the statistics as interrupted.
