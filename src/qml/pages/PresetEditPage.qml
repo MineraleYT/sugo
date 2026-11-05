@@ -787,6 +787,7 @@ QQC2.Page {
                     }
                     NumberField {
                         id: workBox
+                        objectName: "workField"
                         Layout.leftMargin: Theme.spaceSm
                         from: 1
                         to: PresetModel.maxWorkMinutes

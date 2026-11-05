@@ -946,6 +946,22 @@ QQC2.ApplicationWindow {
                          + ", modified " + editor.modified);
                     return true;
                 }
+                // What is typed is taken whole: "-5" is below the minimum (not 5), "abc7" no number (not 7).
+                const workField = findItem(editor, item => item.objectName === "workField");
+                const typedValue = (numberField, text) => {
+                    const input = findItem(numberField, item => item.cursorPosition !== undefined);
+                    input.text = text;
+                    numberField.commit();
+                    return numberField.value;
+                };
+                const typedShort = shortField ? typedValue(shortField, "-5") : NaN;
+                const typedWork = workField ? typedValue(workField, "-5") : NaN;
+                const typedText = workField ? typedValue(workField, "abc7") : NaN;
+                if (typedShort !== shortField.from || typedWork !== workField.from || typedText !== workField.from) {
+                    fail(64, "A number typed with a sign, or text that is no number, was misread: \"-5\" gave " + typedShort + " and "
+                         + typedWork + ", \"abc7\" gave " + typedText);
+                    return true;
+                }
                 // The longest set: its preview lays out on the next tick.
                 const cyclesField = findItem(editor, item => item.objectName === "cyclesField");
                 if (!cyclesField) {
