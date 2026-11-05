@@ -15,7 +15,7 @@ import io.github.mineraleyt.sugo
 QtObject {
     id: inventory
 
-    /// Main.qml's window: navigate(), pageStack, paletteCommands().
+    /// Main.qml's window: navigate(), pageStack, settingsNavItem, paletteCommands().
     property var app: null
 
     property var screens: []
@@ -28,14 +28,10 @@ QtObject {
             { name: "timer", open: () => app.navigate("timer") },
             { name: "timer-page", open: () => app.navigate("preset", PresetModel.currentUuid) },
             { name: "new-timer", open: () => app.navigate("preset", "") },
-            { name: "stats", open: () => app.navigate("stats") },
-            { name: "about", open: () => app.navigate("about") }
+            { name: "stats", open: () => app.navigate("stats") }
         ];
-        for (const category of ["general", "sounds", "focus", "calendar", "sync", "advanced"]) {
-            list.push({ name: "settings/" + category, open: () => {
-                app.navigate("settings");
-                app.pageStack.currentItem.category = category;
-            } });
+        for (const category of app.settingsCategories.map(entry => entry.id)) {
+            list.push({ name: "settings/" + category, open: () => app.openSettings(category) });
         }
         for (let step = 0; step < 4; ++step) {
             list.push({ name: "welcome/" + step, open: () => {
@@ -45,7 +41,41 @@ QtObject {
                 app.pageStack.currentItem.current = step;
             } });
         }
+        // The composer's menus: popups, so their rows are not children of the page.
+        for (const menu of [{ name: "timer/menu-timers", property: "timerMenu" },
+                            { name: "timer/menu-start", property: "autoStartMenu" }]) {
+            list.push({ name: menu.name,
+                        open: () => {
+                            app.navigate("timer");
+                            // Once the page is laid out, so the menu finds its button.
+                            Qt.callLater(() => composerMenu(menu.property).open());
+                        },
+                        root: () => composerMenu(menu.property).contentItem,
+                        close: () => composerMenu(menu.property).close() });
+        }
         return list;
+    }
+
+    /// One of the focus page's composer menus ("timerMenu", "autoStartMenu").
+    function composerMenu(property: string): var {
+        const find = item => {
+            if (!item) {
+                return null;
+            }
+            if (item.objectName === "composer") {
+                return item;
+            }
+            const kids = item.children || [];
+            for (let i = 0; i < kids.length; ++i) {
+                const found = find(kids[i]);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        };
+        const composer = find(app.pageStack.currentItem);
+        return composer ? composer[property] : null;
     }
 
     /// What a control is called: its name for screen readers, else its text.
@@ -109,16 +139,26 @@ QtObject {
             return false;
         }
         const entries = [];
-        collect(app.pageStack.currentItem, entries);
+        const screen = screens[index];
+        if (screen.root) {
+            collect(screen.root(), entries);
+        } else {
+            // The list of the settings' categories is beside the page, not in it.
+            collect(app.settingsNavItem, entries);
+            collect(app.pageStack.currentItem, entries);
+        }
         entries.sort();
-        collected[screens[index].name] = entries;
+        collected[screen.name] = entries;
+        if (screen.close) {
+            screen.close();
+        }
         ticks = 0;
         if (++index < screens.length) {
             screens[index].open();
             return false;
         }
-        // The search's commands; a keyboard shortcut is noted, not its keys (Ctrl or Cmd).
-        collected["search"] = app.paletteCommands().map(command => "command: " + command.text + (command.hint ? " (shortcut)" : "")).sort();
+        // The search's commands.
+        collected["search"] = app.paletteCommands().map(command => "command: " + command.text).sort();
         const report = {
             platform: DesktopStyle.macos ? "macos" : "linux",
             capabilities: {

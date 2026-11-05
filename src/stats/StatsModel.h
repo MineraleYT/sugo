@@ -96,6 +96,18 @@ public:
     /// Work time counts by the day the session started, like the chart.
     Q_PROPERTY(QVariantList days READ days NOTIFY statsChanged FINAL)
 
+    // --- Today, whatever period is shown (the line under the focus page's controls) ---
+    /// Work time of the local today (active time, interrupted sessions included).
+    Q_PROPERTY(qint64 todayWorkSeconds READ todayWorkSeconds NOTIFY todayChanged FINAL)
+    /// Work sessions finished today (an interrupted one does not count).
+    Q_PROPERTY(int todayCompletedSessions READ todayCompletedSessions NOTIFY todayChanged FINAL)
+    /// The task notes of the shown period, newest first (at most kMaxNotes): one entry per work
+    /// session with a note, { sessionId, note (trimmed), time (its start), label, when }.
+    /// `label` is short: the time for today and in the day view, the weekday in the week view,
+    /// else the day and month; `when` is the whole date and time, for tooltips and screen readers.
+    /// Its own signal, raised only when the list changes.
+    Q_PROPERTY(QVariantList notes READ notes NOTIFY notesChanged FINAL)
+
     explicit StatsModel(QObject *parent = nullptr);
 
     void attach(SessionRepository *repository, SessionRecorder *recorder = nullptr);
@@ -136,6 +148,11 @@ public:
     QVariantList breakdown() const;
     QVariantList days() const { return m_daysVariant; }
 
+    qint64 todayWorkSeconds() const { return m_todayWorkSeconds; }
+    int todayCompletedSessions() const { return m_todayCompletedSessions; }
+    static constexpr int kMaxNotes = 20;
+    QVariantList notes() const { return m_notesVariant; }
+
     Q_INVOKABLE void previousPeriod();
     Q_INVOKABLE void nextPeriod();
     Q_INVOKABLE void today();
@@ -149,6 +166,8 @@ Q_SIGNALS:
     void breakdownChanged();
     void streaksChanged();
     void protectWeekendStreakChanged();
+    void todayChanged();
+    void notesChanged();
 
 private:
     /// Moves the shown period by `steps` periods.
@@ -163,6 +182,8 @@ private:
     void armMidnightTimer();
     QDate todayDate() const;
     StatsPeriod toStatsPeriod(Period p) const;
+    /// Rebuilds `notes` from the shown period's sessions (after each statsChanged).
+    void rebuildNotes();
 
     SessionRepository *m_repository = nullptr;
     Environment m_env;
@@ -187,4 +208,10 @@ private:
     QList<qint64> m_completedStarts;     ///< Cache: start instants of completed work sessions.
     qint64 m_completedStartsMaxId = 0;   ///< Highest session id in the cache.
     QHash<QDate, int> m_completedPerDay; ///< Cache: completed work sessions per local day.
+
+    // Today's figures (todayWorkSeconds, todayCompletedSessions).
+    void recomputeToday();
+    qint64 m_todayWorkSeconds = 0;
+    int m_todayCompletedSessions = 0;
+    QVariantList m_notesVariant;
 };

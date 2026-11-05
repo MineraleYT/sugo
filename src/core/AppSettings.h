@@ -89,6 +89,11 @@ class AppSettings : public QObject
 
     /// Window colours: "dark", "light" or "system" (the default: the desktop's light or dark mode).
     Q_PROPERTY(QString colorScheme READ colorScheme WRITE setColorScheme NOTIFY colorSchemeChanged FINAL)
+    /// The colour of work and of the main controls: one of accentColors (the default: "red").
+    /// Theme.qml has its shades for the dark and the light theme.
+    Q_PROPERTY(QString accentColor READ accentColor WRITE setAccentColor NOTIFY accentColorChanged FINAL)
+    /// Every id accentColor takes, in the order the colour menu shows them.
+    Q_PROPERTY(QStringList accentColors READ accentColors CONSTANT FINAL)
     /// "stable" (releases) or "nightly" (a build of every change), for the updates of the AppImage and the macOS app.
     Q_PROPERTY(QString updateChannel READ updateChannel WRITE setUpdateChannel NOTIFY updateChannelChanged FINAL)
     /// The AppImage looks for updates by itself (see UpdateChecker); it installs them when asked.
@@ -184,6 +189,12 @@ public:
 
     QString colorScheme() const { return m_colorScheme; }
     void setColorScheme(const QString &scheme);
+    QString accentColor() const { return m_accentColor; }
+    /// An id that is not one of accentColors() sets the default.
+    void setAccentColor(const QString &id);
+    static QStringList accentColors();
+    /// The name of an accent colour for the interface ("Red"), or the id itself if it is not one.
+    Q_INVOKABLE static QString accentColorName(const QString &id);
 
     QString updateChannel() const { return m_updateChannel; }
     void setUpdateChannel(const QString &channel);
@@ -284,6 +295,7 @@ Q_SIGNALS:
     void firstRunCompletedChanged();
     void promptTaskNoteChanged();
     void colorSchemeChanged();
+    void accentColorChanged();
     void updateChannelChanged();
     void autoCheckUpdatesChanged();
     void verboseLoggingChanged();
@@ -322,6 +334,7 @@ private:
         static constexpr bool firstRunCompleted = false;
         static constexpr bool promptTaskNote = true;
         static constexpr QLatin1String colorScheme{"system"};
+        static constexpr QLatin1String accentColor{"red"};
         static constexpr QLatin1String updateChannel{"stable"};
         static constexpr bool autoCheckUpdates = true;
         static constexpr bool verboseLogging = false;
@@ -361,6 +374,7 @@ private:
     bool m_firstRunCompleted = Defaults::firstRunCompleted;
     bool m_promptTaskNote = Defaults::promptTaskNote;
     QString m_colorScheme = QString(Defaults::colorScheme);
+    QString m_accentColor = QString(Defaults::accentColor);
     QString m_updateChannel = QString(Defaults::updateChannel);
     bool m_autoCheckUpdates = Defaults::autoCheckUpdates;
     bool m_verboseLogging = Defaults::verboseLogging;

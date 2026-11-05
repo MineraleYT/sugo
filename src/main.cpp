@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setApplicationDisplayName(i18n("Sugo"));
     QCoreApplication::setApplicationVersion(QStringLiteral(PROJECT_VERSION));
-    // What the About page and the sidebar show.
+    // What the About page shows.
     const QVariantMap about{
         {QStringLiteral("displayName"), i18n("Sugo")},
         {QStringLiteral("version"), QStringLiteral(PROJECT_VERSION)},
@@ -317,7 +317,8 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("appStatsSmokeTest"), statsSmokeTest);
     engine.rootContext()->setContextProperty(QStringLiteral("appSmokePage"), smokePage);
     // For development and screenshots: open on another page ("presets" for the timer in use, "stats",
-    // "settings", "about", "welcome"), or on a part of one ("settings/focus", "welcome/2").
+    // "settings", "about" (the settings' About), "welcome"), or on a part of one ("settings/focus",
+    // "welcome/2").
     engine.rootContext()->setContextProperty(QStringLiteral("appStartPage"), qEnvironmentVariable("SUGO_START_PAGE"));
     const bool smokeTest = statsSmokeTest || !smokePage.isEmpty();
     if (smokeTest) {

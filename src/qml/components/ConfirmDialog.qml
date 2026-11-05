@@ -24,10 +24,8 @@ QQC2.Dialog {
     anchors.centerIn: parent
     modal: true
     focus: true
-    width: Math.min(Theme.contentMaxWidth * 0.58, (parent ? parent.width : Theme.contentMaxWidth) - Theme.space2xl * 2)
-    padding: Theme.space2xl
-    topPadding: Theme.spaceXl + Theme.spaceXs
-    bottomPadding: Theme.spaceXl
+    width: Math.min(Theme.sheetWidth, (parent ? parent.width : Theme.sheetWidth) - Theme.spaceLg * 2)
+    padding: Theme.sheetPadding
 
     QQC2.Overlay.modal: Rectangle {
         color: Theme.scrim
@@ -42,44 +40,47 @@ QQC2.Dialog {
     }
 
     background: Rectangle {
-        radius: Theme.radiusLg
-        color: Theme.raised
+        radius: Theme.radiusXl
+        color: Theme.card
         border.width: Theme.hairline
-        border.color: Theme.borderStrong
+        border.color: Theme.border
     }
 
     header: null
     footer: null
 
     contentItem: ColumnLayout {
-        spacing: Theme.spaceMd
+        spacing: Theme.spaceLg
 
-        Text {
-            text: dialog.title
-            color: Theme.foreground
-            font.pixelSize: Theme.fontTitle + 1
-            font.weight: Font.DemiBold
-            wrapMode: Text.WordWrap
+        ColumnLayout {
             Layout.fillWidth: true
-        }
-        Text {
-            visible: dialog.text.length > 0
-            text: dialog.text
-            color: Theme.muted
-            font.pixelSize: Theme.fontBody
-            lineHeight: 1.15
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
+            spacing: Theme.spaceXs - Theme.hairline
+            Text {
+                text: dialog.title
+                color: Theme.foreground
+                font.pixelSize: Theme.fontTitle + 1
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Text {
+                visible: dialog.text.length > 0
+                text: dialog.text
+                color: Theme.muted
+                font.pixelSize: Theme.fontBody
+                lineHeight: 1.15
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
         }
         ColumnLayout {
             id: extra
+            visible: children.length > 0
             Layout.fillWidth: true
-            Layout.topMargin: children.length > 0 ? Theme.spaceXs : 0
-            spacing: Theme.spaceMd
+            spacing: Theme.spaceLg
         }
         RowLayout {
             Layout.fillWidth: true
-            Layout.topMargin: Theme.spaceLg
             spacing: Theme.spaceMd
             Item {
                 Layout.fillWidth: true

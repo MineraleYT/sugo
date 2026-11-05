@@ -9,7 +9,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Create a timer with a name, category, icon, work duration, break durations, and long-break interval. Save it and confirm the displayed values.
 - [ ] Edit a user timer, duplicate it, select each resulting timer, and delete the duplicate.
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
-- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
+- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place; change a value: Discard fades in beside the title and nothing else in the header moves.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
 - [ ] Give a timer a category of 100 characters and start it in a narrow window: "Focusing · …" is cut with an ellipsis inside its pill, which is never wider than the cycle track.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
@@ -44,7 +44,7 @@ Run these checks in a fresh user profile where practical. Record the application
 
 ## macOS: Focus shortcuts
 
-- [ ] On a Mac (signed into iCloud or not), click "Install Focus Shortcuts" in the welcome tour's setup step (Settings → Advanced → Show the Welcome Tour). Shortcuts shows the "Add Shortcut" sheet of "Sugo Focus On"; the step says to add it. Only after clicking Add Shortcut does the sheet of "Sugo Focus Off" appear (not lost behind the first); after adding it the row says the shortcuts are installed. Nothing on the step moves while the messages change.
+- [ ] On a Mac (signed into iCloud or not), click "Install Focus Shortcuts" in the welcome tour's setup step (start once with `SUGO_START_PAGE=welcome/2`). Shortcuts shows the "Add Shortcut" sheet of "Sugo Focus On"; the step says to add it. Only after clicking Add Shortcut does the sheet of "Sugo Focus Off" appear (not lost behind the first); after adding it the row says the shortcuts are installed. Nothing on the step moves while the messages change.
 - [ ] Settings → Focus while working: with the shortcuts deleted in Shortcuts, "Install Shortcuts" does the same, with the status in the row's description (the card keeps its height, the text stays centred); with one already there, only the other one's sheet appears; with both, the button is off.
 - [ ] Close a sheet without adding the shortcut: after three minutes the row says installing failed.
 - [ ] With a timer whose "Silence notifications while working" is on, start it: Do Not Disturb turns on; pause or stop it: it turns off. With the option off, nothing happens.
@@ -76,20 +76,22 @@ Run the sync server locally (`sugo-sync/worker`: `npm run db:migrate:local`, `np
 - [ ] On macOS, after updating an ad hoc signed build while linked: one Keychain question for the sync (its single item), a few seconds after the start; while signed out, starting never asks.
 - [ ] Show the recovery code and copy it; "Create a new one…" warns that the old code stops working and then asks to confirm the new one.
 - [ ] Disconnect the other device: it asks first, and the other copy is signed out with "This device was disconnected". Sign out asks first and says the timers stay; with the server stopped, a toast says to disconnect the device on sugo.stream. The timers are still there afterwards.
-- [ ] In a narrow window (about 400 px) and in light and dark colours, every state of the Sync tab fits, and the category tabs scroll sideways.
+- [ ] In a narrow window (about 400 px) and in light and dark colours, every state of the Sync tab fits, and the categories are chosen in the drop-down list at the top of the settings (the list beside them comes back in a window 640 px wide or more).
 - [ ] Settings → Advanced → diagnostics: the Sync section has the state, error, keyring, linked, last sync, device count and server (default/custom), and no names, ids, codes or tokens.
 
 ## No layout shift
 
-- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Sync (no keyring, the device limit, offline), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
+- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), Settings → About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Sync (no keyring, the device limit, offline), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
 - [ ] On a timer's page, make silencing notifications available or unavailable while the page is open (macOS: install or remove the Focus shortcuts; Linux: start or stop the notification inhibitor service): the "Silence notifications while working" row and those below do not move.
 
 ## Window and dialogs
 
 - [ ] Start a work phase with "Pause timer when screen is locked" on, lock and unlock the screen: "Screen Unlocked" asks to resume. Resume from the tray menu (or the global shortcut, or KRunner): the dialog closes by itself. With a task note being asked for when the screen is unlocked, the resume question comes only after the note dialog is closed.
-- [ ] Make the window narrow, open the menu (the sidebar slides in), then maximise or widen the window: the drawer closes and only the sidebar is shown, with the page not dimmed.
-- [ ] With a timer running, open Statistics and double-click the status pill in the top bar: the timer page opens and the window is neither maximised nor restored. A double-click on an empty part of the top bar still maximises and restores it.
-- [ ] With eight or more timers and an update found (AppImage, or the macOS app), make the window as short as it goes: the timer list shrinks and scrolls, and Settings and About stay inside the window, in the sidebar and in the menu of a narrow window.
+- [ ] Widen and narrow the window: the three tabs stay in the middle of the window until they would touch the logo or search, then are pushed aside, never over them; below 560 px the name "Sugo" goes and the tabs get tighter. At the narrowest window, with the desktop's window buttons on the right and on the left (KDE: System Settings → Window Decorations → Titlebar Buttons; GNOME: `gsettings set org.gnome.desktop.wm.preferences button-layout`), nothing in the title bar overlaps.
+- [ ] Start a timer: the Focus tab shows the time left in the colour of the phase (the accent for work, the break colour for breaks), and no tab moves when it starts, ticks or stops; in a narrow window the time takes the place of the word "Focus". Hovering the tab tells the phase and the time.
+- [ ] Double-click a tab or the search button: the window is neither maximised nor restored. A double-click on an empty part of the title bar maximises and restores it; dragging it moves the window.
+- [ ] With an update found (AppImage, or the macOS app): "Install update" appears left of search, then "Downloading update… n%", then "Restart to update", without changing width and without moving the tabs in a wide window; in a narrow window it is an icon whose tooltip has the text.
+- [ ] macOS: the traffic lights sit at the left of the title bar, clear of the logo, and dragging the bar moves the window.
 - [ ] On a timer's page and in Settings, Tab into a number field (e.g. "Work") and press Shift+Tab: the focus goes back to the control before it and is not kept in the field.
 - [ ] Maximise the window, minimise it, then click the tray icon (or launch Sugo again): the window comes back maximised.
 - [ ] macOS: minimise the window (Cmd+M), then choose Window › Sugo in the menu bar: the window comes out of the Dock, maximised (zoomed) again if it was.

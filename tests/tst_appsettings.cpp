@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QScopeGuard>
+#include <QSet>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -586,6 +587,7 @@ private Q_SLOTS:
             config.setValue(QStringLiteral("FocusSoundMode"), 99);
             config.setValue(QStringLiteral("SoundVolume"), 500);
             config.setValue(QStringLiteral("ColorScheme"), QStringLiteral("purple"));
+            config.setValue(QStringLiteral("AccentColor"), QStringLiteral("purple"));
             config.sync();
         }
         {
@@ -594,6 +596,7 @@ private Q_SLOTS:
             QCOMPARE(settings->focusSoundMode(), 6);
             QCOMPARE(settings->soundVolume(), 100);
             QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
         } // releases the shared config, so the next one rereads the file
 
         {
@@ -601,12 +604,14 @@ private Q_SLOTS:
             config.setValue(QStringLiteral("TrayBadgeStyle"), -1);
             config.setValue(QStringLiteral("FocusSoundMode"), -4);
             config.setValue(QStringLiteral("SoundVolume"), -3);
+            config.setValue(QStringLiteral("AccentColor"), 7);
             config.sync();
         }
         const auto reloaded = make();
         QCOMPARE(reloaded->trayBadgeStyle(), 0);
         QCOMPARE(reloaded->focusSoundMode(), 0);
         QCOMPARE(reloaded->soundVolume(), 0);
+        QCOMPARE(reloaded->accentColor(), QStringLiteral("red"));
     }
 
     void emptyOrNonNumericValuesUseTheDefaults()
@@ -675,6 +680,63 @@ private Q_SLOTS:
         }
         QCOMPARE(stored("ColorScheme"), QStringLiteral("dark"));
         QCOMPARE(make()->colorScheme(), QStringLiteral("dark"));
+    }
+
+    void accentColorDefaultsToRedAndPersists()
+    {
+        {
+            const auto settings = make();
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
+            QCOMPARE(stored("AccentColor"), missing()); // the default is not written out
+            QSignalSpy spy(settings.get(), &AppSettings::accentColorChanged);
+            settings->setAccentColor(QStringLiteral("teal"));
+            QCOMPARE(settings->accentColor(), QStringLiteral("teal"));
+            QCOMPARE(spy.count(), 1);
+            settings->setAccentColor(QStringLiteral("teal"));
+            QCOMPARE(spy.count(), 1);
+            settings->setAccentColor(QStringLiteral(" Violet ")); // like the stored scheme: trimmed, any case
+            QCOMPARE(settings->accentColor(), QStringLiteral("violet"));
+            QCOMPARE(spy.count(), 2);
+            settings->setAccentColor(QStringLiteral("purple")); // not an accent: the default
+            QCOMPARE(settings->accentColor(), QStringLiteral("red"));
+            QCOMPARE(spy.count(), 3);
+            settings->setAccentColor(QString());
+            QCOMPARE(spy.count(), 3);
+            settings->setAccentColor(QStringLiteral("blue"));
+            QCOMPARE(spy.count(), 4);
+        }
+        QCOMPARE(stored("AccentColor"), QStringLiteral("blue"));
+        QCOMPARE(make()->accentColor(), QStringLiteral("blue"));
+    }
+
+    void everyAccentColorHasAName()
+    {
+        QSet<QString> names;
+        for (const QString &id : AppSettings::accentColors()) {
+            const QString name = AppSettings::accentColorName(id);
+            QVERIFY2(!name.isEmpty() && name != id, qPrintable(id));
+            names.insert(name);
+        }
+        QCOMPARE(names.size(), AppSettings::accentColors().size());
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("red")), QStringLiteral("Red"));
+        QCOMPARE(AppSettings::accentColorName(QStringLiteral("purple")), QStringLiteral("purple"));
+    }
+
+    void everyAccentColorIsKept()
+    {
+        const QStringList ids = AppSettings::accentColors();
+        QCOMPARE(ids,
+                 QStringList({QStringLiteral("red"), QStringLiteral("orange"), QStringLiteral("yellow"), QStringLiteral("lime"),
+                              QStringLiteral("green"), QStringLiteral("teal"), QStringLiteral("cyan"), QStringLiteral("blue"),
+                              QStringLiteral("violet"), QStringLiteral("pink")}));
+        for (const QString &id : ids) {
+            {
+                const auto settings = make();
+                settings->setAccentColor(id);
+                QCOMPARE(settings->accentColor(), id);
+            }
+            QCOMPARE(make()->accentColor(), id);
+        }
     }
 
     void updatesDefaultToStableAndAutomatic()
@@ -746,6 +808,7 @@ private Q_SLOTS:
         settings->setFirstRunCompleted(true);
         settings->setPromptTaskNote(false);
         settings->setColorScheme(QStringLiteral("light"));
+        settings->setAccentColor(QStringLiteral("cyan"));
         settings->setUpdateChannel(QStringLiteral("nightly"));
         settings->setAutoCheckUpdates(false);
         settings->setVerboseLogging(true);
@@ -755,6 +818,7 @@ private Q_SLOTS:
         QSignalSpy trayIcon(settings.get(), &AppSettings::showTrayIconChanged);
         QSignalSpy volume(settings.get(), &AppSettings::soundVolumeChanged);
         QSignalSpy scheme(settings.get(), &AppSettings::colorSchemeChanged);
+        QSignalSpy accent(settings.get(), &AppSettings::accentColorChanged);
         QSignalSpy verbose(settings.get(), &AppSettings::verboseLoggingChanged);
         QSignalSpy channel(settings.get(), &AppSettings::updateChannelChanged);
         QSignalSpy firstRun(settings.get(), &AppSettings::firstRunCompletedChanged);
@@ -780,6 +844,7 @@ private Q_SLOTS:
         QVERIFY(settings->protectWeekendStreak());
         QVERIFY(settings->promptTaskNote());
         QCOMPARE(settings->colorScheme(), QStringLiteral("system"));
+        QCOMPARE(settings->accentColor(), QStringLiteral("red"));
         QCOMPARE(settings->updateChannel(), QStringLiteral("stable"));
         QVERIFY(settings->autoCheckUpdates());
         QVERIFY(!settings->verboseLogging());
@@ -788,6 +853,7 @@ private Q_SLOTS:
         QCOMPARE(trayIcon.count(), 1);
         QCOMPARE(volume.count(), 1);
         QCOMPARE(scheme.count(), 1);
+        QCOMPARE(accent.count(), 1);
         QCOMPARE(verbose.count(), 1);
         QCOMPARE(channel.count(), 1);
         // ... and what is not a preference of this class stays.
@@ -802,6 +868,7 @@ private Q_SLOTS:
         QCOMPARE(stored("SoundVolume"), QStringLiteral("80"));
         QCOMPARE(stored("SoundTheme"), QStringLiteral("alarm-clock-elapsed"));
         QCOMPARE(stored("ColorScheme"), QStringLiteral("system"));
+        QCOMPARE(stored("AccentColor"), QStringLiteral("red"));
         QCOMPARE(stored("UpdateChannel"), QStringLiteral("stable"));
         QCOMPARE(stored("VerboseLogging"), QStringLiteral("false"));
         QCOMPARE(stored("FirstRunCompleted"), QStringLiteral("true"));
@@ -809,6 +876,7 @@ private Q_SLOTS:
         const auto reloaded = make();
         QCOMPARE(reloaded->soundVolume(), 80);
         QCOMPARE(reloaded->colorScheme(), QStringLiteral("system"));
+        QCOMPARE(reloaded->accentColor(), QStringLiteral("red"));
         QVERIFY(reloaded->showTrayIcon());
         QVERIFY(!reloaded->verboseLogging());
 
@@ -817,6 +885,7 @@ private Q_SLOTS:
         QCOMPARE(trayIcon.count(), 1);
         QCOMPARE(volume.count(), 1);
         QCOMPARE(scheme.count(), 1);
+        QCOMPARE(accent.count(), 1);
     }
 
     void trayAvailabilityChangesUpdateDependentProperties()

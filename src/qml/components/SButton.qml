@@ -5,7 +5,7 @@ import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
 /**
- * The button of the interface. `kind`: "primary" (filled with the text colour, one per view),
+ * The button of the interface. `kind`: "primary" (filled with the accent colour, one per view),
  * "secondary" (outlined card), "ghost" (no frame until hovered) or "danger".
  */
 QQC2.AbstractButton {
@@ -14,7 +14,7 @@ QQC2.AbstractButton {
     property string kind: "secondary"
     /// A LineIcon name.
     property string iconName
-    /// A shortcut shown inside the button, e.g. "Space".
+    /// No longer shown (the interface shows no shortcut hints); kept so that callers still work.
     property string shortcutText
     property bool large: false
     property bool iconOnly: false
@@ -34,7 +34,7 @@ QQC2.AbstractButton {
 
     readonly property bool isPrimary: kind === "primary"
     readonly property color contentColor: !enabled ? Theme.subtle
-                                         : isPrimary ? Theme.primaryText
+                                         : isPrimary ? Theme.accentText
                                          : kind === "danger" || (destructive && hovered) ? Theme.danger
                                          : kind === "ghost" && iconOnly && !hovered && !visualFocus ? Theme.muted
                                          : Theme.foreground
@@ -62,7 +62,7 @@ QQC2.AbstractButton {
         radius: Theme.radius
         color: {
             if (button.isPrimary) {
-                return button.enabled ? Theme.alpha(Theme.primary, button.down ? 0.8 : (button.hovered ? 0.9 : 1)) : Theme.selected;
+                return button.enabled ? Theme.alpha(Theme.accent, button.down ? 0.8 : (button.hovered ? 0.9 : 1)) : Theme.selected;
             }
             // A secondary button's hover is laid over its own fill: animating from the opaque fill to
             // the translucent overlay would pass through a half-opaque grey (a light flash).
@@ -109,12 +109,6 @@ QQC2.AbstractButton {
                 text: button.text
                 color: button.contentColor
                 font: button.font
-            }
-            Kbd {
-                visible: button.shortcutText.length > 0
-                Layout.leftMargin: Theme.spaceXs
-                text: button.shortcutText
-                textColor: button.isPrimary ? Theme.alpha(Theme.primaryText, 0.7) : Theme.muted
             }
         }
     }

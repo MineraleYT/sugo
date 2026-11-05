@@ -8,20 +8,19 @@ QQC2.ApplicationWindow {
     id: root
 
     color: Theme.background
-    // Linux: no system title bar; the top bar moves the window and has its buttons, the edges
+    // Linux: no system title bar; the title bar moves the window and has its buttons, the edges
     // resize it. macOS (DesktopStyle.nativeChrome): the system's title bar, transparent over the
     // content, with its own buttons (the traffic lights), resizing, full screen and tiling.
     flags: DesktopStyle.nativeChrome ? (Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint)
                                      : (Qt.Window | Qt.FramelessWindowHint)
     // The content fills the whole window, also under macOS' transparent title bar: by default
     // ApplicationWindow keeps it in the safe area below it, where nothing could move the window.
-    // The top bar and the sidebar leave that strip free for the traffic lights themselves.
+    // The title bar leaves room at its left for the traffic lights themselves.
     topPadding: 0
     leftPadding: 0
     rightPadding: 0
     bottomPadding: 0
     readonly property bool maximized: visibility === Window.Maximized || visibility === Window.FullScreen
-    readonly property bool wideScreen: width >= Theme.wideBreakpoint
 
     // The colours of the standard controls (Basic style).
     palette {
@@ -60,7 +59,7 @@ QQC2.ApplicationWindow {
         if (!TimerEngine.active) {
             return i18n("Sugo");
         }
-        // As the top bar shows it: h:mm:ss past an hour, else mm:ss.
+        // As the Focus tab shows it: h:mm:ss past an hour, else mm:ss.
         const total = TimerEngine.remainingSeconds;
         const h = Math.floor(total / 3600);
         const m = Math.floor((total % 3600) / 60);
@@ -375,6 +374,48 @@ QQC2.ApplicationWindow {
                 fail(29, "The volume slider no longer follows the setting after a drag: " + slider.value);
                 return;
             }
+            // The accent colour's menu opens under its button, 4 px away, right edges together,
+            // with every colour; choosing one sets the setting and moves the check.
+            const accentButton = findItem(page, item => item.objectName === "accentColorButton");
+            if (!accentButton || !accentButton.visible) {
+                fail(62, "The Accent color button is missing from General");
+                return;
+            }
+            const accentMenu = accentButton.menu;
+            const accentBefore = AppSettings.accentColor;
+            accentMenu.open();
+            const accentEntries = [];
+            findItem(accentMenu.contentItem, item => {
+                if (item.objectName.startsWith("accentEntry-")) {
+                    accentEntries.push(item);
+                }
+                return false;
+            });
+            const accentGap = accentMenu.y - accentButton.height;
+            const accentRightEdges = accentMenu.x + accentMenu.width - accentButton.width;
+            // The colour after the current one (the ids in quotes would read as colours to the checks).
+            const accentTarget = AppSettings.accentColors[(AppSettings.accentColors.indexOf(accentBefore) + 1) % AppSettings.accentColors.length];
+            const accentEntry = accentEntries.find(item => item.objectName === "accentEntry-" + accentTarget);
+            const accentOld = accentEntries.find(item => item.objectName === "accentEntry-" + accentBefore);
+            if (accentMenu.objectName !== "accentColorMenu" || !accentMenu.visible || accentMenu.openedSide !== "bottom"
+                    || Math.abs(accentGap - Theme.menuOffset) > 0.5 || Math.abs(accentRightEdges) > 1
+                    || accentEntries.length !== AppSettings.accentColors.length || accentEntries.length !== 10
+                    || !accentEntry || !accentOld || !accentOld.checked) {
+                fail(62, "The Accent color menu is not 4 px under its button with its right edge on the button's and ten colours: gap "
+                     + accentGap + ", right edges " + accentRightEdges + ", side " + accentMenu.openedSide
+                     + ", " + accentEntries.length + " entries");
+                accentMenu.close();
+                return;
+            }
+            accentEntry.clicked();
+            const accentChosen = AppSettings.accentColor === accentTarget && accentEntry.checked && !accentOld.checked
+                                 && !accentMenu.opened;
+            AppSettings.accentColor = accentBefore;
+            if (!accentChosen) {
+                fail(62, "Choosing \"" + accentTarget + "\" in the Accent color menu did not set it, move the check or close the menu: "
+                     + AppSettings.accentColor);
+                return;
+            }
             // The Focus card (shortcuts that silence notifications) exists on macOS only, and
             // openSettings() shows the category it is in.
             const focusCard = findItem(page, item => item.objectName === "focusModeCard");
@@ -475,20 +516,20 @@ QQC2.ApplicationWindow {
                     return false;
                 }
             }
-            // The status pill is as wide with every text it takes, so "Sync now" beside it stays
-            // put. Its width follows its texts at once, so it is read right after each one.
-            const pill = findItem(page, item => item.objectName === "syncStatusPill");
-            if (!pill || pill.labels.length < 2) {
-                fail(61, "The Sync tab's status pill, or the texts it can show, is missing");
+            // The status line is as wide with every text it takes, so nothing beside it moves.
+            // Its width follows its texts at once, so it is read right after each one.
+            const status = findItem(page, item => item.objectName === "syncStatusText");
+            if (!status || status.labels.length < 2) {
+                fail(61, "The Sync tab's status line, or the texts it can show, is missing");
                 return false;
             }
-            const pillWidths = [];
-            for (const label of pill.labels) {
-                pill.text = label;
-                pillWidths.push(pill.implicitWidth);
+            const statusWidths = [];
+            for (const label of status.labels) {
+                status.text = label;
+                statusWidths.push(status.implicitWidth);
             }
-            if (pillWidths.some(width => width !== pillWidths[0])) {
-                fail(61, "The Sync tab's status pill changes width with its text: " + pillWidths.join(", "));
+            if (statusWidths.some(width => width !== statusWidths[0])) {
+                fail(61, "The Sync tab's status line changes width with its text: " + statusWidths.join(", "));
                 return false;
             }
             // Signing out asks first.
@@ -579,23 +620,77 @@ QQC2.ApplicationWindow {
                 PresetModel.create({ name: "Smoke" });
                 return false;
             case 1: {
-                // A timer chosen in the sidebar becomes the one in use, and the timer page shows it.
-                const entry = findItem(root.contentItem, item => item.objectName === "timerEntry-1");
+                // The composer's timer button names the timer in use and opens the timer menu.
+                const composer = findItem(page, item => item.objectName === "composer");
+                if (!composer || composer.timerButton.text !== PresetModel.currentName) {
+                    fail(40, "The composer's timer button does not name the timer in use");
+                    return true;
+                }
+                composer.timerButton.clicked();
+                if (!composer.timerMenu.visible) {
+                    fail(40, "The composer's timer button did not open the timer menu");
+                    return true;
+                }
+                return false; // laid out on the next tick
+            }
+            case 2: {
+                // The menu opens above its button, 4 px away, their left edges together.
+                const composer = findItem(page, item => item.objectName === "composer");
+                const menu = composer.timerMenu;
+                if (Math.abs(menu.y + menu.height + Theme.menuOffset) > 1 || Math.abs(menu.x) > 1
+                        || menu.width < Theme.menuMinWidth || menu.width > Theme.menuMaxWidth) {
+                    fail(63, "The timer menu is not above its button, 4 px away and left-aligned: x " + menu.x
+                         + ", bottom " + (menu.y + menu.height) + ", width " + menu.width);
+                    return true;
+                }
+                // Choosing a timer there makes it the one in use, and the page stays.
+                const entry = findItem(menu.contentItem, item => item.objectName === "timerMenuEntry-1");
                 if (!entry) {
-                    fail(40, "The timers of the sidebar are missing");
+                    fail(40, "The timer menu does not list the timers");
                     return true;
                 }
                 entry.clicked();
-                if (PresetModel.currentIndex !== 1 || root.currentDestination !== "preset") {
-                    fail(40, "Choosing a timer in the sidebar did not select it and open its page");
+                if (PresetModel.currentIndex !== 1 || root.currentDestination !== "timer"
+                        || composer.timerButton.text !== PresetModel.currentName) {
+                    fail(40, "Choosing a timer in the timer menu did not select it alone: index " + PresetModel.currentIndex
+                         + ", page " + root.currentDestination);
                     return true;
                 }
-                root.navigate("timer");
-                page = root.pageStack.currentItem;
-                if (page.title !== PresetModel.currentName) {
-                    fail(40, "The timer page shows \"" + page.title + "\" instead of \"" + PresetModel.currentName + "\"");
+                // A running timer cannot be switched.
+                TimerEngine.start();
+                if (composer.timerButton.enabled) {
+                    fail(40, "The timer button can switch timers while the timer runs");
                     return true;
                 }
+                TimerEngine.stop();
+                composer.autoStartButton.clicked();
+                if (!composer.autoStartMenu.visible) {
+                    fail(63, "The start mode button did not open its menu");
+                    return true;
+                }
+                return false;
+            }
+            case 3: {
+                // The start mode menu: above its button, left-aligned; a choice is the timer's option.
+                const composer = findItem(page, item => item.objectName === "composer");
+                const menu = composer.autoStartMenu;
+                if (Math.abs(menu.y + menu.height + Theme.menuOffset) > 1 || Math.abs(menu.x) > 1) {
+                    fail(63, "The start mode menu is not above its button, 4 px away and left-aligned: x " + menu.x
+                         + ", bottom " + (menu.y + menu.height));
+                    return true;
+                }
+                const entry = findItem(menu.contentItem, item => item.objectName === "autoStartEntry-2");
+                const before = PresetModel.option(PresetModel.currentUuid, "autoStartMode");
+                entry.clicked();
+                if (PresetModel.option(PresetModel.currentUuid, "autoStartMode") !== 2 || !entry.checked
+                        || composer.autoStartButton.text !== i18n("All phases")) {
+                    fail(63, "Choosing All phases in the start mode menu did not set the timer's option");
+                    return true;
+                }
+                PresetModel.setOption(PresetModel.currentUuid, "autoStartMode", before);
+                return false;
+            }
+            case 4: {
                 // A phase that has only just started stops at once.
                 TimerEngine.start();
                 page.requestStop();
@@ -710,16 +805,37 @@ QQC2.ApplicationWindow {
                 PresetModel.currentUuid = userUuid;
                 root.openTimer(userUuid);
                 TimerEngine.start();
-                // The top bar at the narrowest window, with the section and the pill shown.
+                // The title bar at the narrowest window, with the time in the Focus tab.
                 wideWidth = root.width;
                 root.width = Theme.windowMinWidth;
                 return false;
             case 1: {
-                const insideWindow = item => !item || !item.visible || item.mapToItem(root.contentItem, item.width, 0).x <= root.width + 1;
-                const pill = findItem(root.contentItem, item => item.objectName === "statusPill");
-                const buttons = findItem(root.contentItem, item => item.objectName === "topBarWindowButtons");
-                if (root.width > Theme.windowMinWidth || !pill || !pill.visible || !insideWindow(pill) || !insideWindow(buttons)) {
-                    fail(37, "The top bar does not fit a narrow window: width " + root.width + ", pill " + (pill ? pill.visible : "missing"));
+                // The tabs, search and the window buttons are all there, inside the window and
+                // clear of each other and of the logo; the Focus tab is as wide with the time
+                // as without it.
+                const byName = name => findItem(root.contentItem, item => item.objectName === name);
+                const parts = ["titleBarBrand", "titleBarTab-timer", "titleBarTab-stats", "titleBarTab-settings",
+                               "titleBarSearch", "topBarWindowButtons"].map(byName);
+                const boxOf = item => {
+                    const at = item.mapToItem(root.contentItem, 0, 0);
+                    return { left: at.x, right: at.x + item.width };
+                };
+                const shown = parts.filter(item => item && item.visible);
+                const boxes = shown.map(boxOf).sort((a, b) => a.left - b.left);
+                let fits = root.width <= Theme.windowMinWidth && shown.length >= 5 && boxes[0].left >= 0
+                           && boxes[boxes.length - 1].right <= root.width + 1;
+                for (let i = 1; i < boxes.length; ++i) {
+                    fits = fits && boxes[i].left >= boxes[i - 1].right - 1;
+                }
+                const focusTab = parts[1];
+                const runningWidth = focusTab ? focusTab.width : -1;
+                TimerEngine.stop();
+                const idleWidth = focusTab ? focusTab.width : -1;
+                TimerEngine.start();
+                if (!fits || runningWidth !== idleWidth) {
+                    fail(37, "The title bar does not fit a narrow window: width " + root.width + ", "
+                         + shown.length + " parts shown, at " + JSON.stringify(boxes)
+                         + "; Focus tab " + runningWidth + " running, " + idleWidth + " idle");
                     return true;
                 }
                 root.width = wideWidth;
@@ -770,7 +886,7 @@ QQC2.ApplicationWindow {
                 }
                 root.navigate("timer");
                 if (root.pageStack.currentItem !== editor || !editor.confirming || root.currentDestination !== "preset") {
-                    fail(26, "Leaving through the sidebar with unsaved changes did not ask first");
+                    fail(26, "Leaving through the tabs with unsaved changes did not ask first");
                     return true;
                 }
                 editor.requestClose();
@@ -883,13 +999,17 @@ QQC2.ApplicationWindow {
                     done = checkTimer(root.pageStack.get(0));
                 } else if (appSmokePage === "inventory") {
                     done = featureInventory.step();
+                } else if (appSmokePage === "about" && (root.currentDestination !== "settings" || currentPage.category !== "about")) {
+                    fail(20, "\"about\" did not open the About category of the settings: " + root.currentDestination
+                         + " " + currentPage.category);
+                    return;
                 }
                 if (done && running) {
                     stop();
                     Qt.exit(0);
                 }
             } else if (attempts >= 50) {
-                const targetFile = root.destinations[appSmokePage === "presets" ? "preset" : appSmokePage];
+                const targetFile = root.destinations[({ presets: "preset", about: "settings" })[appSmokePage] ?? appSmokePage];
                 const component = targetFile ? root.pageComponents[targetFile] : null;
                 console.error("Page", appSmokePage, "did not load within five seconds:",
                               "component=", component ? component.status : "missing",
@@ -950,16 +1070,6 @@ QQC2.ApplicationWindow {
         pages.forEach(page => page && page.destroy());
     }
 
-    /// The back button: a sub-page with unsaved changes asks first.
-    function goBack(): void {
-        const top = stack.currentItem;
-        if (top && typeof top.requestClose === "function") {
-            top.requestClose();
-        } else {
-            popPage();
-        }
-    }
-
     // --- Navigation ----------------------------------------------------------
 
     readonly property var destinations: ({
@@ -967,18 +1077,22 @@ QQC2.ApplicationWindow {
         preset: "PresetEditPage.qml",
         stats: "StatsPage.qml",
         settings: "AppSettingsPage.qml",
-        about: "AboutPage.qml",
         welcome: "WelcomePage.qml"
     })
 
-    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings", "about" or "welcome".
+    // The visible destination: "timer", "preset" (a timer's page), "stats", "settings" or "welcome".
     property string currentDestination: "timer"
     /// The timer whose page is open ("" for a new one).
     property string openTimerUuid: ""
     readonly property bool isWelcomeActive: currentDestination === "welcome"
 
     /// Shows a destination; "preset" with the timer's `uuid`. `reload` builds the page afresh.
+    /// "about" (the tray, the menu bar, Ctrl+4) is the About category of the settings.
     function navigate(name: string, uuid: var, reload: var): void {
+        if (name === "about") {
+            openSettings("about");
+            return;
+        }
         const target = uuid ?? "";
         // A page with unsaved changes (a timer's page) asks before it is left. A number still
         // being typed counts, even one that did not change the value yet ("0", out of range).
@@ -1005,11 +1119,39 @@ QQC2.ApplicationWindow {
         navigate(name);
     }
 
+    /// The categories of the settings, in the order of their list (SettingsNav) and of the
+    /// drop-down list that takes its place in a narrow window.
+    readonly property var settingsCategories: [
+        { id: "general", text: i18n("General") },
+        { id: "timers", text: i18n("Timers") },
+        { id: "sounds", text: i18n("Sounds") },
+        { id: "focus", text: i18n("Focus") },
+        { id: "calendar", text: i18n("Calendar") },
+        { id: "sync", text: i18n("Sync") },
+        { id: "advanced", text: i18n("Advanced") },
+        { id: "about", text: i18n("About") }
+    ]
+    /// The list of the categories is shown at the left of the settings and of a timer's page,
+    /// when the window is wide enough for it.
+    readonly property bool settingsNavShown: (currentDestination === "settings" || currentDestination === "preset")
+                                             && width >= Theme.settingsNavBreakpoint
+    /// The list, for the inventory (FeatureInventory), which lists its entries with the page's.
+    readonly property Item settingsNavItem: settingsNav
+
     /// The settings category the settings page opens on next ("" for its default).
     property string pendingSettingsCategory: ""
 
     /// Opens the settings on one category, e.g. "focus".
     function openSettings(category: string): void {
+        // A page with unsaved changes asks first, and then comes back here for the category.
+        const shown = pageStack.currentItem;
+        if (shown && typeof shown.commitFields === "function") {
+            shown.commitFields();
+        }
+        if (shown && shown.modified === true && shown.leaving !== true && typeof shown.requestClose === "function") {
+            shown.requestClose(() => root.openSettings(category));
+            return;
+        }
         pendingSettingsCategory = category;
         navigate("settings");
         // Already open: navigate() kept the page, so tell it here.
@@ -1029,20 +1171,16 @@ QQC2.ApplicationWindow {
         navigate("preset", "");
     }
 
-    /// A timer chosen in the sidebar: it becomes the one in use (unless a phase runs) and its page opens.
+    /// A timer chosen in the timer menu or the search becomes the one in use; the page shown stays.
+    /// Not while a phase runs: then the toast says why.
     function chooseTimer(uuid: string): void {
-        const top = pageStack.currentItem;
-        if (top && typeof top.commitFields === "function") {
-            top.commitFields();
-        }
-        if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
-            top.requestClose(() => root.chooseTimer(uuid));
+        if (TimerEngine.active) {
+            if (uuid !== PresetModel.currentUuid) {
+                showPassiveNotification(i18n("Stop the timer to switch to a different timer."));
+            }
             return;
         }
-        if (!TimerEngine.active) {
-            PresetModel.currentUuid = uuid;
-        }
-        openTimer(uuid);
+        PresetModel.currentUuid = uuid;
     }
 
     // Stop and Skip end the phase at once, unless that would cut short a work session that has
@@ -1109,24 +1247,29 @@ QQC2.ApplicationWindow {
     /// What the search (Ctrl+K) offers.
     function paletteCommands(): var {
         const list = [
-            { text: i18n("Focus"), icon: "timer", hint: DesktopStyle.shortcutText("Ctrl+1"), run: () => root.navigate("timer") },
-            { text: i18n("Statistics"), icon: "stats", hint: DesktopStyle.shortcutText("Ctrl+2"), run: () => root.navigate("stats") },
-            { text: i18n("Settings"), icon: "settings", hint: DesktopStyle.shortcutText("Ctrl+,"), run: () => root.navigate("settings") },
+            { text: i18n("Focus"), icon: "timer", run: () => root.navigate("timer") },
+            { text: i18n("Statistics"), icon: "stats", run: () => root.navigate("stats") },
+            { text: i18n("Settings"), icon: "settings", run: () => root.navigate("settings") },
             { text: i18n("About"), icon: "info", run: () => root.navigate("about") },
             { text: TimerEngine.paused ? i18n("Resume the timer") : TimerEngine.active ? i18n("Pause the timer") : i18n("Start the timer"),
-              icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", hint: i18nc("keyboard key", "Space"),
-              run: () => TimerEngine.toggle() },
-            { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
+              icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", run: () => TimerEngine.toggle() },
+            { text: i18n("New timer"), icon: "plus", run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
             list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => root.requestEndPhase(false) });
             list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => root.requestEndPhase(true) });
         }
+        return list.concat(root.timerCommands());
+    }
+
+    /// The timers, for the search: one chosen becomes the one in use.
+    function timerCommands(): var {
+        const list = [];
         for (let i = 0; i < PresetModel.count; ++i) {
             const uuid = PresetModel.uuidAt(i);
             const preset = PresetModel.get(uuid);
             list.push({ text: preset.name, timerIcon: preset.iconName || "sugo-timer",
-                        hint: i18nc("minutes, short", "%1m", Math.round(preset.workSeconds / 60)),
+                        detail: String(preset.category ?? "").trim(),
                         run: () => root.chooseTimer(uuid) });
         }
         return list;
@@ -1229,49 +1372,39 @@ QQC2.ApplicationWindow {
         onActivatedAmbiguously: root.navigate("settings")
     }
 
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        Sidebar {
-            id: sidebar
-            Layout.fillHeight: true
-            visible: root.wideScreen && !root.isWelcomeActive
-            maximized: root.maximized
-            onMinimizeRequested: root.showMinimized()
-            onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
-            onCloseRequested: root.close()
+        TitleBar {
+            Layout.fillWidth: true
             current: root.currentDestination
-            openTimer: root.openTimerUuid
-            onNavigateRequested: name => root.navigate(name)
-            onTimerRequested: uuid => root.chooseTimer(uuid)
-            onNewTimerRequested: root.newTimer()
-            onRestartRequested: root.requestRestart()
+            bare: root.isWelcomeActive
+            maximized: root.maximized
+            onTabRequested: name => root.navigate(name)
             onSearchRequested: root.openSearch()
+            onRestartRequested: root.requestRestart()
             onMoveRequested: root.startSystemMove()
+            onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
+            onMinimizeRequested: root.showMinimized()
+            onCloseRequested: root.close()
         }
 
-        ColumnLayout {
+        RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
 
-            TopBar {
-                Layout.fillWidth: true
-                minimal: root.isWelcomeActive
-                maximized: root.maximized
-                showLeftButtons: !sidebar.visible
-                onMoveRequested: root.startSystemMove()
-                onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
-                onMinimizeRequested: root.showMinimized()
-                onCloseRequested: root.close()
-                page: stack.currentItem
-                showStatus: root.currentDestination !== "timer"
-                canGoBack: stack.depth > 1
-                showMenuButton: !root.wideScreen
-                onBackRequested: root.goBack()
-                onMenuRequested: navDrawer.open()
-                onStatusClicked: root.navigate("timer")
+            // The settings' categories, beside the settings and a timer's page (one of the timers).
+            SettingsNav {
+                id: settingsNav
+                objectName: "settingsNav"
+                visible: root.settingsNavShown
+                Layout.fillHeight: true
+                categories: root.settingsCategories
+                current: root.currentDestination === "preset" ? "timers"
+                         : stack.currentItem && stack.currentItem.category !== undefined ? stack.currentItem.category : ""
+                onActivated: id => root.openSettings(id)
             }
 
             Item {
@@ -1358,47 +1491,6 @@ QQC2.ApplicationWindow {
         }
     }
 
-    // The sidebar of narrow windows.
-    QQC2.Drawer {
-        id: navDrawer
-        edge: Qt.LeftEdge
-        width: Theme.sidebarWidth
-        height: root.height
-        interactive: !root.wideScreen && !root.isWelcomeActive
-        // Turning `interactive` off leaves an open drawer open: close it when the window is
-        // widened (the sidebar shows) or the welcome tour takes the window.
-        onInteractiveChanged: if (!interactive) close()
-        background: Item {}
-        Sidebar {
-            anchors.fill: parent
-            // The window buttons stay in the top bar, which is the frame of a narrow window.
-            showWindowButtons: false
-            current: root.currentDestination
-            openTimer: root.openTimerUuid
-            onNavigateRequested: name => {
-                navDrawer.close();
-                root.navigate(name);
-            }
-            onTimerRequested: uuid => {
-                navDrawer.close();
-                root.chooseTimer(uuid);
-            }
-            onNewTimerRequested: {
-                navDrawer.close();
-                root.newTimer();
-            }
-            onRestartRequested: {
-                navDrawer.close();
-                root.requestRestart();
-            }
-            onSearchRequested: {
-                navDrawer.close();
-                commandPalette.commands = root.paletteCommands();
-                commandPalette.open();
-            }
-        }
-    }
-
     Toast {
         id: toast
     }
@@ -1449,8 +1541,14 @@ QQC2.ApplicationWindow {
                 currentDestination = appSmokePage === "inventory" ? "timer" : appSmokePage;
             } else if (appStatsSmokeTest) {
                 currentDestination = "stats";
-            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets")) {
+            } else if (startPageName.length > 0 && (destinations[startPageName] || startPageName === "presets"
+                                                     || startPageName === "about")) {
                 currentDestination = startPageName;
+            }
+            // "about": the About category of the settings.
+            if (currentDestination === "about") {
+                currentDestination = "settings";
+                pendingSettingsCategory = "about";
             }
             // "presets" (smoke test, development): the page of the timer in use.
             if (currentDestination === "presets") {
@@ -1498,10 +1596,10 @@ QQC2.ApplicationWindow {
             onAccepted: root.saveTaskNote(text)
         }
 
-        // The latest notes, to use one again.
-        Flow {
+        // The latest notes, a click to use one again.
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: Theme.spaceSm
+            spacing: 0
             visible: recentRepeater.count > 0
 
             Repeater {
@@ -1509,30 +1607,29 @@ QQC2.ApplicationWindow {
                 model: []
 
                 QQC2.AbstractButton {
-                    id: chip
+                    id: recentNote
                     required property string modelData
+                    Layout.fillWidth: true
                     text: modelData
                     hoverEnabled: true
                     focusPolicy: Qt.TabFocus
-                    implicitHeight: Theme.controlHeight - Theme.spaceSm
-                    implicitWidth: Math.min(chipLabel.implicitWidth + leftPadding + rightPadding, taskNoteField.width)
-                    leftPadding: Theme.spaceMd + Theme.hairline * 2
-                    rightPadding: leftPadding
+                    implicitHeight: Theme.menuRowHeight
+                    leftPadding: Theme.spaceMd
+                    rightPadding: Theme.spaceMd
                     Accessible.name: i18nc("@action:button use a recent note", "Use “%1”", modelData)
                     onClicked: taskNoteField.text = modelData
 
                     background: Rectangle {
-                        radius: height / 2
-                        color: chip.down ? Theme.pressed : chip.hovered ? Theme.hover : "transparent"
-                        border.width: Theme.hairline
-                        border.color: chip.visualFocus ? Theme.focusRing : chip.hovered ? Theme.borderStrong : Theme.border
+                        radius: Theme.radiusSm
+                        color: recentNote.down ? Theme.pressed : recentNote.hovered ? Theme.hover : "transparent"
+                        border.width: recentNote.visualFocus ? Theme.hairline : 0
+                        border.color: Theme.focusRing
                         Behavior on color { ColorAnimation { duration: Theme.durationShort } }
                     }
                     contentItem: Text {
-                        id: chipLabel
-                        text: chip.text
-                        color: chip.hovered ? Theme.foreground : Theme.muted
-                        font.pixelSize: Theme.fontCaption
+                        text: recentNote.text
+                        color: recentNote.hovered ? Theme.foreground : Theme.muted
+                        font.pixelSize: Theme.fontBody
                         elide: Text.ElideRight
                         verticalAlignment: Text.AlignVCenter
                     }

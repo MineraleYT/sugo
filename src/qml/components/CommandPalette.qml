@@ -6,7 +6,8 @@ import io.github.mineraleyt.sugo
 
 /**
  * Ctrl+K: type to find a page, a timer or a command, Enter to run it.
- * `commands` is an array of { text, hint, icon, timerIcon, run }.
+ * `commands` is an array of { text, detail, icon, timerIcon, run }: `detail` is a quieter word on
+ * the right (a timer's category), found by the search too.
  */
 QQC2.Popup {
     id: commandPalette
@@ -15,7 +16,7 @@ QQC2.Popup {
     readonly property var matches: {
         const query = field.text.trim().toLowerCase();
         return commands.filter(c => query.length === 0 || c.text.toLowerCase().includes(query)
-                                    || (c.hint || "").toLowerCase().includes(query));
+                                    || (c.detail || "").toLowerCase().includes(query));
     }
 
     function runAt(index: int): void {
@@ -28,9 +29,9 @@ QQC2.Popup {
 
     parent: QQC2.Overlay.overlay
     x: (parent.width - width) / 2
-    y: Theme.space4xl + Theme.spaceXl
-    width: Math.min(Theme.contentMaxWidth * 0.75, parent.width - Theme.space2xl * 2)
-    padding: 0
+    y: Theme.paletteTop
+    width: Math.min(Theme.paletteWidth, parent.width - Theme.spaceLg * 2)
+    padding: Theme.hairline
     modal: true
     focus: true
     onOpened: {
@@ -43,23 +44,27 @@ QQC2.Popup {
         color: Theme.scrim
     }
     enter: Transition {
-        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationMenu; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "scale"; from: Theme.menuScaleFrom; to: 1; duration: Theme.durationMenu; easing.type: Easing.OutCubic }
     }
 
     background: Rectangle {
-        radius: Theme.radiusLg
+        radius: Theme.radiusXl
         color: Theme.raised
         border.width: Theme.hairline
-        border.color: Theme.borderStrong
+        border.color: Theme.border
     }
 
     contentItem: ColumnLayout {
         spacing: 0
 
+        // The search field, across the top with a line under it.
         RowLayout {
             Layout.fillWidth: true
-            Layout.margins: Theme.spaceLg
-            spacing: Theme.spaceMd
+            Layout.preferredHeight: Theme.paletteFieldHeight
+            Layout.leftMargin: Theme.spaceMd + Theme.spaceXs - Theme.hairline
+            Layout.rightMargin: Theme.spaceMd + Theme.spaceXs - Theme.hairline
+            spacing: Theme.spaceMd + Theme.hairline * 2
             LineIcon {
                 name: "search"
                 size: Theme.icon
@@ -69,8 +74,10 @@ QQC2.Popup {
                 id: field
                 Layout.fillWidth: true
                 color: Theme.foreground
-                font.pixelSize: Theme.fontTitle + 1
-                selectionColor: Theme.alpha(Theme.brand, 0.35)
+                font.pixelSize: Theme.fontTitle
+                selectionColor: Theme.alpha(Theme.accent, 0.35)
+                clip: true
+                Accessible.role: Accessible.EditableText
                 Accessible.name: i18n("Search")
                 Keys.onDownPressed: list.incrementCurrentIndex()
                 Keys.onUpPressed: list.decrementCurrentIndex()
@@ -84,9 +91,6 @@ QQC2.Popup {
                     font: field.font
                 }
             }
-            Kbd {
-                text: i18nc("keyboard key", "Esc")
-            }
         }
 
         Rectangle {
@@ -98,67 +102,62 @@ QQC2.Popup {
         ListView {
             id: list
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(contentHeight, Theme.navHeight * 9)
-            Layout.margins: Theme.spaceXs
+            // Every row is as tall: no waiting for the list to measure itself after a search.
+            Layout.preferredHeight: Math.min(commandPalette.matches.length, 10) * Theme.menuRowHeight
+            Layout.margins: Theme.spaceSm - Theme.hairline
             clip: true
             model: commandPalette.matches
             boundsBehavior: Flickable.StopAtBounds
             highlightMoveDuration: 0
 
-            delegate: QQC2.AbstractButton {
+            delegate: SMenuItem {
                 id: entry
                 required property var modelData
                 required property int index
+                readonly property string detail: modelData.detail || ""
                 width: ListView.view.width
-                implicitHeight: Theme.navHeight
-                leftPadding: Theme.spaceMd
-                rightPadding: Theme.spaceMd
-                hoverEnabled: true
+                rightPadding: Theme.spaceMd + (detail.length > 0 ? detailText.implicitWidth + Theme.spaceMd : 0)
                 text: modelData.text
-                onHoveredChanged: if (hovered) list.currentIndex = index
-                onClicked: commandPalette.runAt(index)
-                background: Rectangle {
-                    radius: Theme.radius
-                    color: entry.ListView.isCurrentItem ? Theme.selected : "transparent"
+                iconName: modelData.timerIcon ? "" : (modelData.icon || "chevron-right")
+                leading: modelData.timerIcon ? timerIconComponent : null
+                highlighted: ListView.isCurrentItem
+                onHoveredChanged: {
+                    if (hovered) {
+                        list.currentIndex = index;
+                    }
                 }
-                contentItem: RowLayout {
-                    spacing: Theme.spaceMd + Theme.hairline * 2
-                    LineIcon {
-                        visible: !entry.modelData.timerIcon
-                        name: entry.modelData.icon || "chevron-right"
-                        size: Theme.icon
-                        color: Theme.muted
-                    }
+                onTriggered: commandPalette.runAt(index)
+
+                Component {
+                    id: timerIconComponent
                     TimerIcon {
-                        visible: !!entry.modelData.timerIcon
                         iconName: entry.modelData.timerIcon || ""
-                        size: Theme.iconMd - Theme.hairline * 2
+                        size: Theme.icon
                     }
-                    Text {
-                        text: entry.modelData.text
-                        color: Theme.foreground
-                        font.pixelSize: Theme.fontTitle
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        text: entry.modelData.hint || ""
-                        color: Theme.subtle
-                        font.pixelSize: Theme.fontCaption
-                    }
+                }
+                Text {
+                    id: detailText
+                    visible: entry.detail.length > 0
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.spaceMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: entry.detail
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
                 }
             }
         }
         // Outside the list: a child of the ListView would sit in its content
-        // item, which has no height (and is clipped) when nothing matches.
+        // item, which has no height (and is clipped) when nothing matches. Hidden, rather than
+        // of no height, when something does: the layout then leaves no room for it.
         Item {
             Layout.fillWidth: true
-            implicitHeight: list.count === 0 ? Theme.navHeight : Theme.spaceXs
+            implicitHeight: Theme.paletteFieldHeight
+            visible: commandPalette.matches.length === 0
 
             Text {
                 objectName: "nothingFound"
                 anchors.centerIn: parent
-                visible: list.count === 0
                 text: i18n("Nothing found")
                 color: Theme.muted
                 font.pixelSize: Theme.fontBody

@@ -5,12 +5,10 @@ import QtQuick.Shapes
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// The focus page: the time in large, where it sits in the cycle, and the three controls.
+/// The focus page: the time in large, where it sits in the cycle, the three controls and the timer in use.
 QQC2.Page {
     id: page
 
-    /// The top bar shows "Focus / <timer>".
-    readonly property string section: i18n("Focus")
     title: PresetModel.currentName
     background: null
 
@@ -98,7 +96,7 @@ QQC2.Page {
 
     readonly property color phaseColor: isIdle ? Theme.muted
                                        : TimerEngine.paused ? Theme.warning
-                                       : isWorkPhase ? Theme.brand : Theme.breakColor
+                                       : isWorkPhase ? Theme.accent : Theme.breakAccent
 
     function pad(n: int): string {
         return String(n).padStart(2, "0");
@@ -108,14 +106,55 @@ QQC2.Page {
                                                     : pad(Math.floor(TimerEngine.remainingSeconds / 60))
     readonly property string secondsText: pad(TimerEngine.remainingSeconds % 60)
 
-    readonly property real clockSize: Math.max(Theme.space4xl * 1.3, Math.min(page.width * 0.17, page.height * 0.2, Theme.space4xl * 2.6))
-    readonly property real trackWidth: Math.min(page.width - Theme.space3xl * 2, Theme.contentMaxWidth * 0.62)
+    /// A narrow window: the smaller clock.
+    readonly property bool compact: page.width < Theme.compactBreakpoint
+    // A short window still has room for the clock, the track and the controls.
+    readonly property real clockSize: Math.min(compact ? Theme.clockSizeCompact : Theme.clockSize, page.height / 4)
+    readonly property real trackWidth: Math.max(0, Math.min(Theme.cycleTrackWidth, page.width - Theme.space2xl * 2))
+
+    /// The round of the set the timer is in (the work phase, or the work before this break).
+    readonly property int round: {
+        let works = 0;
+        for (let i = 0; i <= currentSegment && i < segments.length; ++i) {
+            if (segments[i].work) {
+                ++works;
+            }
+        }
+        return Math.max(1, works);
+    }
+    /// How long a whole set lasts, as the timer's page says it.
+    readonly property string setDuration: {
+        const total = Math.round(segments.reduce((sum, s) => sum + s.seconds, 0) / 60);
+        return total >= 60 ? i18nc("hours and minutes", "%1h %2m", Math.floor(total / 60), total % 60)
+                           : i18nc("minutes", "%1 min", total);
+    }
+    /// Left under the track: the set when idle ("4 rounds · 2h 10m"), the round while it runs.
+    /// Without a long break there are no rounds to count: the phase's name.
+    readonly property string roundText: {
+        const cycles = TimerEngine.cyclesBeforeLong;
+        if (cycles <= 0) {
+            return segments[currentSegment] ? segments[currentSegment].label : "";
+        }
+        return isIdle && TimerEngine.completedCycles === 0 && isWorkPhase
+            ? i18ncp("the rounds of work in a set, the duration of the set", "%1 round · %2", "%1 rounds · %2", cycles, setDuration)
+            : i18nc("the round of work in a set", "Round %1 of %2", round, cycles);
+    }
+
+    // Above the controls: the time, centred in the room they leave.
+    Item {
+        id: focusArea
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: dock.top
+    }
 
     // A soft glow of the phase colour behind the clock, only while time is running: a circle
-    // whose colour fades to nothing at its edge, stretched into a wide ellipse.
+    // whose colour fades to nothing at its edge, stretched into a wide ellipse. It follows the
+    // accent colour for work and the break colour for breaks.
     Shape {
         id: glow
-        readonly property color tint: page.isWorkPhase ? Theme.brand : Theme.breakColor
+        readonly property color tint: page.isWorkPhase ? Theme.accent : Theme.breakAccent
         readonly property real diameter: page.clockSize * 4.4
         anchors.centerIn: clockColumn
         anchors.verticalCenterOffset: -page.clockSize * 0.3
@@ -158,57 +197,50 @@ QQC2.Page {
 
     ColumnLayout {
         id: clockColumn
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -Theme.spaceXl
+        anchors.centerIn: focusArea
         width: Math.min(implicitWidth, page.width - Theme.space2xl * 2)
-        spacing: Theme.space2xl
+        spacing: Theme.spaceXl
 
-        // The phase, in its colour.
-        Rectangle {
+        // The phase in its colour, with a dot that pulses while the time runs.
+        RowLayout {
             Layout.alignment: Qt.AlignHCenter
-            implicitWidth: phaseRow.implicitWidth + Theme.spaceLg * 2
-            implicitHeight: phaseRow.implicitHeight + Theme.spaceSm * 2
-            radius: height / 2
-            color: Theme.alpha(page.phaseColor, page.isIdle ? 0.08 : 0.1)
-            border.width: Theme.hairline
-            border.color: Theme.alpha(page.phaseColor, page.isIdle ? 0.25 : 0.3)
-            Behavior on color { ColorAnimation { duration: Theme.durationLong } }
+            // As wide as its text, centred (a layout in a layout would fill the column).
+            Layout.fillWidth: false
+            Layout.maximumWidth: page.trackWidth
+            spacing: Theme.spaceSm + Theme.hairline
             Accessible.role: Accessible.StaticText
             Accessible.name: page.phaseText
 
-            RowLayout {
-                id: phaseRow
-                anchors.centerIn: parent
-                spacing: Theme.spaceMd
-                Rectangle {
-                    implicitWidth: Theme.spaceSm
-                    implicitHeight: Theme.spaceSm
-                    radius: width / 2
-                    color: page.phaseColor
-                    SequentialAnimation on opacity {
-                        running: page.running
-                        loops: Animation.Infinite
-                        alwaysRunToEnd: true
-                        NumberAnimation { to: 0.3; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
-                        NumberAnimation { to: 1; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
-                    }
+            Rectangle {
+                visible: !page.isIdle
+                implicitWidth: Theme.phaseDot
+                implicitHeight: Theme.phaseDot
+                radius: width / 2
+                color: page.phaseColor
+                Behavior on color { ColorAnimation { duration: Theme.durationLong } }
+                SequentialAnimation on opacity {
+                    running: page.running
+                    loops: Animation.Infinite
+                    alwaysRunToEnd: true
+                    NumberAnimation { to: 0.3; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: Theme.durationLong * 4; easing.type: Easing.InOutSine }
                 }
-                Text {
-                    // A long category is cut: the pill is never wider than the track below.
-                    Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.spaceLg * 2 - Theme.spaceSm - phaseRow.spacing)
-                    elide: Text.ElideRight
-                    text: page.phaseText
-                    color: page.isIdle ? Theme.muted : Qt.lighter(page.phaseColor, Theme.dark ? 1.3 : 0.8)
-                    font.pixelSize: Theme.fontBody
-                    font.weight: Font.Medium
-                }
+            }
+            Text {
+                // A long category is cut: the line is never wider than the track below.
+                Layout.maximumWidth: Math.max(0, page.trackWidth - Theme.phaseDot - parent.spacing)
+                elide: Text.ElideRight
+                text: page.phaseText
+                color: page.phaseColor
+                Behavior on color { ColorAnimation { duration: Theme.durationLong } }
+                font.pixelSize: Theme.fontBody
+                font.weight: Font.Medium
             }
         }
 
         // The time left: minutes, a quiet colon, seconds.
         Row {
             Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: -Theme.spaceMd
             Accessible.role: Accessible.StaticText
             // In words, unit by unit ("1 hour 5 minutes 3 seconds left"), not the clock's "1:05".
             Accessible.name: {
@@ -222,7 +254,7 @@ QQC2.Page {
                 parts.push(i18np("%1 second", "%1 seconds", total % 60));
                 return i18nc("time left, e.g. 5 minutes 3 seconds", "%1 left", parts.join(" "));
             }
-            opacity: TimerEngine.paused ? 0.55 : 1
+            opacity: TimerEngine.paused ? 0.5 : 1
             Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
 
             Text {
@@ -230,23 +262,23 @@ QQC2.Page {
                 color: Theme.foreground
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                font.letterSpacing: -page.clockSize * 0.04
+                font.letterSpacing: -page.clockSize * 0.045
                 font.features: { "tnum": 1 }
             }
             Text {
                 text: ":"
-                color: Theme.alpha(Theme.muted, 0.6)
+                color: Theme.subtle
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                leftPadding: page.clockSize * 0.02
-                rightPadding: page.clockSize * 0.04
+                leftPadding: page.clockSize * 0.03
+                rightPadding: page.clockSize * 0.03
             }
             Text {
                 text: page.secondsText
                 color: Theme.foreground
                 font.pixelSize: page.clockSize
                 font.weight: Font.Medium
-                font.letterSpacing: -page.clockSize * 0.04
+                font.letterSpacing: -page.clockSize * 0.045
                 font.features: { "tnum": 1 }
             }
         }
@@ -255,20 +287,21 @@ QQC2.Page {
         ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: page.trackWidth
-            spacing: Theme.spaceSm
+            Layout.topMargin: Theme.spaceSm
+            spacing: Theme.spaceMd
 
             Item {
                 id: track
                 objectName: "cycleTrack"
                 Layout.fillWidth: true
-                implicitHeight: Theme.spaceSm
+                implicitHeight: Theme.cycleTrackHeight
                 // A long set (up to 99 work phases) still fits: the gaps take at most half the
                 // track, the segments' minimum width shrinks to their share of the rest, and the
                 // track clips what rounding leaves over.
                 clip: true
                 readonly property int count: page.segments.length
                 readonly property real total: page.segments.reduce((sum, s) => sum + s.seconds, 0)
-                readonly property real gap: count > 1 ? Math.min(Theme.spaceXs, width / 2 / (count - 1)) : 0
+                readonly property real gap: count > 1 ? Math.min(Theme.cycleTrackGap, width / 2 / (count - 1)) : 0
                 readonly property real available: Math.max(0, width - gap * (count - 1))
                 readonly property real minSegment: Math.min(Theme.spaceSm, available / Math.max(1, count))
                 // Each segment as long as its phase, at least minSegment; when those minimums would
@@ -305,17 +338,16 @@ QQC2.Page {
                             color: Theme.track
                             clip: true
 
+                            // Work in the accent colour, breaks in the break colour; dimmed while paused.
                             Rectangle {
                                 height: parent.height
                                 radius: parent.radius
                                 width: segment.done ? parent.width
                                      : segment.current && !page.isIdle ? parent.width * TimerEngine.progress : 0
                                 Behavior on width { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop { position: 0; color: segment.modelData.work ? Theme.brandPeach : Theme.breakLight }
-                                    GradientStop { position: 1; color: segment.modelData.work ? Theme.brand : Theme.breakColor }
-                                }
+                                color: segment.modelData.work ? Theme.accent : Theme.breakAccent
+                                opacity: TimerEngine.paused ? 0.5 : 1
+                                Behavior on opacity { NumberAnimation { duration: Theme.durationLong } }
                             }
                         }
                     }
@@ -324,13 +356,14 @@ QQC2.Page {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: Theme.spaceLg
                 Text {
-                    text: page.segments[page.currentSegment] ? page.segments[page.currentSegment].label : ""
+                    objectName: "cycleRoundText"
+                    Layout.fillWidth: true
+                    text: page.roundText
+                    elide: Text.ElideRight
                     color: Theme.muted
                     font.pixelSize: Theme.fontCaption
-                }
-                Item {
-                    Layout.fillWidth: true
                 }
                 Text {
                     readonly property var next: page.segments[(page.currentSegment + 1) % page.segments.length]
@@ -338,67 +371,6 @@ QQC2.Page {
                     color: Theme.subtle
                     font.pixelSize: Theme.fontCaption
                 }
-            }
-        }
-
-        // Stop · start/pause · skip.
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spaceSm
-            spacing: Theme.spaceXl
-
-            RoundButton {
-                diameter: Theme.space3xl + Theme.spaceMd
-                iconName: "stop"
-                text: i18n("Stop")
-                enabled: TimerEngine.active
-                onClicked: page.requestStop()
-            }
-            RoundButton {
-                diameter: Theme.space4xl + Theme.spaceXl
-                primary: true
-                iconName: page.isIdle || TimerEngine.paused ? "play" : "pause"
-                text: TimerEngine.paused ? i18n("Resume") : page.isIdle ? (page.isWorkPhase ? i18n("Start") : i18n("Start break")) : i18n("Pause")
-                onClicked: TimerEngine.toggle()
-            }
-            RoundButton {
-                diameter: Theme.space3xl + Theme.spaceMd
-                iconName: "skip"
-                text: i18n("Skip")
-                enabled: TimerEngine.active
-                onClicked: page.requestSkip()
-            }
-        }
-
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Theme.spaceSm
-            Kbd {
-                text: i18nc("keyboard key", "Space")
-            }
-            Text {
-                id: spaceHint
-                text: TimerEngine.active && !TimerEngine.paused ? i18n("pause") : i18n("start")
-                color: Theme.subtle
-                font.pixelSize: Theme.fontCaption
-                // As wide as the wider word.
-                Layout.preferredWidth: Math.ceil(Math.max(hintMetrics.advanceWidth(i18n("pause")), hintMetrics.advanceWidth(i18n("start"))))
-                FontMetrics {
-                    id: hintMetrics
-                    font: spaceHint.font
-                }
-            }
-            // Faded rather than hidden: the hints beside them keep their place.
-            Kbd {
-                Layout.leftMargin: Theme.spaceSm
-                opacity: TimerEngine.active ? 1 : 0
-                text: i18nc("keyboard key", "S")
-            }
-            Text {
-                opacity: TimerEngine.active ? 1 : 0
-                text: i18n("skip")
-                color: Theme.subtle
-                font.pixelSize: Theme.fontCaption
             }
         }
     }
@@ -433,67 +405,53 @@ QQC2.Page {
         }
     }
 
-    // Reminder that the desktop is not showing notifications because of us.
-    RowLayout {
+    // The controls, and under them what today brought.
+    ColumnLayout {
+        id: dock
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.spaceXl
-        spacing: Theme.spaceSm
-        visible: SilenceController.available && SilenceController.active
-        LineIcon {
-            name: "bell-off"
-            size: Theme.iconSm
-            color: Theme.subtle
+        anchors.bottomMargin: Theme.dockBottomMargin
+        width: Math.max(0, Math.min(Theme.composerWidth, page.width - Theme.spaceLg * 2))
+        spacing: Theme.dockSpacing
+
+        Composer {
+            id: composer
+            Layout.fillWidth: true
+            app: applicationWindow()
+            compact: page.compact
         }
-        Text {
-            text: i18n("Notifications silenced until the break")
-            color: Theme.subtle
-            font.pixelSize: Theme.fontCaption
+
+        // Today: the work sessions finished, the time focused and the streak (not in a narrow window).
+        Row {
+            id: todayLine
+            objectName: "todayLine"
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Theme.spaceXl
+            // The figures in the text colour, the words around them muted.
+            function emphasized(text: string): string {
+                return text.replace(/<b>/g, '<b><font color="' + Theme.foreground + '">').replace(/<\/b>/g, '</font></b>');
+            }
+
+            TodayText {
+                text: todayLine.emphasized(i18ncp("the focus page's line about today: work sessions finished",
+                                                  "Today <b>%1 session</b>", "Today <b>%1 sessions</b>",
+                                                  StatsModel.todayCompletedSessions))
+            }
+            TodayText {
+                text: todayLine.emphasized(i18nc("the focus page's line about today: time spent working",
+                                                 "<b>%1</b> focused", StatsModel.formatDuration(StatsModel.todayWorkSeconds)))
+            }
+            TodayText {
+                visible: !page.compact
+                text: todayLine.emphasized(i18ncp("the focus page's line about today: days in a row with work",
+                                                  "Streak <b>%1 day</b>", "Streak <b>%1 days</b>", StatsModel.currentStreak))
+            }
         }
     }
 
-    /// A round control: the main one is filled with the text colour.
-    component RoundButton: QQC2.AbstractButton {
-        id: round
-        property real diameter: Theme.space3xl
-        property bool primary: false
-        property string iconName
-
-        implicitWidth: diameter
-        implicitHeight: diameter
-        hoverEnabled: true
-        focusPolicy: Qt.TabFocus
-        Accessible.name: text
-        QQC2.ToolTip.visible: hovered && !primary
-        QQC2.ToolTip.text: text
-        QQC2.ToolTip.delay: Theme.toolTipDelay
-
-        background: Rectangle {
-            radius: width / 2
-            color: round.primary ? Theme.alpha(Theme.primary, round.down ? 0.8 : (round.hovered ? 0.9 : 1))
-                                 : (round.down ? Theme.pressed : (round.hovered && round.enabled ? Theme.hover : "transparent"))
-            border.width: round.primary ? 0 : Theme.hairline
-            border.color: Theme.borderStrong
-            scale: round.down ? 0.96 : 1
-            Behavior on scale { NumberAnimation { duration: Theme.durationShort } }
-            Behavior on color { ColorAnimation { duration: Theme.durationShort } }
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -Theme.hairline * 3
-                radius: width / 2
-                color: "transparent"
-                border.width: Theme.hairline
-                border.color: Theme.focusRing
-                visible: round.visualFocus
-            }
-        }
-        contentItem: Item {
-            LineIcon {
-                anchors.centerIn: parent
-                name: round.iconName
-                size: round.primary ? Theme.iconMd + Theme.spaceXs : Theme.icon
-                color: round.primary ? Theme.primaryText : (round.enabled ? Theme.foreground : Theme.subtle)
-            }
-        }
+    component TodayText: Text {
+        textFormat: Text.StyledText
+        color: Theme.muted
+        font.pixelSize: Theme.fontCaption
     }
 }

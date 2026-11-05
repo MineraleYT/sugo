@@ -15,7 +15,7 @@ RowLayout {
     property var buttons: []
     property bool maximized: false
     /// The height of the bar they sit in (Windows' buttons fill it).
-    property real barHeight: Theme.topBarHeight
+    property real barHeight: Theme.titleBarHeight
     signal minimizeRequested()
     signal maximizeRequested()
     signal closeRequested()

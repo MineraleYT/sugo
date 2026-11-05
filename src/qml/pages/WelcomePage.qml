@@ -167,54 +167,51 @@ QQC2.Page {
 
         ColumnLayout {
             id: column
-            width: Math.min(step.width - Theme.space2xl * 2, Theme.contentMaxWidth * 0.7)
+            width: Math.min(step.width - Theme.space2xl * 2, Theme.welcomeGroupWidth)
             x: (step.width - width) / 2
             y: Math.max(Theme.space3xl, (step.height - implicitHeight) / 2)
             spacing: 0
         }
     }
 
-    /// The small caps line, the title and the text at the top of a step.
+    /// The title of a step.
+    component StepTitle: Text {
+        Layout.fillWidth: true
+        color: Theme.foreground
+        font.pixelSize: Theme.fontWelcomeTitle
+        font.weight: Font.DemiBold
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+    }
+
+    /// The text under a step's title: muted, in a narrow column.
+    component StepText: Text {
+        Layout.fillWidth: true
+        Layout.maximumWidth: Theme.welcomeTextWidth
+        Layout.alignment: Qt.AlignHCenter
+        color: Theme.muted
+        font.pixelSize: Theme.fontBody
+        lineHeight: 1.15
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+    }
+
+    /// The title and the text at the top of a step.
     component StepHeader: ColumnLayout {
         id: header
         required property Step step
-        property string eyebrow
         property string title
         property string text
         Layout.fillWidth: true
-        spacing: Theme.spaceSm
+        spacing: Theme.spaceLg
 
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: header.eyebrow
-            color: Theme.muted
-            font.pixelSize: Theme.fontSmall
-            font.capitalization: Font.AllUppercase
-            font.letterSpacing: Theme.letterSpacingCaps
-            opacity: header.step.reveal(0)
-            transform: Translate { y: header.step.rise(0) }
-        }
-        Text {
-            Layout.fillWidth: true
+        StepTitle {
             text: header.title
-            color: Theme.foreground
-            font.pixelSize: Theme.fontHeading
-            font.weight: Font.DemiBold
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
             opacity: header.step.reveal(1)
             transform: Translate { y: header.step.rise(1) }
         }
-        Text {
-            Layout.fillWidth: true
-            Layout.maximumWidth: Theme.contentMaxWidth * 0.6
-            Layout.alignment: Qt.AlignHCenter
+        StepText {
             text: header.text
-            color: Theme.muted
-            font.pixelSize: Theme.fontBody
-            lineHeight: 1.15
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
             opacity: header.step.reveal(2)
             transform: Translate { y: header.step.rise(2) }
         }
@@ -235,12 +232,15 @@ QQC2.Page {
         property string title
         property string text
         default property alias picture: pictureHolder.data
-        implicitHeight: featureRow.implicitHeight + Theme.spaceLg * 2
+        implicitHeight: featureRow.implicitHeight + Theme.settingsRowPaddingY * 2
         RowLayout {
             id: featureRow
             anchors.fill: parent
-            anchors.margins: Theme.spaceLg
-            spacing: Theme.spaceMd + Theme.spaceXs
+            anchors.leftMargin: Theme.settingsRowPaddingX
+            anchors.rightMargin: Theme.settingsRowPaddingX
+            anchors.topMargin: Theme.settingsRowPaddingY
+            anchors.bottomMargin: Theme.settingsRowPaddingY
+            spacing: Theme.spaceLg
             Item {
                 id: pictureHolder
                 implicitWidth: Theme.iconLg
@@ -315,41 +315,26 @@ QQC2.Page {
             LogoIntro {
                 id: logo
                 objectName: "welcomeLogo"
+                size: Theme.logoWelcome
                 Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: Theme.spaceXl
+                Layout.bottomMargin: Theme.space2xl
             }
-            Text {
-                Layout.alignment: Qt.AlignHCenter
+            StepTitle {
                 text: i18n("Sugo")
-                color: Theme.foreground
-                font.pixelSize: Theme.fontHero
-                font.weight: Font.DemiBold
-                font.letterSpacing: Theme.letterSpacingTight
                 opacity: welcomeStep.reveal(0)
                 transform: Translate { y: welcomeStep.rise(0) }
             }
-            Text {
-                Layout.fillWidth: true
-                Layout.maximumWidth: Theme.contentMaxWidth * 0.6
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: Theme.spaceSm
+            StepText {
+                Layout.topMargin: Theme.spaceLg
                 text: i18n("A calm Pomodoro timer. Focus in rounds, rest in between, and see where your time goes.")
-                color: Theme.muted
-                font.pixelSize: Theme.fontBody
-                lineHeight: 1.15
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
                 opacity: welcomeStep.reveal(1)
                 transform: Translate { y: welcomeStep.rise(1) }
             }
-            Text {
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.spaceXl
+            StepText {
+                Layout.topMargin: Theme.spaceLg
                 text: i18n("No account, no tracking: everything stays on this computer.")
                 color: Theme.subtle
                 font.pixelSize: Theme.fontCaption
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
                 opacity: welcomeStep.reveal(2)
                 transform: Translate { y: welcomeStep.rise(2) }
             }
@@ -392,16 +377,15 @@ QQC2.Page {
 
             StepHeader {
                 step: timersStep
-                eyebrow: i18n("Timers")
                 title: i18n("Work in rounds, rest in between")
                 // macOS does not let applications silence notifications (Focus modes do that).
                 text: DesktopStyle.macos
-                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the sidebar.")
-                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
+                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the timer menu on the Focus page.")
+                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the timer menu on the Focus page.")
             }
 
             Panel {
-                Layout.topMargin: Theme.spaceXl
+                Layout.topMargin: Theme.space2xl
                 implicitHeight: cycleColumn.implicitHeight + Theme.spaceLg * 2
                 opacity: timersStep.reveal(3)
                 transform: Translate { y: timersStep.rise(3) }
@@ -410,8 +394,8 @@ QQC2.Page {
                     id: cycleColumn
                     anchors.fill: parent
                     anchors.margins: Theme.spaceLg
-                    anchors.leftMargin: Theme.spaceXl
-                    anchors.rightMargin: Theme.spaceXl
+                    anchors.leftMargin: Theme.settingsRowPaddingX
+                    anchors.rightMargin: Theme.settingsRowPaddingX
                     spacing: Theme.spaceMd + Theme.spaceXs
 
                     Item {
@@ -490,7 +474,7 @@ QQC2.Page {
             }
 
             Panel {
-                Layout.topMargin: Theme.spaceMd + Theme.spaceXs
+                Layout.topMargin: Theme.spaceLg
                 implicitHeight: presetColumn.implicitHeight
 
                 ColumnLayout {
@@ -520,9 +504,9 @@ QQC2.Page {
                             }
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: Theme.spaceLg + Theme.spaceXs
-                                anchors.rightMargin: Theme.spaceLg + Theme.spaceXs
-                                spacing: Theme.spaceMd + Theme.spaceXs
+                                anchors.leftMargin: Theme.settingsRowPaddingX
+                                anchors.rightMargin: Theme.settingsRowPaddingX
+                                spacing: Theme.spaceLg
                                 TimerIcon {
                                     iconName: presetRow.modelData.icon
                                     size: Theme.iconMd + Theme.spaceXs
@@ -554,10 +538,10 @@ QQC2.Page {
 
             GridLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: Theme.spaceMd + Theme.spaceXs
-                columns: width >= Theme.contentMaxWidth * 0.6 ? 2 : 1
-                columnSpacing: Theme.spaceMd + Theme.spaceXs
-                rowSpacing: Theme.spaceMd + Theme.spaceXs
+                Layout.topMargin: Theme.spaceLg
+                columns: width >= Theme.welcomeGroupWidth ? 2 : 1
+                columnSpacing: Theme.spaceLg
+                rowSpacing: Theme.spaceLg
 
                 Feature {
                     title: DesktopStyle.macos ? i18n("Live menu bar icon") : i18n("Live tray icon")
@@ -611,22 +595,22 @@ QQC2.Page {
 
             StepHeader {
                 step: setupStep
-                eyebrow: i18n("Set up")
                 title: i18n("Make it yours")
                 text: i18n("A few choices to start with. You can change all of them later in Settings.")
             }
 
+            // One group of rows, as in Settings.
             Panel {
                 objectName: "welcomeSetupPanel"
-                Layout.topMargin: Theme.spaceXl
+                Layout.topMargin: Theme.space2xl
                 implicitHeight: settingsColumn.implicitHeight
 
                 ColumnLayout {
                     id: settingsColumn
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: Theme.spaceXl
-                    anchors.rightMargin: Theme.spaceXl
+                    anchors.leftMargin: Theme.settingsRowPaddingX
+                    anchors.rightMargin: Theme.settingsRowPaddingX
                     spacing: 0
 
                     FormRow {
@@ -721,8 +705,8 @@ QQC2.Page {
 
             Item {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: Theme.spaceXl
-                implicitWidth: Theme.space4xl * 2
+                Layout.bottomMargin: Theme.space2xl
+                implicitWidth: Theme.logoWelcome
                 implicitHeight: implicitWidth
 
                 BrandGlow {
@@ -757,56 +741,21 @@ QQC2.Page {
                 }
             }
 
-            Text {
-                Layout.alignment: Qt.AlignHCenter
+            StepTitle {
                 text: i18n("You're all set")
-                color: Theme.foreground
-                font.pixelSize: Theme.fontHeading
-                font.weight: Font.DemiBold
                 opacity: readyStep.reveal(8)
                 transform: Translate { y: readyStep.rise(8) }
             }
-            Text {
-                Layout.fillWidth: true
-                Layout.maximumWidth: Theme.contentMaxWidth * 0.6
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: Theme.spaceSm
+            StepText {
+                Layout.topMargin: Theme.spaceLg
                 text: i18n("Your timer is ready. Sessions and streaks will show up in Statistics.")
-                color: Theme.muted
-                font.pixelSize: Theme.fontBody
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
                 opacity: readyStep.reveal(9)
                 transform: Translate { y: readyStep.rise(9) }
-            }
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: Theme.spaceXl
-                spacing: Theme.spaceSm
-                opacity: readyStep.reveal(10)
-                transform: Translate { y: readyStep.rise(10) }
-                Kbd { text: i18nc("keyboard key", "Space") }
-                Text {
-                    text: i18n("starts and pauses")
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
-                Text {
-                    text: "·"
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
-                Kbd { text: DesktopStyle.shortcutText("Ctrl+K") }
-                Text {
-                    text: i18n("finds anything")
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
             }
         }
     }
 
-    // --- Bottom bar: skip, the step dots, back and next ---------------------------------------
+    // --- Bottom bar: skip at the left; the step dots, back and next at the right ---------------
 
     // Opaque, so that a scrolled step never shows through it (the software renderer does not
     // clip shapes).
@@ -815,7 +764,7 @@ QQC2.Page {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        implicitHeight: Theme.space4xl + Theme.spaceMd
+        implicitHeight: Theme.welcomeFooterHeight
         height: implicitHeight
         color: Theme.background
 
@@ -828,7 +777,7 @@ QQC2.Page {
         SButton {
             id: skipButton
             anchors.left: parent.left
-            anchors.leftMargin: Theme.spaceXl
+            anchors.leftMargin: Theme.welcomeFooterPaddingX
             anchors.verticalCenter: parent.verticalCenter
             kind: "ghost"
             text: i18n("Skip Tour")
@@ -842,10 +791,14 @@ QQC2.Page {
             readonly property int count: page.count
             // Only ever follows the steps; the dots move the steps themselves.
             readonly property int currentIndex: page.current
-            anchors.centerIn: parent
+            // Left of the room Back takes on every step but the first: the dots never move.
+            anchors.right: navButtons.right
+            anchors.rightMargin: backButton.implicitWidth + primaryButton.Layout.preferredWidth + navButtons.spacing + Theme.spaceLg
+            anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.spaceSm
             // Hidden when the window is too narrow to fit the dots between the buttons.
-            visible: parent.width - 2 * Math.max(skipButton.implicitWidth, navButtons.implicitWidth) - Theme.space4xl > implicitWidth
+            visible: bottomBar.width - 2 * Theme.welcomeFooterPaddingX - skipButton.implicitWidth - anchors.rightMargin
+                     - Theme.space2xl > implicitWidth
 
             Repeater {
                 model: indicator.count
@@ -861,37 +814,37 @@ QQC2.Page {
                     Accessible.role: Accessible.Button
                     Accessible.name: accessibleName
                     Accessible.onPressAction: activate()
-                    implicitWidth: active ? Theme.space2xl - Theme.spaceXs : Theme.spaceSm
+                    implicitWidth: Theme.phaseDot
                     implicitHeight: Theme.spaceXl
-                    Behavior on implicitWidth {
-                        NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic }
-                    }
                     TapHandler {
+                        // A dot is small: the tap counts a little around it too.
+                        margin: Theme.spaceXs
                         onTapped: dot.activate()
                     }
                     HoverHandler {
+                        margin: Theme.spaceXs
                         cursorShape: Qt.PointingHandCursor
                     }
                     Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width
-                        height: Theme.spaceSm
+                        anchors.centerIn: parent
+                        width: Theme.phaseDot
+                        height: Theme.phaseDot
                         radius: height / 2
-                        color: dot.active ? Theme.foreground : Theme.borderStrong
+                        color: dot.active ? Theme.accent : Theme.borderStrong
                         Behavior on color { ColorAnimation { duration: Theme.durationLong } }
                     }
                 }
             }
         }
-
         RowLayout {
             id: navButtons
             anchors.right: parent.right
-            anchors.rightMargin: Theme.spaceXl
+            anchors.rightMargin: Theme.welcomeFooterPaddingX
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.spaceXs
+            spacing: Theme.spaceMd
 
             SButton {
+                id: backButton
                 kind: "ghost"
                 iconName: "chevron-left"
                 text: i18n("Back")

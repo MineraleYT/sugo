@@ -17,20 +17,16 @@ qt6_add_qml_module(sugo_core
         qml/pages/StatsPage.qml
         qml/pages/PresetEditPage.qml
         qml/pages/AppSettingsPage.qml
-        qml/pages/AboutPage.qml
         qml/pages/WelcomePage.qml
         qml/components/ProgressRing.qml
         qml/theme/Theme.qml
         qml/components/LineIcon.qml
-        qml/components/Kbd.qml
         qml/components/SButton.qml
-        qml/components/NavItem.qml
-        qml/components/StatusPill.qml
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
         qml/components/TrayBadge.qml
-        qml/components/Sidebar.qml
-        qml/components/TopBar.qml
+        qml/components/TimerMenu.qml
+        qml/components/TitleBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml
         qml/components/MessageSlot.qml
@@ -41,10 +37,19 @@ qt6_add_qml_module(sugo_core
         qml/components/SSwitch.qml
         qml/components/STextField.qml
         qml/components/SComboBox.qml
+        qml/components/AutoStartMenu.qml
         qml/components/CommandPalette.qml
+        qml/components/Composer.qml
         qml/components/SSlider.qml
         qml/components/Segmented.qml
         qml/components/NumberField.qml
+        qml/components/SMenu.qml
+        qml/components/SMenuHeader.qml
+        qml/components/SMenuItem.qml
+        qml/components/SMenuSeparator.qml
+        qml/components/SettingsNav.qml
+        qml/components/AccentButton.qml
+        qml/components/StatusLine.qml
         qml/components/BrandGlow.qml
         qml/components/LogoIntro.qml
         qml/components/WindowButtons.qml
