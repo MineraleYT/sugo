@@ -6,6 +6,9 @@
 
 #include <QLoggingCategory>
 
+#include <sodium.h>
+
+#include <cstring>
 #include <utility>
 
 namespace
@@ -48,13 +51,45 @@ CFMutableDictionaryRef newItemQuery(const QString &service, const QString &accou
     return query;
 }
 
-/// The secret as the item's data, UTF-8; null when out of memory.
-CFDataRef newSecretData(const QString &secret)
+/// The secret as UTF-8, in bytes that are wiped when they go.
+SecretBytes secretUtf8(const QString &secret)
 {
-    const QByteArray utf8 = secret.toUtf8();
-    return CFDataCreate(kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(utf8.constData()),
-                        static_cast<CFIndex>(utf8.size()));
+    QByteArray utf8 = secret.toUtf8();
+    SecretBytes bytes = SecretBytes::fromRaw(utf8);
+    if (!utf8.isEmpty()) {
+        sodium_memzero(utf8.data(), size_t(utf8.size()));
+    }
+    return bytes;
 }
+
+/// The item's data: a copy of \a secret that is zeroed before it is released, as the item was
+/// added (or failed to be) by then. Null when out of memory.
+class SecretData
+{
+public:
+    explicit SecretData(const SecretBytes &secret)
+        : m_data(CFDataCreateMutable(kCFAllocatorDefault, 0))
+    {
+        if (m_data) {
+            CFDataAppendBytes(m_data, secret.data(), static_cast<CFIndex>(secret.size()));
+        }
+    }
+    ~SecretData()
+    {
+        if (m_data) {
+            if (const CFIndex length = CFDataGetLength(m_data); length > 0) {
+                sodium_memzero(CFDataGetMutableBytePtr(m_data), size_t(length));
+            }
+            CFRelease(m_data);
+        }
+    }
+    SecretData(const SecretData &) = delete;
+    SecretData &operator=(const SecretData &) = delete;
+    CFDataRef get() const { return m_data; }
+
+private:
+    CFMutableDataRef m_data;
+};
 } // namespace
 
 MacKeychainStore::MacKeychainStore(const QString &service)
@@ -75,19 +110,22 @@ std::optional<QString> MacKeychainStore::read(const QString &key)
     // Not errSecInteractionNotAllowed: nobody was asked (no login session), worth trying again.
     m_lastReadRefused = status == errSecAuthFailed || status == errSecUserCanceled;
     if (status == errSecItemNotFound) {
-        m_known.insert(key, QString());
+        m_known.insert_or_assign(key, SecretBytes());
         return QString();
     }
     if (status != errSecSuccess || !data.get() || CFGetTypeID(data.get()) != CFDataGetTypeID()) {
         qCWarning(lcKeychain) << "Cannot read" << key << "from the Keychain, OSStatus" << status;
-        m_known.remove(key);
+        m_known.erase(key);
         return std::nullopt;
     }
     const auto bytes = static_cast<CFDataRef>(data.get());
-    const QString secret = QString::fromUtf8(reinterpret_cast<const char *>(CFDataGetBytePtr(bytes)),
-                                             static_cast<qsizetype>(CFDataGetLength(bytes)));
-    m_known.insert(key, secret);
-    return secret;
+    const auto length = static_cast<qsizetype>(CFDataGetLength(bytes));
+    SecretBytes known(length);
+    if (length > 0) {
+        std::memcpy(known.data(), CFDataGetBytePtr(bytes), size_t(length));
+    }
+    m_known.insert_or_assign(key, std::move(known));
+    return QString::fromUtf8(reinterpret_cast<const char *>(CFDataGetBytePtr(bytes)), length);
 }
 
 bool MacKeychainStore::remove(const QString &key)
@@ -97,10 +135,10 @@ bool MacKeychainStore::remove(const QString &key)
     m_lastStatus = static_cast<int>(status);
     if (status != errSecSuccess && status != errSecItemNotFound) {
         qCWarning(lcKeychain) << "Cannot remove" << key << "from the Keychain, OSStatus" << status;
-        m_known.remove(key);
+        m_known.erase(key);
         return false;
     }
-    m_known.insert(key, QString());
+    m_known.insert_or_assign(key, SecretBytes());
     return true;
 }
 
@@ -113,7 +151,8 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     // hoc signed build (each update has another code hash) may still change the data of an item
     // it cannot read. SecItemUpdate then succeeds, but leaves an item that neither build reads
     // without asking the user. Deleting needs no permission, and the new item is this build's.
-    const CFRef<CFDataRef> data(newSecretData(secret));
+    SecretBytes utf8 = secretUtf8(secret);
+    const SecretData data(utf8);
     if (!data.get()) {
         // Checked before anything is deleted: a null value in the query would crash, not fail.
         qCWarning(lcKeychain) << "Cannot store" << key << "in the Keychain: out of memory";
@@ -122,8 +161,12 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     }
     // What the item holds, if known without asking the user (not read again here: reading an item
     // another build wrote makes macOS ask, even after the user said "Deny"), to put back below.
-    const auto known = m_known.constFind(key);
-    const std::optional<QString> previous = known != m_known.cend() ? std::optional<QString>(*known) : std::nullopt;
+    // Taken out of m_known: wiped when this returns, unless restore() puts it back there.
+    std::optional<SecretBytes> previous;
+    if (auto known = m_known.find(key); known != m_known.end()) {
+        previous = std::move(known->second);
+        m_known.erase(known);
+    }
     if (!remove(key)) {
         return false;
     }
@@ -132,10 +175,10 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     m_lastStatus = static_cast<int>(status);
     if (status != errSecSuccess) {
         qCWarning(lcKeychain) << "Cannot store" << key << "in the Keychain, OSStatus" << status;
-        restore(key, previous);
+        restore(key, std::move(previous));
         return false;
     }
-    m_known.insert(key, secret);
+    m_known.insert_or_assign(key, std::move(utf8));
     return true;
 }
 
@@ -147,20 +190,20 @@ OSStatus MacKeychainStore::addItem(const QString &key, CFDataRef data) const
     return SecItemAdd(query.get(), nullptr);
 }
 
-void MacKeychainStore::restore(const QString &key, const std::optional<QString> &previous)
+void MacKeychainStore::restore(const QString &key, std::optional<SecretBytes> previous)
 {
     // What the failed add left is not known for sure (errSecDuplicateItem: someone else's item).
-    m_known.remove(key);
+    m_known.erase(key);
     // Unknown (never read, or the user refused): gone with the failed write, as before.
     // Known to be absent: nothing to put back.
     if (!previous || previous->isEmpty()) {
         return;
     }
-    const CFRef<CFDataRef> data(newSecretData(*previous));
+    const SecretData data(*previous);
     // errSecDuplicateItem: someone else stored the item meanwhile; theirs stays.
     const OSStatus status = data.get() ? addItem(key, data.get()) : errSecAllocate;
     if (status == errSecSuccess) {
-        m_known.insert(key, *previous);
+        m_known.insert_or_assign(key, std::move(*previous));
     } else {
         qCWarning(lcKeychain) << "Cannot put the previous" << key << "back in the Keychain, OSStatus" << status;
     }
