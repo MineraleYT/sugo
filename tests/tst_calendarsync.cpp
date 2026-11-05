@@ -538,7 +538,12 @@ private Q_SLOTS:
         QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(""), &error), QString());
         QVERIFY(error.isEmpty());
 
-        for (const QString &bad : {QStringLiteral("cloud.example.org"), QStringLiteral("http://cloud.example.org"),
+        // Typed without its scheme: an https address.
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(" cloud.example.org/ "), &error), QStringLiteral("https://cloud.example.org"));
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral("cloud.example.org:8443/nc"), &error), QStringLiteral("https://cloud.example.org:8443/nc"));
+        QVERIFY(error.isEmpty());
+
+        for (const QString &bad : {QStringLiteral("http://cloud.example.org"),
                                    QStringLiteral("ftp://cloud.example.org"), QStringLiteral("https://alice:pw@cloud.example.org"),
                                    QStringLiteral("https://")}) {
             error.clear();
@@ -559,12 +564,12 @@ private Q_SLOTS:
         QVERIFY(!m_sync->lastError().isEmpty());
         QCOMPARE(rejected.count(), 1);
         QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
-        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
         QVERIFY(m_sync->calendarUrl().isEmpty());
         QCOMPARE(rejected.count(), 1);
         QVERIFY(!rejected.takeFirst().at(0).toString().isEmpty());
         // The same refusal twice is announced twice: lastErrorChanged alone would not tell.
-        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
         QCOMPARE(rejected.count(), 1);
         rejected.clear();
         m_sync->setServerUrl(QStringLiteral("https://cloud.example.org/"));
@@ -605,9 +610,15 @@ private Q_SLOTS:
         QTest::newRow("rgba transparent") << QStringLiteral("#FF000000") << QStringLiteral("#ff0000");
         QTest::newRow("rgb") << QStringLiteral("#3a87ad") << QStringLiteral("#3a87ad");
         QTest::newRow("spaces") << QStringLiteral("  #3A87AD ") << QStringLiteral("#3a87ad");
-        QTest::newRow("none") << QString() << QString();
-        QTest::newRow("not a colour") << QStringLiteral("#12345") << QString();
-        QTest::newRow("garbage") << QStringLiteral("blue-ish") << QString();
+        QTest::newRow("short") << QStringLiteral("#f0f") << QStringLiteral("#ff00ff");
+        // Nextcloud keeps what a client sent, "#" or not.
+        QTest::newRow("rgb without #") << QStringLiteral("3A87AD") << QStringLiteral("#3a87ad");
+        QTest::newRow("rgba without #") << QStringLiteral("0082c9ff") << QStringLiteral("#0082c9");
+        QTest::newRow("name") << QStringLiteral("teal") << QStringLiteral("#008080");
+        // None, or none that can be read: the one Nextcloud's web interface makes from the name "Home".
+        QTest::newRow("none") << QString() << QStringLiteral("#bc5c91");
+        QTest::newRow("not a colour") << QStringLiteral("#12345") << QStringLiteral("#bc5c91");
+        QTest::newRow("garbage") << QStringLiteral("blue-ish") << QStringLiteral("#bc5c91");
     }
     void parseCalendarsColours()
     {
@@ -623,6 +634,22 @@ private Q_SLOTS:
         const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
         QCOMPARE(cals.size(), 1);
         QCOMPARE(cals.at(0).color, shown);
+    }
+
+    void parseCalendarsColourFromName()
+    {
+        // Values worked out with the JavaScript of nextcloud/calendar (uidToColor).
+        const auto colourOf = [](const QString &name) {
+            const QString xml = QStringLiteral("<d:multistatus xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:response>"
+                                               "<d:href>/dav/cal/x/</d:href><d:propstat><d:prop><d:resourcetype><c:calendar/></d:resourcetype>"
+                                               "<d:displayname>%1</d:displayname></d:prop></d:propstat></d:response></d:multistatus>")
+                                    .arg(name);
+            const auto cals = CalendarSync::parseCalendars(xml.toUtf8(), QUrl(QStringLiteral("https://dav.example.net/dav/cal/")));
+            return cals.size() == 1 ? cals.at(0).color : QStringLiteral("missing");
+        };
+        QCOMPARE(colourOf(QStringLiteral("Orari dottore")), QStringLiteral("#d09e6d"));
+        QCOMPARE(colourOf(QStringLiteral("Home")), QStringLiteral("#bc5c91"));
+        QCOMPARE(colourOf(QString()), QString()); // no name, no colour
     }
 
     void parseCalendarsTolerant()

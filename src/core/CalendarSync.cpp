@@ -9,6 +9,7 @@
 
 #include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -146,15 +147,50 @@ QByteArray basicAuth(const QString &user, const QString &password)
     return "Basic " + (user + QLatin1Char(':') + password).toUtf8().toBase64();
 }
 
-/// A calendar-color as the interface can show it: "#rrggbb", or empty. Servers send it as
-/// #RRGGBBAA (Apple's property), which QML would read as #AARRGGBB: the alpha is left out.
-/// Anything else QColor cannot read is dropped too, rather than warned about by QML.
-QString calendarColor(const QString &value)
+/// The colour Nextcloud's calendar app gives a calendar that has none of its own (uidToColor
+/// in nextcloud/calendar): one of 18 steps between its red, yellow and blue, picked by the sum
+/// of the hex digits of the MD5 of the lower-case name. The same name gets the same colour here
+/// as in the browser.
+QString nameColor(const QString &name)
 {
-    static const QRegularExpression rgba(QStringLiteral("^#[0-9A-Fa-f]{8}$"));
-    const QString rgb = rgba.match(value).hasMatch() ? value.left(7) : value;
-    const QColor color = QColor::fromString(rgb);
-    return color.isValid() ? color.name(QColor::HexRgb) : QString();
+    QString hash = name.toLower();
+    static const QRegularExpression md5Like(QStringLiteral("^([0-9a-f]{4}-?){8}$"));
+    if (!md5Like.match(hash).hasMatch()) {
+        hash = QString::fromLatin1(QCryptographicHash::hash(hash.toUtf8(), QCryptographicHash::Md5).toHex());
+    }
+    int sum = 0;
+    for (const QChar c : std::as_const(hash)) {
+        bool ok = false;
+        const int digit = QString(c).toInt(&ok, 16);
+        if (ok) {
+            sum += digit;
+        }
+    }
+    constexpr int steps = 6;
+    static const QColor ends[] = {QColor(182, 70, 157), QColor(221, 203, 85), QColor(0, 130, 201), QColor(182, 70, 157)};
+    const int index = sum % (steps * 3);
+    const QColor &from = ends[index / steps];
+    const QColor &to = ends[index / steps + 1];
+    const int i = index % steps;
+    // As the JavaScript does: parseInt() of a positive number drops the fraction.
+    const auto mix = [i](int a, int b) { return static_cast<int>(a + (b - a) / double(steps) * i); };
+    return QColor(mix(from.red(), to.red()), mix(from.green(), to.green()), mix(from.blue(), to.blue())).name(QColor::HexRgb);
+}
+
+/// A calendar-color as the interface can show it: "#rrggbb". Servers send it as #RRGGBBAA
+/// (Apple's property), which QML would read as #AARRGGBB: the alpha is left out; Nextcloud also
+/// keeps colours without their "#". A calendar without a colour QColor can read gets the one
+/// Nextcloud's web interface shows for it, made from its name; with no name either, none.
+QString calendarColor(const QString &value, const QString &name)
+{
+    static const QRegularExpression hex(QStringLiteral("^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$"));
+    const QRegularExpressionMatch m = hex.match(value);
+    const QString digits = m.hasMatch() ? m.captured(1) : QString();
+    const QColor color = QColor::fromString(m.hasMatch() ? QLatin1Char('#') + digits.left(6) : value);
+    if (color.isValid()) {
+        return color.name(QColor::HexRgb);
+    }
+    return name.isEmpty() ? QString() : nameColor(name);
 }
 
 /// A 403 to an event (a real one or the test's): the server knows who we are, but the calendar
@@ -296,14 +332,10 @@ QString CalendarSync::normalizeUrl(const QString &input, QString *error)
     if (trimmed.isEmpty()) {
         return {};
     }
+    // An address typed without its scheme ("cloud.example.org") is an https one.
     static const QRegularExpression schemeRe(QStringLiteral("^[A-Za-z][A-Za-z0-9+.-]*://"));
-    if (!schemeRe.match(trimmed).hasMatch()) {
-        if (error) {
-            *error = i18n("Please type the full address, starting with %1", QStringLiteral("https://"));
-        }
-        return {};
-    }
-    QUrl url(trimmed, QUrl::StrictMode);
+    const QString full = schemeRe.match(trimmed).hasMatch() ? trimmed : QStringLiteral("https://") + trimmed;
+    QUrl url(full, QUrl::StrictMode);
     if (!url.isValid() || url.host().isEmpty()) {
         if (error) {
             *error = i18n("This is not a valid web address.");
@@ -425,16 +457,13 @@ QList<CalendarSync::CalendarInfo> CalendarSync::parseCalendars(const QByteArray 
                 CalendarInfo info;
                 info.url = url;
                 info.name = props.name.isEmpty() ? segment : props.name;
-                info.color = props.color;
+                info.color = calendarColor(props.color, props.name);
                 result.append(info);
             }
         }
     }
     if (xml.hasError()) {
         return {};
-    }
-    for (CalendarInfo &info : result) {
-        info.color = calendarColor(info.color);
     }
     return result;
 }
