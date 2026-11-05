@@ -22,6 +22,7 @@ sugo_add_test(tst_sessions Qt6::Core Qt6::Qml Qt6::Sql)
 sugo_add_test(tst_silence Qt6::Core Qt6::Qml)
 sugo_add_test(tst_autostart Qt6::Core Qt6::Gui ${SUGO_DBUS})
 sugo_add_test(tst_appsettings Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
+sugo_add_test(tst_alertsound Qt6::Core Qt6::Multimedia)
 sugo_add_test(tst_traypresenter Qt6::Core Qt6::Qml)
 sugo_add_test(tst_statsaggregator Qt6::Core Qt6::Sql)
 sugo_add_test(tst_statsmodel Qt6::Core Qt6::Qml Qt6::Sql)
@@ -193,7 +194,7 @@ target_compile_definitions(tst_shortcutsfocusinstaller PRIVATE SUGO_SHORTCUTS_SO
 
 # These use QStandardPaths' test mode, whose folders (~/.qttest) every test process shares, and
 # write the default settings file there: `ctest --parallel` runs them one at a time.
-set_tests_properties(tst_appsettings tst_calendarsync tst_desktopstyle tst_phasenotifier tst_screenlockwatcher
+set_tests_properties(tst_alertsound tst_appsettings tst_calendarsync tst_desktopstyle tst_phasenotifier tst_screenlockwatcher
     PROPERTIES RESOURCE_LOCK qt_test_mode_dirs)
 
 # --- Platform parity ---
