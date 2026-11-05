@@ -84,6 +84,7 @@ Rectangle {
 
     RowLayout {
         id: leftGroup
+        objectName: "titleBarBrand"
         anchors.left: parent.left
         anchors.leftMargin: DesktopStyle.nativeChrome ? Theme.titleBarMacInset : Theme.titleBarPaddingLeft
         anchors.verticalCenter: parent.verticalCenter

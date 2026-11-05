@@ -8,20 +8,19 @@ QQC2.ApplicationWindow {
     id: root
 
     color: Theme.background
-    // Linux: no system title bar; the top bar moves the window and has its buttons, the edges
+    // Linux: no system title bar; the title bar moves the window and has its buttons, the edges
     // resize it. macOS (DesktopStyle.nativeChrome): the system's title bar, transparent over the
     // content, with its own buttons (the traffic lights), resizing, full screen and tiling.
     flags: DesktopStyle.nativeChrome ? (Qt.Window | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint)
                                      : (Qt.Window | Qt.FramelessWindowHint)
     // The content fills the whole window, also under macOS' transparent title bar: by default
     // ApplicationWindow keeps it in the safe area below it, where nothing could move the window.
-    // The top bar and the sidebar leave that strip free for the traffic lights themselves.
+    // The title bar leaves room at its left for the traffic lights themselves.
     topPadding: 0
     leftPadding: 0
     rightPadding: 0
     bottomPadding: 0
     readonly property bool maximized: visibility === Window.Maximized || visibility === Window.FullScreen
-    readonly property bool wideScreen: width >= Theme.wideBreakpoint
 
     // The colours of the standard controls (Basic style).
     palette {
@@ -60,7 +59,7 @@ QQC2.ApplicationWindow {
         if (!TimerEngine.active) {
             return i18n("Sugo");
         }
-        // As the top bar shows it: h:mm:ss past an hour, else mm:ss.
+        // As the Focus tab shows it: h:mm:ss past an hour, else mm:ss.
         const total = TimerEngine.remainingSeconds;
         const h = Math.floor(total / 3600);
         const m = Math.floor((total % 3600) / 60);
@@ -578,15 +577,10 @@ QQC2.ApplicationWindow {
                 PresetModel.create({ name: "Smoke" });
                 return false;
             case 1: {
-                // A timer chosen in the sidebar becomes the one in use, and the timer page shows it.
-                const entry = findItem(root.contentItem, item => item.objectName === "timerEntry-1");
-                if (!entry) {
-                    fail(40, "The timers of the sidebar are missing");
-                    return true;
-                }
-                entry.clicked();
+                // A timer chosen in the search becomes the one in use, and the timer page shows it.
+                root.chooseTimer(PresetModel.uuidAt(1));
                 if (PresetModel.currentIndex !== 1 || root.currentDestination !== "preset") {
-                    fail(40, "Choosing a timer in the sidebar did not select it and open its page");
+                    fail(40, "Choosing a timer did not select it and open its page");
                     return true;
                 }
                 root.navigate("timer");
@@ -709,16 +703,37 @@ QQC2.ApplicationWindow {
                 PresetModel.currentUuid = userUuid;
                 root.openTimer(userUuid);
                 TimerEngine.start();
-                // The top bar at the narrowest window, with the section and the pill shown.
+                // The title bar at the narrowest window, with the time in the Focus tab.
                 wideWidth = root.width;
                 root.width = Theme.windowMinWidth;
                 return false;
             case 1: {
-                const insideWindow = item => !item || !item.visible || item.mapToItem(root.contentItem, item.width, 0).x <= root.width + 1;
-                const pill = findItem(root.contentItem, item => item.objectName === "statusPill");
-                const buttons = findItem(root.contentItem, item => item.objectName === "topBarWindowButtons");
-                if (root.width > Theme.windowMinWidth || !pill || !pill.visible || !insideWindow(pill) || !insideWindow(buttons)) {
-                    fail(37, "The top bar does not fit a narrow window: width " + root.width + ", pill " + (pill ? pill.visible : "missing"));
+                // The tabs, search and the window buttons are all there, inside the window and
+                // clear of each other and of the logo; the Focus tab is as wide with the time
+                // as without it.
+                const byName = name => findItem(root.contentItem, item => item.objectName === name);
+                const parts = ["titleBarBrand", "titleBarTab-timer", "titleBarTab-stats", "titleBarTab-settings",
+                               "titleBarSearch", "topBarWindowButtons"].map(byName);
+                const boxOf = item => {
+                    const at = item.mapToItem(root.contentItem, 0, 0);
+                    return { left: at.x, right: at.x + item.width };
+                };
+                const shown = parts.filter(item => item && item.visible);
+                const boxes = shown.map(boxOf).sort((a, b) => a.left - b.left);
+                let fits = root.width <= Theme.windowMinWidth && shown.length >= 5 && boxes[0].left >= 0
+                           && boxes[boxes.length - 1].right <= root.width + 1;
+                for (let i = 1; i < boxes.length; ++i) {
+                    fits = fits && boxes[i].left >= boxes[i - 1].right - 1;
+                }
+                const focusTab = parts[1];
+                const runningWidth = focusTab ? focusTab.width : -1;
+                TimerEngine.stop();
+                const idleWidth = focusTab ? focusTab.width : -1;
+                TimerEngine.start();
+                if (!fits || runningWidth !== idleWidth) {
+                    fail(37, "The title bar does not fit a narrow window: width " + root.width + ", "
+                         + shown.length + " parts shown, at " + JSON.stringify(boxes)
+                         + "; Focus tab " + runningWidth + " running, " + idleWidth + " idle");
                     return true;
                 }
                 root.width = wideWidth;
@@ -769,7 +784,7 @@ QQC2.ApplicationWindow {
                 }
                 root.navigate("timer");
                 if (root.pageStack.currentItem !== editor || !editor.confirming || root.currentDestination !== "preset") {
-                    fail(26, "Leaving through the sidebar with unsaved changes did not ask first");
+                    fail(26, "Leaving through the tabs with unsaved changes did not ask first");
                     return true;
                 }
                 editor.requestClose();
@@ -1028,7 +1043,7 @@ QQC2.ApplicationWindow {
         navigate("preset", "");
     }
 
-    /// A timer chosen in the sidebar: it becomes the one in use (unless a phase runs) and its page opens.
+    /// A timer chosen in the search: it becomes the one in use (unless a phase runs) and its page opens.
     function chooseTimer(uuid: string): void {
         const top = pageStack.currentItem;
         if (top && typeof top.commitFields === "function") {
@@ -1108,14 +1123,13 @@ QQC2.ApplicationWindow {
     /// What the search (Ctrl+K) offers.
     function paletteCommands(): var {
         const list = [
-            { text: i18n("Focus"), icon: "timer", hint: DesktopStyle.shortcutText("Ctrl+1"), run: () => root.navigate("timer") },
-            { text: i18n("Statistics"), icon: "stats", hint: DesktopStyle.shortcutText("Ctrl+2"), run: () => root.navigate("stats") },
-            { text: i18n("Settings"), icon: "settings", hint: DesktopStyle.shortcutText("Ctrl+,"), run: () => root.navigate("settings") },
+            { text: i18n("Focus"), icon: "timer", run: () => root.navigate("timer") },
+            { text: i18n("Statistics"), icon: "stats", run: () => root.navigate("stats") },
+            { text: i18n("Settings"), icon: "settings", run: () => root.navigate("settings") },
             { text: i18n("About"), icon: "info", run: () => root.navigate("about") },
             { text: TimerEngine.paused ? i18n("Resume the timer") : TimerEngine.active ? i18n("Pause the timer") : i18n("Start the timer"),
-              icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", hint: i18nc("keyboard key", "Space"),
-              run: () => TimerEngine.toggle() },
-            { text: i18n("New timer"), icon: "plus", hint: DesktopStyle.shortcutText("Ctrl+N"), run: () => root.newTimer() }
+              icon: TimerEngine.active && !TimerEngine.paused ? "pause" : "play", run: () => TimerEngine.toggle() },
+            { text: i18n("New timer"), icon: "plus", run: () => root.newTimer() }
         ];
         if (TimerEngine.active) {
             list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => root.requestEndPhase(false) });
@@ -1228,172 +1242,103 @@ QQC2.ApplicationWindow {
         onActivatedAmbiguously: root.navigate("settings")
     }
 
-    RowLayout {
+    ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
-        Sidebar {
-            id: sidebar
-            Layout.fillHeight: true
-            visible: root.wideScreen && !root.isWelcomeActive
-            maximized: root.maximized
-            onMinimizeRequested: root.showMinimized()
-            onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
-            onCloseRequested: root.close()
+        TitleBar {
+            Layout.fillWidth: true
             current: root.currentDestination
-            openTimer: root.openTimerUuid
-            onNavigateRequested: name => root.navigate(name)
-            onTimerRequested: uuid => root.chooseTimer(uuid)
-            onNewTimerRequested: root.newTimer()
-            onRestartRequested: root.requestRestart()
+            bare: root.isWelcomeActive
+            maximized: root.maximized
+            onTabRequested: name => root.navigate(name)
             onSearchRequested: root.openSearch()
+            onRestartRequested: root.requestRestart()
             onMoveRequested: root.startSystemMove()
+            onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
+            onMinimizeRequested: root.showMinimized()
+            onCloseRequested: root.close()
         }
 
-        ColumnLayout {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
 
-            TopBar {
-                Layout.fillWidth: true
-                minimal: root.isWelcomeActive
-                maximized: root.maximized
-                showLeftButtons: !sidebar.visible
-                onMoveRequested: root.startSystemMove()
-                onToggleMaximizeRequested: root.maximized ? root.showNormal() : root.showMaximized()
-                onMinimizeRequested: root.showMinimized()
-                onCloseRequested: root.close()
-                page: stack.currentItem
-                showStatus: root.currentDestination !== "timer"
-                canGoBack: stack.depth > 1
-                showMenuButton: !root.wideScreen
-                onBackRequested: root.goBack()
-                onMenuRequested: navDrawer.open()
-                onStatusClicked: root.navigate("timer")
+            QQC2.StackView {
+                id: stack
+                anchors.fill: parent
+                clip: true
+                pushEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                }
+                pushExit: Transition {}
+                popEnter: Transition {}
+                popExit: Transition {}
+                replaceEnter: Transition {}
+                replaceExit: Transition {}
             }
 
-            Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+            // Shown on every page: nothing recorded now will survive a restart, or the last
+            // changes are still waiting to be stored, or (until dismissed) the database found
+            // at startup was damaged or not Sugo's and a new one was started. Laid over the
+            // top of the page, so the page does not move when it comes or goes.
+            Rectangle {
+                id: dataWarning
+                objectName: "dataWarning"
+                readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
+                property bool movedAsideDismissed: false
+                readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
+                readonly property bool shown: storageFailing || movedAside
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Theme.spaceMd
+                height: dataBanner.implicitHeight
+                z: 1
+                // The banner's fill is see-through: the page must not show under it.
+                color: Theme.background
+                radius: Theme.radius
+                opacity: shown ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity {
+                    NumberAnimation { duration: Theme.durationShort }
+                }
 
-                QQC2.StackView {
-                    id: stack
+                MessageSlot {
+                    id: dataBanner
                     anchors.fill: parent
-                    clip: true
-                    pushEnter: Transition {
-                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durationShort }
+                    shown: dataWarning.shown
+                    lines: 3
+                    tone: "warning"
+                    text: {
+                        if (DataManager === null) {
+                            return "";
+                        }
+                        if (DataManager.usingTemporaryDatabase === true) {
+                            return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
+                        }
+                        if (DataManager.saveFailing === true) {
+                            return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
+                        }
+                        return DataManager.movedAsideDatabaseWasCorrupt
+                            ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
+                            : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
                     }
-                    pushExit: Transition {}
-                    popEnter: Transition {}
-                    popExit: Transition {}
-                    replaceEnter: Transition {}
-                    replaceExit: Transition {}
-                }
-
-                // Shown on every page: nothing recorded now will survive a restart, or the last
-                // changes are still waiting to be stored, or (until dismissed) the database found
-                // at startup was damaged or not Sugo's and a new one was started. Laid over the
-                // top of the page, so the page does not move when it comes or goes.
-                Rectangle {
-                    id: dataWarning
-                    objectName: "dataWarning"
-                    readonly property bool storageFailing: DataManager !== null && (DataManager.usingTemporaryDatabase === true || DataManager.saveFailing === true)
-                    property bool movedAsideDismissed: false
-                    readonly property bool movedAside: DataManager !== null && DataManager.movedAsideDatabasePath.length > 0 && !movedAsideDismissed
-                    readonly property bool shown: storageFailing || movedAside
-                    anchors.top: parent.top
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.margins: Theme.spaceMd
-                    height: dataBanner.implicitHeight
-                    z: 1
-                    // The banner's fill is see-through: the page must not show under it.
-                    color: Theme.background
-                    radius: Theme.radius
-                    opacity: shown ? 1 : 0
-                    visible: opacity > 0
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durationShort }
+                    SButton {
+                        kind: "ghost"
+                        text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
+                        visible: dataWarning.movedAside && !dataWarning.storageFailing
+                        onClicked: DataManager.openDatabaseFolder()
                     }
-
-                    MessageSlot {
-                        id: dataBanner
-                        anchors.fill: parent
-                        shown: dataWarning.shown
-                        lines: 3
-                        tone: "warning"
-                        text: {
-                            if (DataManager === null) {
-                                return "";
-                            }
-                            if (DataManager.usingTemporaryDatabase === true) {
-                                return i18n("Your data cannot be saved: the database could not be opened. Sugo is using a temporary database.");
-                            }
-                            if (DataManager.saveFailing === true) {
-                                return i18n("Your latest sessions or timer changes could not be saved yet. Sugo keeps them and tries again; do not quit until this message is gone.");
-                            }
-                            return DataManager.movedAsideDatabaseWasCorrupt
-                                ? i18n("Your database was damaged, so Sugo started a new one. The old file is kept as %1.", DataManager.movedAsideDatabasePath)
-                                : i18n("The database file did not belong to Sugo, so Sugo started a new one. That file is kept as %1.", DataManager.movedAsideDatabasePath);
-                        }
-                        SButton {
-                            kind: "ghost"
-                            text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
-                            visible: dataWarning.movedAside && !dataWarning.storageFailing
-                            onClicked: DataManager.openDatabaseFolder()
-                        }
-                        SButton {
-                            kind: "ghost"
-                            iconOnly: true
-                            iconName: "close"
-                            text: i18n("Dismiss")
-                            visible: dataWarning.movedAside && !dataWarning.storageFailing
-                            onClicked: dataWarning.movedAsideDismissed = true
-                        }
+                    SButton {
+                        kind: "ghost"
+                        iconOnly: true
+                        iconName: "close"
+                        text: i18n("Dismiss")
+                        visible: dataWarning.movedAside && !dataWarning.storageFailing
+                        onClicked: dataWarning.movedAsideDismissed = true
                     }
                 }
-            }
-        }
-    }
-
-    // The sidebar of narrow windows.
-    QQC2.Drawer {
-        id: navDrawer
-        edge: Qt.LeftEdge
-        width: Theme.sidebarWidth
-        height: root.height
-        interactive: !root.wideScreen && !root.isWelcomeActive
-        // Turning `interactive` off leaves an open drawer open: close it when the window is
-        // widened (the sidebar shows) or the welcome tour takes the window.
-        onInteractiveChanged: if (!interactive) close()
-        background: Item {}
-        Sidebar {
-            anchors.fill: parent
-            // The window buttons stay in the top bar, which is the frame of a narrow window.
-            showWindowButtons: false
-            current: root.currentDestination
-            openTimer: root.openTimerUuid
-            onNavigateRequested: name => {
-                navDrawer.close();
-                root.navigate(name);
-            }
-            onTimerRequested: uuid => {
-                navDrawer.close();
-                root.chooseTimer(uuid);
-            }
-            onNewTimerRequested: {
-                navDrawer.close();
-                root.newTimer();
-            }
-            onRestartRequested: {
-                navDrawer.close();
-                root.requestRestart();
-            }
-            onSearchRequested: {
-                navDrawer.close();
-                commandPalette.commands = root.paletteCommands();
-                commandPalette.open();
             }
         }
     }

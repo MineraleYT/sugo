@@ -325,12 +325,12 @@
     "search": {
       "common": [
         "command: About",
-        "command: Focus (shortcut)",
-        "command: New timer (shortcut)",
+        "command: Focus",
+        "command: New timer",
         "command: Pomodoro (shortcut)",
-        "command: Settings (shortcut)",
-        "command: Start the timer (shortcut)",
-        "command: Statistics (shortcut)"
+        "command: Settings",
+        "command: Start the timer",
+        "command: Statistics"
       ]
     }
   },

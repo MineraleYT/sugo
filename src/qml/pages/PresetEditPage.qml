@@ -189,7 +189,7 @@ QQC2.Page {
         }
     }
 
-    /// Escape and the sidebar: unsaved changes are only thrown away once confirmed.
+    /// Escape and the tabs: unsaved changes are only thrown away once confirmed.
     function requestClose(then: var): void {
         commitFields();
         discardDialog.then = then ?? null;
