@@ -119,6 +119,8 @@ target_sources(sugo_core PRIVATE
     platform/ScreenLockWatcher.cpp
     platform/SecretStore.h
     platform/SecretStore.cpp
+    platform/SecretHandoff.h
+    platform/SecretHandoff.cpp
     platform/DesktopStyle.h
     platform/DesktopStyle.cpp
     platform/AppImage.h

@@ -35,6 +35,7 @@ set_tests_properties(tst_diagnostics PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=off
 sugo_add_test(tst_calendarsync Qt6::Core Qt6::Gui Qt6::Qml Qt6::Network ${SUGO_DBUS})
 set_tests_properties(tst_calendarsync PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 sugo_add_test(tst_askoncesecretstore Qt6::Core ${SUGO_DBUS})
+sugo_add_test(tst_secrethandoff Qt6::Core)
 
 sugo_add_test(tst_phasenotifier Qt6::Core Qt6::Gui Qt6::Qml ${SUGO_DBUS})
 # A GUI application (AppSettings); no display on CI.

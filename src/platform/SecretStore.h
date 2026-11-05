@@ -48,6 +48,10 @@ private:
     bool m_lastReadRefused = false;
 };
 
+/// The service (Keychain) or application (Secret Service) under which this application keeps its
+/// secrets: its application id.
+QString secretStoreService();
+
 /// The platform's keyring for this application: the Keychain on macOS (MacKeychainStore), the
 /// freedesktop Secret Service on the session bus elsewhere (SecretServiceStore), in an
 /// AskOnceSecretStore.
