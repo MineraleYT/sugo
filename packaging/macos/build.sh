@@ -86,9 +86,11 @@ export PKG_CONFIG_PATH="$WORK/sodium/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFI
 cmake -S "$SRC" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
     -DCMAKE_PREFIX_PATH="$QT;$WORK/ecm" \
     -DCMAKE_OSX_ARCHITECTURES="$ARCHS" -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
-    -DSUGO_VERSION="$VERSION" >/dev/null
+    -DSUGO_VERSION="$VERSION" -DSUGO_INSTALLS_UPDATES=ON >/dev/null
 cmake --build build
 [ -x build/bin/Sugo.app/Contents/MacOS/Sugo ] || fail "build/bin/Sugo.app was not built"
+[ "$(plutil -extract SugoInstallsUpdates raw build/bin/Sugo.app/Contents/Info.plist 2>/dev/null)" = true ] \
+    || fail "Sugo.app does not install its updates (SugoInstallsUpdates in Info.plist)"
 
 # A copy, so that a rebuild never sees a bundle macdeployqt has already changed.
 rm -rf app

@@ -35,6 +35,10 @@ if(APPLE)
     add_compile_options("$<$<COMPILE_LANGUAGE:OBJCXX>:-Wall;-Wextra>")
 endif()
 
+# macOS: whether Sugo.app replaces itself with a new release (MacBundleInstaller). On only in the
+# disk image's build (packaging/macos/build.sh); a build from source only reports new versions.
+option(SUGO_INSTALLS_UPDATES "macOS: the app bundle installs updates itself (the disk image's build)" OFF)
+
 # The version the program shows and compares when it looks for updates. Nightly builds set it to
 # a pre-release of the coming version, "1.0.1-nightly.20261031.42": newer than 1.0.0, older than
 # 1.0.1 (see .github/workflows/nightly.yml).

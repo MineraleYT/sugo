@@ -100,6 +100,9 @@ public:
 
     /// The CFBundleIdentifier of an XML property list, or an empty string.
     static QString bundleIdentifier(const QString &infoPlist);
+    /// Whether the Info.plist says this bundle installs updates itself (key SugoInstallsUpdates,
+    /// true only in the disk image's build: -DSUGO_INSTALLS_UPDATES=ON).
+    static bool installsUpdates(const QString &infoPlist);
 
 private:
     using Then = std::function<void(bool ok, const QString &output)>;
