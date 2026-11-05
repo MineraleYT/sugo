@@ -41,6 +41,8 @@ class SyncSecrets;
  * - Push: 3 s after PresetPersistence::saved() (not for what a merge applied), with If-Match,
  *   or If-None-Match: * without a blob. 412: download, merge, apply, try again, three times at
  *   most; then Error, and again in 5 minutes.
+ * - A merge that would delete the selected timer while a phase runs or is paused is held back
+ *   (no new ETag, Dirty kept, no uploads) and downloaded again on timerIdle().
  * - A blob this version cannot read (newer format: FormatTooNew; wrong key or damaged:
  *   UnreadableData) is never overwritten. Network failures are tried again after 1, 5 and
  *   15 minutes; the program works as usual meanwhile.
@@ -125,6 +127,13 @@ public:
      */
     void attachNotifier(Notifier *notifier, std::function<bool()> windowVisible);
 
+    /**
+     * Whether a timer phase runs or is paused (main.cpp asks the TimerEngine). While it does, a
+     * download that would delete the selected timer is not applied (that would stop the phase):
+     * it waits, with the old ETag and Dirty, until timerIdle().
+     */
+    void setTimerBusy(std::function<bool()> busy);
+
     /// One second in ms for every wait (tests make it short).
     void setTimeUnitMs(int ms);
 
@@ -191,6 +200,8 @@ public Q_SLOTS:
     /// minute), and a keyring that failed is read again.
     void windowActivated();
     void windowDeactivated();
+    /// The timer went back to idle: a download held back for it (setTimerBusy()) is fetched again.
+    void timerIdle();
 
 Q_SIGNALS:
     void stateChanged();
@@ -240,6 +251,8 @@ private:
     void push();
     void takeRemote(const SyncReply &reply);
     void applyLocally(const QList<TimerPreset> &presets, const QList<PresetTombstone> &tombstones);
+    /// Applying `presets` would take away the selected timer while the timer is busy.
+    bool wouldStopTimer(const QList<TimerPreset> &presets) const;
     void succeeded();
     void failed(const SyncError &error, Op op);
     void scheduleRetry(int seconds);
@@ -272,6 +285,7 @@ private:
     std::function<void(const QString &)> m_copyText;
     QPointer<Notifier> m_notifier;
     std::function<bool()> m_windowVisible;
+    std::function<bool()> m_timerBusy;
     int m_unitMs = 1000;
 
     State m_state = Off;
@@ -290,6 +304,7 @@ private:
     bool m_remoteUnreadable = false;  ///< The blob does not open: never overwritten until it does.
     quint64 m_saves = 0;              ///< saved() count, so an upload clears Dirty only if nothing came after.
     bool m_applyingRemote = false;
+    bool m_heldForTimer = false;      ///< A download waits for timerIdle(); no uploads meanwhile.
     bool m_formatTooNew = false;
     bool m_signingOut = false;
     bool m_keyRejected = false;

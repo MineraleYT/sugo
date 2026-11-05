@@ -124,6 +124,11 @@ void SyncController::attachNotifier(Notifier *notifier, std::function<bool()> wi
     m_windowVisible = std::move(windowVisible);
 }
 
+void SyncController::setTimerBusy(std::function<bool()> busy)
+{
+    m_timerBusy = std::move(busy);
+}
+
 void SyncController::connectAccount()
 {
     SyncAccount *a = m_account;
@@ -328,6 +333,7 @@ void SyncController::resetCycle()
     m_remoteUnreadable = false;
     m_formatTooNew = false;
     m_applyingRemote = false;
+    m_heldForTimer = false;
     m_conflicts = 0;
     m_failures = 0;
     m_pushTimer.stop();
@@ -356,6 +362,17 @@ void SyncController::windowActivated()
 void SyncController::windowDeactivated()
 {
     m_account->setWindowActive(false);
+}
+
+void SyncController::timerIdle()
+{
+    if (!m_heldForTimer) {
+        return;
+    }
+    m_heldForTimer = false;
+    // The held blob is not under the stored ETag: download it whatever the ETag says.
+    m_pullUnconditional = true;
+    requestPull();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -399,7 +416,8 @@ void SyncController::runNext()
     }
     if (m_pullWanted) {
         pull(std::exchange(m_pullUnconditional, false));
-    } else if (m_pushWanted) {
+    } else if (m_pushWanted && !m_heldForTimer) {
+        // (While held, an upload would only meet the newer blob again: 412.)
         if (m_formatTooNew || m_remoteUnreadable) {
             // Never overwrite what this version cannot read.
             m_pushWanted = false;
@@ -473,6 +491,15 @@ void SyncController::takeRemote(const SyncReply &reply)
     local.tombstones = m_repository->tombstones();
     const PresetSyncFormat::MergeResult merged =
         PresetSyncFormat::merge(local, parsed.data, m_account->deviceId(), QDateTime::currentMSecsSinceEpoch(), parsed.format);
+    if (merged.changedLocal && wouldStopTimer(merged.result.presets)) {
+        // The selected timer was deleted elsewhere while a phase runs here: switching timers
+        // would stop it. Keep the old ETag and Dirty, and download again when the timer is idle.
+        qCInfo(lcSyncController) << "The selected timer was deleted on another device; waiting for the timer to stop";
+        m_heldForTimer = true;
+        succeeded();
+        return;
+    }
+    m_heldForTimer = false;
     if (merged.changedLocal) {
         applyLocally(merged.result.presets, merged.result.tombstones);
     }
@@ -499,6 +526,18 @@ void SyncController::applyLocally(const QList<TimerPreset> &presets, const QList
     m_presets->setPresets(presets, m_presets->currentUuid());
     m_persistence->save(tombstones);
     m_applyingRemote = false;
+}
+
+bool SyncController::wouldStopTimer(const QList<TimerPreset> &presets) const
+{
+    if (!m_timerBusy || !m_timerBusy()) {
+        return false;
+    }
+    const QString current = m_presets->currentUuid();
+    if (current == PresetModel::DefaultUuid) {
+        return false; // always kept (PresetModel::setPresets())
+    }
+    return std::none_of(presets.cbegin(), presets.cend(), [&current](const TimerPreset &p) { return p.uuid == current; });
 }
 
 void SyncController::push()

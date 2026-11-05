@@ -399,6 +399,13 @@ int main(int argc, char *argv[])
         presetSync->setDesktopActions([](const QUrl &url) { return QDesktopServices::openUrl(url); },
                                       [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
         presetSync->attach(presets, presetPersistence, &presetRepository);
+        // A timer deleted elsewhere is not taken away from a running phase.
+        presetSync->setTimerBusy([timer]() { return !timer->isIdle(); });
+        QObject::connect(timer, &TimerEngine::stateChanged, presetSync, [timer, presetSync]() {
+            if (timer->isIdle()) {
+                presetSync->timerIdle();
+            }
+        });
         QObject::connect(&app, &QGuiApplication::applicationStateChanged, presetSync, [presetSync](Qt::ApplicationState state) {
             if (state == Qt::ApplicationActive) {
                 presetSync->windowActivated();
