@@ -73,15 +73,7 @@ QString MacNotificationRegistry::add(QObject *context, const Notifier::Notificat
     const QString id = QStringLiteral("io.github.mineraleyt.sugo.") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     Entry entry;
     entry.context = context;
-    if (notification.defaultAction) {
-        entry.actions.insert(MacNotificationMapping::defaultActionId(), notification.defaultAction);
-    }
-    for (qsizetype i = 0; i < notification.actions.size(); ++i) {
-        entry.actions.insert(QStringLiteral("action-%1").arg(i), notification.actions.at(i).handler);
-    }
-    if (notification.reply) {
-        entry.replied = notification.reply->replied;
-    }
+    entry.notification = notification;
     m_entries.insert(id, entry);
     m_order.append(id);
     while (m_order.size() > m_capacity) {
@@ -96,6 +88,20 @@ void MacNotificationRegistry::remove(const QString &requestId)
     m_order.removeOne(requestId);
 }
 
+std::optional<MacNotificationRegistry::Unshown> MacNotificationRegistry::takeUnshown(const QString &requestId)
+{
+    const auto it = m_entries.constFind(requestId);
+    if (it == m_entries.cend()) {
+        return std::nullopt;
+    }
+    const Entry entry = *it;
+    remove(requestId);
+    if (!entry.context) {
+        return std::nullopt;
+    }
+    return Unshown{entry.context.data(), entry.notification};
+}
+
 bool MacNotificationRegistry::respond(const QString &requestId, const QString &actionId, const QString &text)
 {
     const auto it = m_entries.constFind(requestId);
@@ -108,14 +114,26 @@ bool MacNotificationRegistry::respond(const QString &requestId, const QString &a
     if (!entry.context) {
         return false;
     }
+    const Notifier::Notification &notification = entry.notification;
     if (actionId == MacNotificationMapping::replyActionId()) {
-        if (entry.replied) {
-            entry.replied(text);
+        if (notification.reply && notification.reply->replied) {
+            notification.reply->replied(text);
             return true;
         }
         return false;
     }
-    const Notifier::Handler handler = entry.actions.value(actionId);
+    Notifier::Handler handler;
+    if (actionId == MacNotificationMapping::defaultActionId()) {
+        handler = notification.defaultAction;
+    } else {
+        // The identifiers actionsFor() gave the buttons.
+        for (qsizetype i = 0; i < notification.actions.size(); ++i) {
+            if (actionId == QStringLiteral("action-%1").arg(i)) {
+                handler = notification.actions.at(i).handler;
+                break;
+            }
+        }
+    }
     if (handler) {
         handler(QString());
         return true;

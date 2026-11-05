@@ -129,6 +129,48 @@ private Q_SLOTS:
         registry.remove(b);
         QCOMPARE(registry.size(), 1);
     }
+
+    void anUnshownRequestIsHandedBackWhole()
+    {
+        MacNotificationRegistry registry;
+        QObject context;
+        QStringList ran;
+        Notifier::Notification n = withActions({QStringLiteral("Start")}, true);
+        n.text = QStringLiteral("Break is over");
+        n.defaultAction = [&ran](const QString &) { ran << QStringLiteral("default"); };
+        n.reply->replied = [&ran](const QString &text) { ran << QStringLiteral("reply:") + text; };
+        const QString id = registry.add(&context, n);
+
+        const std::optional<MacNotificationRegistry::Unshown> unshown = registry.takeUnshown(id);
+        QVERIFY(unshown.has_value());
+        QCOMPARE(unshown->context, &context);
+        QCOMPARE(unshown->notification.title, n.title);
+        QCOMPARE(unshown->notification.text, n.text);
+        QCOMPARE(unshown->notification.actions.size(), 1);
+        QCOMPARE(unshown->notification.actions.at(0).label, QStringLiteral("Start"));
+        QVERIFY(unshown->notification.reply.has_value());
+        QCOMPARE(unshown->notification.reply->label, QStringLiteral("Log Task"));
+        // The handlers come back too, so the other notifier can run them.
+        unshown->notification.defaultAction(QString());
+        unshown->notification.reply->replied(QStringLiteral("notes"));
+        QCOMPARE(ran, (QStringList{QStringLiteral("default"), QStringLiteral("reply:notes")}));
+
+        // Forgotten: neither handed back twice nor answerable.
+        QVERIFY(!registry.contains(id));
+        QVERIFY(!registry.takeUnshown(id).has_value());
+        QVERIFY(!registry.respond(id, defaultActionId()));
+    }
+
+    void anUnshownRequestWithoutItsContextIsDropped()
+    {
+        MacNotificationRegistry registry;
+        auto *context = new QObject;
+        const QString id = registry.add(context, withActions({}, false));
+        delete context;
+        QVERIFY(!registry.takeUnshown(id).has_value());
+        QVERIFY(!registry.contains(id));
+        QVERIFY(!registry.takeUnshown(QStringLiteral("someone-else")).has_value());
+    }
 };
 
 QTEST_MAIN(MacNotificationMappingTest)
