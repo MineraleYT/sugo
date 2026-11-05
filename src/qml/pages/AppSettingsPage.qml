@@ -2218,61 +2218,11 @@ QQC2.Page {
                         : i18n("Global shortcuts, scripts (D-Bus) and KRunner can start, pause, skip and stop it. Turn this off if you only use Sugo's own window and tray.")
                     SettingSwitch { setting: "allowExternalControl" }
                 }
-                SettingRow {
-                    title: DesktopStyle.macos ? i18n("Links") : i18n("D-Bus commands")
-                    description: DesktopStyle.macos
-                        ? i18n("Open a sugo:// link to control Sugo: in Terminal or a script with the command below, or in the Shortcuts app with the \"Open URLs\" action (give it a keyboard shortcut there). Available links: %1.",
-                               "sugo://toggle, start, pause, resume, stop, skip, show, start/<timer>, preset/<timer>")
-                        : i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
-                               "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.settingsRowPaddingY + Theme.hairline
-                    Layout.preferredHeight: dbusRow.implicitHeight + Theme.spaceSm * 2
-                    color: Theme.background
-                    border.width: Theme.hairline
-                    border.color: Theme.border
-                    radius: Theme.radius
-                    RowLayout {
-                        id: dbusRow
-                        anchors.fill: parent
-                        anchors.leftMargin: Theme.spaceMd + Theme.hairline * 2
-                        anchors.rightMargin: Theme.spaceSm
-                        spacing: Theme.spaceMd
-                        TextEdit {
-                            id: dbusLabel
-                            Layout.fillWidth: true
-                            readOnly: true
-                            selectByMouse: true
-                            text: DesktopStyle.macos ? "open sugo://toggle" : "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
-                            color: Theme.dim
-                            selectionColor: Theme.alpha(Theme.accent, 0.35)
-                            font.family: Theme.monoFamily
-                            font.pixelSize: Theme.fontCaption
-                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                            Accessible.name: text
-                        }
-                        SButton {
-                            kind: "ghost"
-                            implicitHeight: Theme.controlHeightSm
-                            iconName: "copy"
-                            text: i18n("Copy command")
-                            Accessible.name: text
-                            onClicked: {
-                                dbusLabel.selectAll();
-                                dbusLabel.copy();
-                                dbusLabel.deselect();
-                                applicationWindow().showPassiveNotification(i18n("Command copied to the clipboard."));
-                            }
-                        }
-                    }
-                }
                 // System Settings' shortcut page exists on KDE Plasma only.
                 SettingRow {
                     visible: DesktopStyle.style === "kde"
                     title: i18n("Global shortcuts")
-                    description: i18n("Assign keys to these commands in Plasma's System Settings.")
+                    description: i18n("Assign keys to Sugo's commands in Plasma's System Settings.")
                     SButton {
                         kind: "ghost"
                         text: i18n("Open Shortcut Settings")
