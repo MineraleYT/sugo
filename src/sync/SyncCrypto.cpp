@@ -101,6 +101,8 @@ static_assert(KeyBytes == crypto_box_PUBLICKEYBYTES && KeyBytes == crypto_box_SE
 
 // Crockford's Base32: no I, L, O, U.
 const char kAlphabet[] = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/// The verification code: 16 characters of kAlphabet, 80 bits of the keys' hash.
+constexpr int kVerificationChars = 16;
 constexpr int kRecoveryChars = 28; // 128 bits of code + 12 bits of check = 140 bits
 constexpr int kCheckBits = 12;
 
@@ -308,13 +310,22 @@ QString verificationCode(const QByteArray &publicKeyA, const QByteArray &publicK
     }
     // Sorted, so that both devices hash the same bytes whichever key is "theirs".
     const QByteArray input = std::min(publicKeyA, publicKeyB) + std::max(publicKeyA, publicKeyB);
+    // 80 bits: a server that relays the keys and swaps in keys of its own must find a pair whose
+    // codes collide, about 2^40 key pairs per side within one approval (six digits took ~2000).
     unsigned char digest[16];
     hash(digest, sizeof digest, bytes(input), size_t(input.size()), "SugoVerifyCode");
-    quint64 number = 0;
-    for (int i = 0; i < 8; ++i) {
-        number = (number << 8) | digest[i];
+    QString text;
+    for (int c = 0; c < kVerificationChars; ++c) {
+        if (c > 0 && c % 4 == 0) {
+            text += QLatin1Char('-');
+        }
+        int value = 0;
+        for (int b = c * 5; b < c * 5 + 5; ++b) {
+            value = (value << 1) | ((digest[b / 8] >> (7 - b % 8)) & 1);
+        }
+        text += QLatin1Char(kAlphabet[value]);
     }
-    return QStringLiteral("%1").arg(number % 1000000, 6, 10, QLatin1Char('0'));
+    return text;
 }
 
 // --- Recovery code -------------------------------------------------------------------------------

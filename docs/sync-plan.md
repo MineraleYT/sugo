@@ -108,8 +108,13 @@ Uguale su Linux e macOS, nessuno schema URL da registrare, funziona anche su un 
      "New device: Mac mini — Approve?". Approvando, invia `K` con **`crypto_box` autenticato** (la sua chiave
      privata, la chiave pubblica del nuovo) a `PUT /v1/devices/{id}/key`. Il nuovo la ritira con
      `GET /v1/key`, che restituisce anche `from_device_id` e `from_public_key`. Entrambi mostrano lo
-     **stesso codice di verifica a 6 cifre**, derivato dalle due chiavi pubbliche: così un server compromesso
-     non può sostituire né la chiave del nuovo dispositivo né quella del mittente. (Con un box anonimo,
+     **stesso codice di verifica** di 16 caratteri in Base32 di Crockford (`XXXX-XXXX-XXXX-XXXX`, 80 bit
+     di BLAKE2b delle due chiavi pubbliche): così un server compromesso non può sostituire né la chiave del
+     nuovo dispositivo né quella del mittente. Con 6 cifre (~20 bit) il server poteva generare ~2000 coppie
+     di chiavi per lato finché i due codici coincidevano (paradosso del compleanno); con 80 bit ne servono
+     ~2^40 per lato durante una sola approvazione. Un passo commit-then-reveal (ognuno impegna un hash della
+     propria chiave prima di vedere l'altra) toglierebbe del tutto la ricerca, ma cambia il protocollo
+     (`sugo-sync`): da fare. (Con un box anonimo,
      `crypto_box_seal`, il server potrebbe consegnare una sua `K'` e poi leggere i preset caricati dal nuovo
      dispositivo.)
   2. *Codice di recupero*, se nessun altro dispositivo è acceso o collegato.
@@ -208,7 +213,7 @@ device_id, expires_at, used_at)`, `device_code(…)`, `sealed_key(device_id, fro
 | 1.2 | ✅ `TimerPreset` con `createdAt`, `updatedAt`, `updatedBy`; `PresetModel` li imposta in `create/update/setOption/reset/duplicate` con `setNowProvider()` (wall clock, non il `Clock` monotono del timer). Una modifica che non cambia nulla lascia l'ora; una modifica fatta qui svuota l'autore. | `src/core/TimerPreset.h`, `src/core/PresetModel.cpp` | S–M |
 | 1.3 | ✅ `PresetRepository`: legge e scrive tempi e autore; `saveAll(presets, received = {})` lascia un tombstone per ogni preset cancellato, quello ricevuto (con il suo `deletedAt`/`deletedBy`) o uno nuovo con l'ora locale; mai per il predefinito né per un preset presente, che perde il suo. `tombstones()`, scadenza a 180 giorni (`TombstoneLifetimeMs`), `setNowProvider()`. | `src/db/PresetRepository.{h,cpp}` | S–M |
 | 1.4 | ✅ `PresetSyncFormat`: `toJson(data, deviceId)`, `fromJson(json) → {ok, format, data}`, `merge(local, remote, deviceId, nowMs, remoteFormat) → {result, changedLocal, changedRemote}`, `Format = 1`. | nuovi `src/sync/PresetSyncFormat.{h,cpp}` | M |
-| 1.5 | ✅ `SyncCrypto`: involucro di libsodium (`encryptBlob`/`decryptBlob` XChaCha20-Poly1305, `generateKeyPair`/`publicKeyFor`, `box`/`openBox` con `crypto_box` autenticato, `verificationCode` indipendente dall'ordine, `newRecoveryCode`/`formatRecoveryCode`/`parseRecoveryCode`, `sealWithRecovery`/`openWithRecovery`). Segreti in `SecretBytes`, cancellati con `sodium_memzero`. Il codice di recupero ha 12 bit di controllo: 28 caratteri in 7 gruppi da 4. | nuovi `src/sync/SyncCrypto.{h,cpp}` | M |
+| 1.5 | ✅ `SyncCrypto`: involucro di libsodium (`encryptBlob`/`decryptBlob` XChaCha20-Poly1305, `generateKeyPair`/`publicKeyFor`, `box`/`openBox` con `crypto_box` autenticato, `verificationCode` indipendente dall'ordine (80 bit in Base32), `newRecoveryCode`/`formatRecoveryCode`/`parseRecoveryCode`, `sealWithRecovery`/`openWithRecovery`). Segreti in `SecretBytes`, cancellati con `sodium_memzero`. Il codice di recupero ha 12 bit di controllo: 28 caratteri in 7 gruppi da 4. | nuovi `src/sync/SyncCrypto.{h,cpp}` | M |
 | 1.6 | ✅ **libsodium** (≥ 1.0.18) come dipendenza: `pkg_check_modules` in `CMakeLists.txt`; modulo 1.0.22 nel manifest Flatpak (verificato: non è né nel runtime KDE 6.11 né in freedesktop-sdk 25.08); `libsodium-dev` nello script AppImage, che controlla che la libreria sia nell'AppDir; job Linux della CI; pacchetti per distro in `docs/DEVELOPMENT.md`. macOS (libsodium universale e statica, DMG, job macOS della CI) nella PR #3. | `CMakeLists.txt:39`, `io.github.mineraleyt.sugo.yml`, `packaging/appimage/build.sh` | S–M |
 | 1.7 | ✅ Test: `tst_presetsyncformat` (unione: modifica contro modifica, modifica contro cancellazione, predefinito, opzioni sconosciute, formato futuro), `tst_synccrypto` (vettori calcolati con PyNaCl, AD sbagliata rifiutata, box da mittente sbagliato rifiutato), migrazione in `tst_database`, tempi e tombstone in `tst_presetmodel` e `tst_presetrepository`. | `tests/` | M |
 
@@ -241,7 +246,7 @@ device_id, expires_at, used_at)`, `device_code(…)`, `sealed_key(device_id, fro
 |---|---|---|---|
 | 4.1 | Nuova scheda **"Sync"** nelle impostazioni, tra "Calendar" e "Advanced": accesso (codice grande, "Open in browser", copia), stato e ultimo sync, "Sync now", dispositivi con "Disconnect", codice di recupero ("Show", "Create a new one"), "Sign out". | `src/qml/pages/AppSettingsPage.qml:18-22` | M–L |
 | 4.2 | Riga **"Coming soon"**: "Session history and statistics", "Task notes", con uno `StatusPill` e senza interruttore. | `AppSettingsPage.qml` | S |
-| 4.3 | Dialoghi con `ConfirmDialog`: approvazione di un nuovo dispositivo (con il codice di 6 cifre), limite raggiunto (rimanda al sito), conferma del codice di recupero, "Sign out" (i preset locali restano). | `src/qml/Main.qml`, `AppSettingsPage.qml` | M |
+| 4.3 | Dialoghi con `ConfirmDialog`: approvazione di un nuovo dispositivo (con il codice di verifica), limite raggiunto (rimanda al sito), conferma del codice di recupero, "Sign out" (i preset locali restano). | `src/qml/Main.qml`, `AppSettingsPage.qml` | M |
 | 4.4 | Notifica (con `Notifier`) quando un dispositivo chiede l'approvazione e la finestra è nascosta. | `src/core/…` | S |
 | 4.5 | Smoke test della scheda (`SUGO_SMOKE_PAGE`), stringhe in `po/sugo.pot`, voce nella checklist manuale, `Diagnostics` (stato del sync senza dati personali). | `tests/smoke_app.sh`, `po/`, `tests/manual-review-checklist.md`, `src/core/Diagnostics.cpp` | S–M |
 

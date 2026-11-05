@@ -101,7 +101,7 @@ public:
     bool deviceLimitReached() const { return m_deviceLimitReached; }
 
     // --- Key ------------------------------------------------------------------------------------------
-    /// While waiting for the key: the six digits both devices show (empty if no device can approve).
+    /// While waiting for the key: the code both devices show, "XXXX-XXXX-XXXX-XXXX" (empty if no device can approve).
     QString verificationCode() const { return m_verificationCode; }
     /// The devices of the last list.
     QList<Device> devices() const { return m_devices; }
