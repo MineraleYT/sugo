@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// An on/off switch in the brand colour.
+/// An on/off switch: filled with the accent colour when on, an outlined track when off.
 QQC2.Switch {
     id: control
 
@@ -16,23 +16,23 @@ QQC2.Switch {
     indicator: Rectangle {
         x: 0
         y: (control.height - height) / 2
-        implicitWidth: Theme.space3xl + Theme.spaceXs
-        implicitHeight: Theme.spaceXl + Theme.spaceXs
+        implicitWidth: Theme.switchWidth
+        implicitHeight: Theme.switchHeight
         radius: height / 2
-        color: !control.enabled ? Theme.track : control.checked ? Theme.brand : Theme.borderStrong
+        color: control.checked && control.enabled ? Theme.accent : Theme.track
         opacity: control.enabled ? 1 : 0.6
-        border.width: control.visualFocus ? Theme.hairline : 0
-        border.color: Theme.focusRing
+        border.width: Theme.hairline
+        border.color: control.visualFocus ? Theme.focusRing : control.checked && control.enabled ? Theme.accent : Theme.border
         Behavior on color { ColorAnimation { duration: Theme.durationShort } }
 
         Rectangle {
-            readonly property real inset: Theme.hairline * 2
+            readonly property real inset: (parent.height - height) / 2
             x: control.checked ? parent.width - width - inset : inset
             y: inset
-            width: parent.height - inset * 2
+            width: Theme.switchKnob
             height: width
             radius: width / 2
-            color: control.checked ? Theme.brandText : Theme.muted
+            color: control.checked && control.enabled ? Theme.accentText : Theme.muted
             Behavior on x { NumberAnimation { duration: Theme.durationShort; easing.type: Easing.OutCubic } }
         }
     }
