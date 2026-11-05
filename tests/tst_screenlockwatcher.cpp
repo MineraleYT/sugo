@@ -909,6 +909,70 @@ private Q_SLOTS:
 #endif
     }
 
+    void aLockThatEndsADueBreakStillReportsTheUnlock()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // Back from idle or sleep, the break was due but no tick has ended it yet when logind says
+        // the session is locked: the break ends, the work that starts by itself is paused, and the
+        // unlock asks whether to resume. The phase change is no sign that the user is back.
+        // logind's slot is called directly: no turn of the event loop between the deadline and the
+        // lock, so the engine's own tick cannot end the break first.
+        const auto logindHint = [this](bool locked) {
+            return QMetaObject::invokeMethod(watcher.get(),
+                                             "onLogindPropertiesChanged",
+                                             Qt::DirectConnection,
+                                             Q_ARG(QString, kSessionInterface),
+                                             Q_ARG(QVariantMap, QVariantMap({{QStringLiteral("LockedHint"), locked}})),
+                                             Q_ARG(QStringList, QStringList()));
+        };
+        engine->setAutoStartMode(TimerEngine::AutoStartMode::All);
+        engine->start();
+        engine->skip();
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        clock->advanceSeconds(engine->remainingSeconds() + 1);
+        QSignalSpy unlockSpy(watcher.get(), &ScreenLockWatcher::screenUnlockedAfterPause);
+
+        QVERIFY(logindHint(true));
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QCOMPARE(engine->phase(), TimerEngine::Phase::Work);
+        QVERIFY(watcher->isPausedByScreenLock());
+
+        QVERIFY(logindHint(false));
+        QCOMPARE(unlockSpy.count(), 1);
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+#endif
+    }
+
+    void aLockRequestNeverUnlockedEndsWhenTheUserStartsOrSkips()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("logind exists on Linux only");
+#else
+        // swaylock unlocks without a word. A lock asked while nothing ran to pause is over when the
+        // user starts the timer, or skips the break it came during: the next request pauses Work.
+        const auto lockRequest = [this]() {
+            return QMetaObject::invokeMethod(watcher.get(), "onLogindLockRequested", Qt::DirectConnection);
+        };
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Idle);
+        engine->start();
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(watcher->isPausedByScreenLock());
+
+        engine->skip(); // the user is back and moves on to the break
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::ShortBreak);
+        engine->skip();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+        QVERIFY(lockRequest());
+        QCOMPARE(engine->state(), TimerEngine::State::Paused);
+#endif
+    }
+
     void otherDesktopScreenSaversPauseTheTimer_data()
     {
         QTest::addColumn<QString>("name");

@@ -302,6 +302,18 @@ void ScreenLockWatcher::attach(TimerEngine *engine, AppSettings *settings)
     m_settings = settings;
 
     if (m_engine) {
+#ifndef Q_OS_MACOS
+        // From a completed session to phaseFinished, the engine moves on by itself (auto-start):
+        // no state change in between is the user's doing.
+        connect(m_engine, &TimerEngine::sessionEnded, this, [this](TimerEngine::Phase, const QDateTime &, const QDateTime &, qint64, qint64, bool completed) {
+            if (completed) {
+                m_phaseEnding = true;
+            }
+        });
+        connect(m_engine, &TimerEngine::phaseFinished, this, [this]() {
+            m_phaseEnding = false;
+        });
+#endif
         connect(m_engine, &TimerEngine::stateChanged, this, [this]() {
             if (m_engine && m_engine->state() != TimerEngine::State::Paused) {
                 if (m_pausedByScreenLock) {
@@ -310,9 +322,12 @@ void ScreenLockWatcher::attach(TimerEngine *engine, AppSettings *settings)
                 }
                 setPausedBySleep(false);
 #ifndef Q_OS_MACOS
-                // The timer runs again, so the user is back: a lock only logind told of (a
-                // locker that may never report its unlock, or a hint left set) is over.
-                if (m_screenLocked && (m_lockSource == kLogind || m_lockSource == kLockRequest)) {
+                // The user set the timer running again, so they are back: a lock only logind
+                // told of (a locker that may never report its unlock, or a hint left set) is over.
+                // A phase that ended and started the next one by itself says nothing of the
+                // user: not while the screen is locked, nor when the refresh() of a lock being
+                // recorded ends a phase that was due (its unlock would never be reported).
+                if (!m_phaseEnding && m_screenLocked && (m_lockSource == kLogind || m_lockSource == kLockRequest)) {
                     qCDebug(lcScreenLock) << "The timer runs again: the lock reported by logind is over";
                     m_screenLocked = false;
                     m_lockSource.clear();

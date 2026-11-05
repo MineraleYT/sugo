@@ -30,8 +30,9 @@ class TimerEngine;
  * one when the caller belongs to none, as a Flatpak app's scope).
  * All sources feed one locked state: a lock seen by several pauses once, and the first unlock
  * reported by any of them is the one reported. A lock seen only by logind (the hint, or a Lock
- * request, whose locker may never say it unlocked) is forgotten when the timer runs again: the user
- * resumed it, so they are back, and the next lock must count.
+ * request, whose locker may never say it unlocked) is forgotten when the user sets the timer running
+ * again (resume, start, skip): they are back, and the next lock must count. A phase that ends and
+ * starts the next one by itself proves nothing, also when it ends while a lock is being handled.
  * Automatically pauses the active work phase when the screen is locked, and
  * signals when the user returns so they can resume or review their session.
  *
@@ -133,6 +134,7 @@ private:
     QString m_lockSource; // the name whose owner reported the current lock
     QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
     QString m_logindSession; // object path of the logind session followed, once found
+    bool m_phaseEnding = false; // a phase elapsed and the next one is starting by itself
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
