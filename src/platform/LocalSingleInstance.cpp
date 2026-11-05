@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "LocalSingleInstance.h"
 
+#include <QCryptographicHash>
 #include <QDeadlineTimer>
 #include <QDir>
 #include <QEventLoop>
+#include <QFile>
 #include <QFileInfo>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -14,7 +16,12 @@
 #include <QTimer>
 
 #ifdef Q_OS_UNIX
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #include <unistd.h>
+
+#include <cerrno>
 #endif
 
 Q_LOGGING_CATEGORY(lcLocalSingleInstance, "sugo.platform.localsingleinstance")
@@ -30,13 +37,55 @@ constexpr int kIdleConnectionMs = 5000;
 /// before it listens.
 constexpr int kConnectWindowMs = 2000;
 constexpr int kConnectRetryMs = 100;
+
+#ifdef Q_OS_UNIX
+/// Whether a local socket can be bound at \a path: sun_path holds 104 bytes on macOS, 108 on
+/// Linux, with the terminating NUL.
+bool fitsSocketAddress(const QString &path)
+{
+    return size_t(QFile::encodeName(path).size()) < sizeof(sockaddr_un::sun_path);
+}
+
+/// Whether \a path is a directory of this user's that no one else can enter (created if it is
+/// not there): not a link, owned by us, no access for group or others.
+bool privateDirectory(const QString &path, bool create)
+{
+    const QByteArray encoded = QFile::encodeName(path);
+    if (create && ::mkdir(encoded.constData(), S_IRWXU) != 0 && errno != EEXIST) {
+        return false;
+    }
+    struct stat info = {};
+    return ::lstat(encoded.constData(), &info) == 0 && S_ISDIR(info.st_mode) && info.st_uid == ::getuid()
+        && (info.st_mode & (S_IRWXG | S_IRWXO)) == 0;
+}
+#endif
 } // namespace
 
 LocalSingleInstance::LocalSingleInstance(const QString &name, const QString &directory, QObject *parent)
     : QObject(parent)
     , m_directory(directory)
     , m_name(name)
+    , m_socketPath(QDir(directory).filePath(name + QStringLiteral(".sock")))
 {
+#ifdef Q_OS_UNIX
+    if (fitsSocketAddress(m_socketPath)) {
+        return;
+    }
+    // Too long for a socket (a deep SUGO_DATA_DIR or home directory): in a directory of our own
+    // under the temporary directory, named after the directory asked for, so that another
+    // isolated run is still another instance. The lock stays where it was asked for.
+    const QByteArray directoryHash =
+        QCryptographicHash::hash(QFile::encodeName(QDir(directory).absolutePath()), QCryptographicHash::Sha256).toHex().left(16);
+    const QString socketName = name + QLatin1Char('-') + QString::fromLatin1(directoryHash) + QStringLiteral(".sock");
+    for (const QString &base : {QDir::tempPath(), QStringLiteral("/tmp")}) {
+        const QString candidate = QDir(base).filePath(name) + QLatin1Char('/') + socketName;
+        if (fitsSocketAddress(candidate)) {
+            m_socketPath = candidate;
+            m_socketDirectory = QDir(base).filePath(name);
+            return;
+        }
+    }
+#endif
 }
 
 LocalSingleInstance::~LocalSingleInstance()
@@ -88,7 +137,20 @@ QString LocalSingleInstance::lockPath() const
 
 QString LocalSingleInstance::socketPath() const
 {
-    return QDir(m_directory).filePath(m_name + QStringLiteral(".sock"));
+    return m_socketPath;
+}
+
+bool LocalSingleInstance::socketDirectoryIsOurs(bool create) const
+{
+#ifdef Q_OS_UNIX
+    if (!m_socketDirectory.isEmpty() && !privateDirectory(m_socketDirectory, create)) {
+        qCWarning(lcLocalSingleInstance) << "Cannot use" << m_socketDirectory << "for the socket: not a directory of this user's alone";
+        return false;
+    }
+#else
+    Q_UNUSED(create)
+#endif
+    return true;
 }
 
 bool LocalSingleInstance::acquire(bool activateExisting)
@@ -138,6 +200,9 @@ bool LocalSingleInstance::acquire(bool activateExisting)
 
 void LocalSingleInstance::listen()
 {
+    if (!socketDirectoryIsOurs(true)) {
+        return;
+    }
     m_server = new QLocalServer(this);
     m_server->setSocketOptions(QLocalServer::UserAccessOption);
     // We hold the lock, so a socket file there was left by an instance that ended badly.
@@ -192,6 +257,9 @@ void LocalSingleInstance::request(const QString &token)
 
 LocalSingleInstance::Reply LocalSingleInstance::activateOther(const QString &token)
 {
+    if (!socketDirectoryIsOurs(false)) {
+        return Reply::Unreachable;
+    }
     QLocalSocket socket;
     const QDeadlineTimer connectDeadline(qMin(kConnectWindowMs, m_replyTimeoutMs));
     while (true) {
