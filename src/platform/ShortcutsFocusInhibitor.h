@@ -31,6 +31,9 @@
  * must not land after the "off"). An "off" that times out is run once more after that pause,
  * and then given up on: no retry loop, and quitting waits at most releaseTimeoutMs().
  *
+ * The release runs the "off" shortcut that was set when the "on" ran, even if the names have
+ * changed since: a new "off" may not exist yet, and failing to run it would leave the Focus on.
+ *
  * Unlike the freedesktop inhibition, nothing ties the Focus to our process: if Sugo crashes
  * while working, the Focus stays on until the user turns it off. Quitting releases it
  * (SilenceController::shutdown waits up to releaseTimeoutMs()).
@@ -91,6 +94,7 @@ private:
     QString m_program;
     QString m_onShortcut;
     QString m_offShortcut;
+    QString m_releaseShortcut; ///< The "off" paired with the "on" that last ran; the release runs it.
     QStringList m_list;
     bool m_listing = false;      ///< `shortcuts list` is running.
     bool m_listAgain = false;    ///< Asked for a refresh while one was running.

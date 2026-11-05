@@ -121,6 +121,9 @@ void ShortcutsFocusInhibitor::sync()
         }
         m_warnedUnavailable = false;
         m_busy = true;
+        // The names may change while the Focus is on (the settings, "Install Shortcuts"): the
+        // release must still run the "off" that goes with this "on".
+        m_releaseShortcut = m_offShortcut;
         report();
         runProgram({QStringLiteral("run"), m_onShortcut}, m_runTimeoutMs,
                    [this](bool ok, bool timedOut, const QByteArray &, const QString &error) {
@@ -143,7 +146,7 @@ void ShortcutsFocusInhibitor::sync()
     } else if (!m_wanted && m_on) {
         m_busy = true;
         report();
-        runProgram({QStringLiteral("run"), m_offShortcut}, m_runTimeoutMs,
+        runProgram({QStringLiteral("run"), m_releaseShortcut}, m_runTimeoutMs,
                    [this](bool ok, bool timedOut, const QByteArray &, const QString &error) {
                        m_busy = false;
                        if (timedOut && !m_offRetried) {
