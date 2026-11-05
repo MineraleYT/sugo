@@ -140,6 +140,8 @@ public:
     // --- Test hooks ---
     void setRetryDelaysForTesting(const QList<int> &delaysMs);
     void setLoginPollIntervalForTesting(int ms) { m_pollIntervalMs = ms; }
+    /// The delay before the next try of a failed send, in ms (0: none waiting).
+    int retryIntervalForTesting() const { return m_retryTimer.isActive() ? m_retryTimer.interval() : 0; }
     void setOpenUrlHandler(std::function<void(const QUrl &)> handler) { m_openUrl = std::move(handler); }
     bool isSendingPaused() const { return m_paused; }
     bool isPasswordInKeyring() const { return m_passwordInKeyring; }
@@ -171,6 +173,7 @@ private:
         int http = 0;
         QByteArray body;
         QString networkError; ///< Empty when the server answered.
+        int retryAfter = 0;   ///< Retry-After of a failure, in seconds (RetryAfter::seconds).
     };
     struct Pending {
         SessionRecord record;
@@ -226,7 +229,8 @@ private:
     void trySend();
     /// trySend() from the event loop, once however often it is asked for meanwhile.
     void trySendLater();
-    void scheduleRetry();
+    /// Starts the backoff's next delay, or the server's Retry-After (in seconds) if longer.
+    void scheduleRetry(int retryAfterSeconds = 0);
     void onSendFinished(const Result &result, bool credentialsChangedMeanwhile);
     void rememberSent(const Pending &item);
     void clearQueue();

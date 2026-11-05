@@ -86,6 +86,7 @@ target_sources(sugo_core PRIVATE
     core/UpdateChecker.cpp
     core/Diagnostics.h
     core/Diagnostics.cpp
+    core/RetryAfter.h
     core/UrlPolicy.h
     core/QuitPolicy.h
     core/QuitPolicy.cpp

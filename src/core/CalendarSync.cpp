@@ -4,6 +4,7 @@
 #include "SecretStore.h"
 
 #include "Localization.h"
+#include "RetryAfter.h"
 #include "UrlPolicy.h"
 
 #include <QColor>
@@ -1122,6 +1123,9 @@ void CalendarSync::request(const QByteArray &verb, const QUrl &url, const QByteA
         if (r.http == 0) {
             r.networkError = reply->errorString();
         }
+        if (!isSuccess(r.http)) {
+            r.retryAfter = RetryAfter::seconds(reply->rawHeader("Retry-After"));
+        }
         done(r);
     });
 }
@@ -1315,11 +1319,12 @@ void CalendarSync::trySendLater()
     });
 }
 
-void CalendarSync::scheduleRetry()
+void CalendarSync::scheduleRetry(int retryAfterSeconds)
 {
     const int index = std::min(m_retryStep, int(m_retryDelays.size()) - 1);
     ++m_retryStep;
-    m_retryTimer.start(m_retryDelays.at(index));
+    // A server asking for a longer pause (429, 503) is not asked again sooner.
+    m_retryTimer.start(std::max(m_retryDelays.at(index), retryAfterSeconds * 1000));
 }
 
 void CalendarSync::rememberSent(const Pending &item)
@@ -1409,7 +1414,7 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
     // and go once the calendar accepts them or another one is chosen (see kForbiddenBeforePause).
     setLastError(r.http == 403 ? calendarRefusesEvents() : describeFailure(r));
     refreshIdleStatus();
-    scheduleRetry();
+    scheduleRetry(r.retryAfter);
 }
 
 void CalendarSync::removeLeftoverTestEvents()
