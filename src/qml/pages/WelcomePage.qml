@@ -752,30 +752,6 @@ QQC2.Page {
                 opacity: readyStep.reveal(9)
                 transform: Translate { y: readyStep.rise(9) }
             }
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.topMargin: Theme.spaceXl
-                spacing: Theme.spaceSm
-                opacity: readyStep.reveal(10)
-                transform: Translate { y: readyStep.rise(10) }
-                Kbd { text: i18nc("keyboard key", "Space") }
-                Text {
-                    text: i18n("starts and pauses")
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
-                Text {
-                    text: "·"
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
-                Kbd { text: DesktopStyle.shortcutText("Ctrl+K") }
-                Text {
-                    text: i18n("finds anything")
-                    color: Theme.subtle
-                    font.pixelSize: Theme.fontCaption
-                }
-            }
         }
     }
 
