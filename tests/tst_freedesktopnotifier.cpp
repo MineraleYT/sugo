@@ -204,6 +204,34 @@ private Q_SLOTS:
         QVERIFY(log.isEmpty());
     }
 
+    void theBodyIsEscapedWhereTheServerReadsMarkup_data()
+    {
+        QTest::addColumn<bool>("markup");
+        QTest::addColumn<QString>("body");
+        const QString text = QStringLiteral("Next: <Deep work> & \"notes\"");
+        QTest::newRow("body-markup") << true << QStringLiteral("Next: &lt;Deep work&gt; &amp; &quot;notes&quot;");
+        QTest::newRow("plain text") << false << text;
+    }
+
+    void theBodyIsEscapedWhereTheServerReadsMarkup()
+    {
+        // A server that lists body-markup reads the body as markup: a timer name or a task note
+        // with "<" or "&" would be cut or mangled. The summary is plain text in either case.
+        QFETCH(bool, markup);
+        QFETCH(QString, body);
+        if (markup) {
+            m_server->capabilities << QStringLiteral("body-markup");
+        }
+        QStringList log;
+        auto notification = sample(&log);
+        notification.title = QStringLiteral("Break <is> over & out");
+        notification.text = QStringLiteral("Next: <Deep work> & \"notes\"");
+        QVERIFY(show(notification) > 0);
+        const auto &call = m_server->calls.constLast();
+        QCOMPARE(call.body, body);
+        QCOMPARE(call.summary, QStringLiteral("Break <is> over & out"));
+    }
+
     void anInvokedActionRunsItsHandlerWithTheActivationToken()
     {
         QStringList log;
