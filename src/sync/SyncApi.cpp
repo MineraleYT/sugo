@@ -12,6 +12,7 @@
 #include <QNetworkRequest>
 #include <QTimer>
 
+#include <algorithm>
 #include <chrono>
 #include <utility>
 
@@ -392,7 +393,8 @@ bool SyncApi::takeTokens(const QJsonObject &json)
         }
     }
     m_accessToken = accessToken;
-    const qint64 expiresIn = json.value(QLatin1String("expires_in")).toInteger(3600);
+    // Within reason whatever the server says: not renewed before every request, not kept for days.
+    const qint64 expiresIn = std::clamp<qint64>(json.value(QLatin1String("expires_in")).toInteger(3600), 60, 86400);
     m_accessExpiresAt = now() + expiresIn * 1000;
     return true;
 }
@@ -504,7 +506,12 @@ void SyncApi::send(const Request &request, const QString &accessToken, Callback 
         bool pendingOk = false;
         const int pendingCount = pending.trimmed().toInt(&pendingOk);
         r.pendingDevices = pendingOk ? pendingCount : -1;
-        r.error = SyncError::fromResponse(r.http, r.body, r.http == 0 ? reply->errorString() : QString());
+        // A transfer cut off after the status line (closed, timed out) has a status but not all of its
+        // body: it fails as the network does, not as a good answer with half a blob.
+        const QNetworkReply::NetworkError transport = reply->error();
+        const bool cutOff = transport != QNetworkReply::NoError && transport < QNetworkReply::ContentAccessDenied;
+        r.error = cutOff ? SyncError::fromResponse(0, {}, reply->errorString())
+                         : SyncError::fromResponse(r.http, r.body, r.http == 0 ? reply->errorString() : QString());
         if (!r.error.ok()) {
             r.error.retryAfter = reply->rawHeader("Retry-After").trimmed().toInt();
             r.json = r.error.extra;

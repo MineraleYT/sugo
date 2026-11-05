@@ -1595,6 +1595,8 @@ QQC2.ApplicationWindow {
     // user, and checked by typing one of its groups back.
     ConfirmDialog {
         id: syncRecoveryDialog
+        // Closed by its buttons or Escape only: a click beside it is not "Later".
+        closePolicy: QQC2.Popup.CloseOnEscape
         property string code
         property int group: 0
         readonly property int groups: code.length > 0 ? code.split("-").length : 0
@@ -1704,6 +1706,8 @@ QQC2.ApplicationWindow {
     // the same verification code on both screens (a key sent to anyone else is refused there).
     ConfirmDialog {
         id: syncApprovalDialog
+        // Closed by its buttons or Escape only: a click beside it is not "Not Now".
+        closePolicy: QQC2.Popup.CloseOnEscape
         property var device: ({})
         property bool approved: false
         title: i18n("Approve “%1”?", device.name || "")

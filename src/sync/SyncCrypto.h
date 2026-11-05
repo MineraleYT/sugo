@@ -51,8 +51,8 @@ private:
  *
  * - The data key K (32 bytes) encrypts the blobs with XChaCha20-Poly1305. A blob is
  *   "SUGO" | format (1 byte) | nonce (24 bytes) | ciphertext and tag, and its associated data is
- *   the UTF-8 user id, then the blob's kind ("presets"), then the format byte: a blob cannot be
- *   passed off as another user's or another kind's.
+ *   the UTF-8 user id, a NUL, the blob's kind ("presets"), a NUL, then the format byte: a blob
+ *   cannot be passed off as another user's or another kind's.
  * - Each device has an X25519 key pair. K travels between devices in an authenticated crypto_box
  *   (sender's private key, receiver's public key), never in an anonymous crypto_box_seal: the
  *   receiver checks who sent it, and both show verificationCode() of the two public keys.

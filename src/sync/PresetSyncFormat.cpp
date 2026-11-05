@@ -25,8 +25,9 @@ const QString kIconName = QStringLiteral("iconName");
 
 qint64 timeValue(const QJsonValue &value)
 {
-    // JSON numbers are doubles: milliseconds since the epoch fit exactly (below 2^53).
-    return value.isDouble() ? std::max<qint64>(0, qint64(value.toDouble())) : 0;
+    // JSON numbers are doubles: milliseconds since the epoch fit exactly (below 2^53). Brought
+    // into that range before the conversion, which is undefined (and differs by CPU) outside it.
+    return value.isDouble() ? qint64(std::clamp(value.toDouble(), 0.0, 9007199254740992.0)) : 0;
 }
 
 int intValue(const QJsonValue &value, int low, int high, int fallback)
@@ -128,6 +129,16 @@ bool newer(const Version &a, const Version &b, const QString &self)
 {
     if (a.time() != b.time()) {
         return a.time() > b.time();
+    }
+    // The built-in timer at the same time, as it comes on one side and changed on the other: both
+    // carry time 0 when it was changed before Sugo recorded change times. The change wins.
+    if (!a.deleted && !b.deleted && a.preset.uuid == PresetModel::DefaultUuid) {
+        const TimerPreset factory = PresetModel::makeDefaultPreset();
+        const bool aFactory = a.preset.sameContent(factory);
+        const bool bFactory = b.preset.sameContent(factory);
+        if (aFactory != bFactory) {
+            return bFactory;
+        }
     }
     const QString authorA = a.author().isEmpty() ? self : a.author();
     const QString authorB = b.author().isEmpty() ? self : b.author();

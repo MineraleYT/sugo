@@ -60,6 +60,11 @@ SyncSecrets::SyncSecrets(SecretStore *store)
 bool SyncSecrets::probe()
 {
     const QString value = QString::fromLatin1(SyncCrypto::newDataKey().toBase64());
+    if (value.isEmpty()) {
+        // libsodium did not start: an empty value would be a removal, which "works" without a keyring.
+        m_available = false;
+        return false;
+    }
     const bool written = m_store->write(probeKey(), value);
     // Removed even when the first write seemed to fail: it may have stored something.
     const bool removed = m_store->write(probeKey(), QString());

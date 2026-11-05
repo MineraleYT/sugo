@@ -12,6 +12,8 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include <algorithm>
+
 Q_LOGGING_CATEGORY(lcPresetRepo, "sugo.db.presets")
 
 namespace
@@ -203,13 +205,16 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
 
     // Drop presets that no longer exist (the built-in one is never removed).
     QSqlQuery existing(db);
-    if (!existing.exec(QStringLiteral("SELECT uuid FROM preset WHERE is_builtin = 0"))) {
+    if (!existing.exec(QStringLiteral("SELECT uuid, updated_at FROM preset WHERE is_builtin = 0"))) {
         return fail(existing);
     }
     QStringList stale;
+    QHash<QString, qint64> staleUpdatedAt;
     while (existing.next()) {
-        if (!keep.contains(existing.value(0).toString())) {
-            stale.append(existing.value(0).toString());
+        const QString uuid = existing.value(0).toString();
+        if (!keep.contains(uuid)) {
+            stale.append(uuid);
+            staleUpdatedAt.insert(uuid, existing.value(1).toLongLong());
         }
     }
     existing.finish();
@@ -232,7 +237,8 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
     }
     for (const QString &uuid : std::as_const(stale)) {
         if (!tombstones.contains(uuid)) {
-            tombstones.insert(uuid, PresetTombstone{uuid, now, QString()});
+            // After the version deleted, even when this computer's clock is behind its author's.
+            tombstones.insert(uuid, PresetTombstone{uuid, std::max(now, staleUpdatedAt.value(uuid) + 1), QString()});
         }
     }
     QSqlQuery writeTombstone(db);

@@ -132,7 +132,14 @@ void hash(unsigned char *out, size_t outputBytes, const unsigned char *input, si
 
 QByteArray blobAssociatedData(const QString &userId, const QString &kind, int format)
 {
-    return userId.toUtf8() + kind.toUtf8() + char(format);
+    // Each field ends with a NUL (which neither holds), so no two pairs of user and kind run together
+    // into the same bytes ("usr_a" + "bc" and "usr_ab" + "c").
+    QByteArray ad = userId.toUtf8();
+    ad.append('\0');
+    ad.append(kind.toUtf8());
+    ad.append('\0');
+    ad.append(char(format));
+    return ad;
 }
 
 QByteArray randomNonce()

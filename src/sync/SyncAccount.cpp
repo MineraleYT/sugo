@@ -35,6 +35,9 @@ QString key(const char *name)
 constexpr int kMaxNameLength = 64;
 /// Seconds before a failed step of the key phase is tried again.
 constexpr int kRetrySeconds = 30;
+/// The longest wait between two requests, whatever the server asks (interval, Retry-After): more
+/// would overflow the timers' milliseconds, and the polling would stop without a word.
+constexpr int kMaxWaitSeconds = 3600;
 
 QDateTime parseTime(const QJsonValue &value)
 {
@@ -240,7 +243,7 @@ void SyncAccount::startSignIn(const QString &deviceName)
 
 void SyncAccount::schedulePoll(int seconds)
 {
-    m_pollTimer.start(std::max(1, seconds) * m_unitMs);
+    m_pollTimer.start(std::clamp(seconds, 1, kMaxWaitSeconds) * m_unitMs);
 }
 
 void SyncAccount::pollToken()
@@ -372,7 +375,7 @@ void SyncAccount::setWindowActive(bool active)
 void SyncAccount::scheduleKeyStep(KeyStep step, int seconds)
 {
     m_keyStep = step;
-    m_keyTimer.start(std::max(1, seconds) * m_unitMs);
+    m_keyTimer.start(std::clamp(seconds, 1, kMaxWaitSeconds) * m_unitMs);
 }
 
 void SyncAccount::retryKeyStep(KeyStep step, const SyncError &error)
@@ -459,17 +462,38 @@ void SyncAccount::chooseApprover()
     for (const Device &d : std::as_const(m_devices)) {
         anyReady = anyReady || (!d.current && !d.pending);
     }
-    if (!anyReady) {
-        createDataKey();
-        return;
-    }
     m_approver = approver ? *approver : Device();
     const QString code = approver ? SyncCrypto::verificationCode(m_publicKey, approver->publicKey) : QString();
     if (code != m_verificationCode) {
         m_verificationCode = code;
         Q_EMIT verificationCodeChanged(code);
     }
+    if (!anyReady) {
+        createDataKeyUnlessRecovery();
+        return;
+    }
     pollKey();
+}
+
+void SyncAccount::createDataKeyUnlessRecovery()
+{
+    // No other device holds K. The first device of the account creates it; but when the account has a
+    // recovery copy (its devices signed out or were disconnected), K exists and only the recovery code
+    // opens it: the server would refuse a new one, and a new one would not open the synced timers.
+    m_api->getRecovery([this](const SyncReply &reply) {
+        if (m_phase != Phase::WaitingForKey) {
+            return;
+        }
+        if (reply.error.kind == SyncError::Kind::NotFound) {
+            createDataKey();
+            return;
+        }
+        if (!reply.ok()) {
+            retryKeyStep(KeyStep::List, reply.error);
+            return;
+        }
+        scheduleKeyStep(KeyStep::List, kRetrySeconds); // for the recovery code, or a device that gets K
+    });
 }
 
 void SyncAccount::createDataKey()
@@ -675,6 +699,16 @@ void SyncAccount::ignoreDevice(const QString &id)
     m_ignored.insert(id);
 }
 
+void SyncAccount::askAgain(const QString &id)
+{
+    if (m_phase != Phase::Ready) {
+        return;
+    }
+    m_ignored.remove(id);
+    m_asked.remove(id);
+    askAboutPendingDevices();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Recovery code
 // ---------------------------------------------------------------------------------------------
@@ -865,6 +899,9 @@ void SyncAccount::disconnectDevice(const QString &id)
 
 void SyncAccount::signOut()
 {
+    if (m_signingOut) {
+        return; // already on its way: a second reset would drop the first request
+    }
     if (m_phase == Phase::SigningIn) {
         abandonSignIn();
         Q_EMIT signedOut(true);
