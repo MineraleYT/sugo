@@ -157,6 +157,7 @@ public:
     QByteArray expectedAuth;           ///< Required on the DAV paths when not empty.
     QList<int> putStatuses;            ///< Consumed one per PUT, then defaultPut.
     int defaultPut = 201;
+    QByteArray putRetryAfter;          ///< Retry-After of a PUT that is not accepted, when not empty.
     int deleteStatus = 204;
     int propfindStatus = 0;            ///< Answers every PROPFIND with this status when not 0.
     QByteArray forbiddenPropfindPath;  ///< A PROPFIND of this path is answered with 403.
@@ -223,10 +224,14 @@ private:
         }
     }
 
-    void reply(QTcpSocket *s, int status, const QByteArray &body = QByteArray(), const QByteArray &type = "application/json")
+    void reply(QTcpSocket *s, int status, const QByteArray &body = QByteArray(), const QByteArray &type = "application/json",
+               const QByteArray &retryAfter = QByteArray())
     {
-        QByteArray out = "HTTP/1.1 " + QByteArray::number(status) + " X\r\nContent-Type: " + type + "\r\nContent-Length: "
-            + QByteArray::number(body.size()) + "\r\nConnection: keep-alive\r\n\r\n" + body;
+        QByteArray out = "HTTP/1.1 " + QByteArray::number(status) + " X\r\nContent-Type: " + type + "\r\n";
+        if (!retryAfter.isEmpty()) {
+            out += "Retry-After: " + retryAfter + "\r\n";
+        }
+        out += "Content-Length: " + QByteArray::number(body.size()) + "\r\nConnection: keep-alive\r\n\r\n" + body;
         s->write(out);
         s->flush();
     }
@@ -302,7 +307,7 @@ private:
             if (status >= 200 && status < 300) {
                 stored.insert(path, req.body);
             }
-            reply(s, status);
+            reply(s, status, QByteArray(), "application/json", status >= 200 && status < 300 ? QByteArray() : putRetryAfter);
             return;
         }
         if (req.method == "DELETE") {
@@ -1243,6 +1248,39 @@ private Q_SLOTS:
         QCOMPARE(m_server->stored.size(), 2);
         QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
         QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void retryAfterIsHonoured_data()
+    {
+        QTest::addColumn<int>("http");
+        QTest::addColumn<QByteArray>("header");
+        QTest::addColumn<int>("atLeastMs");
+        QTest::addColumn<int>("atMostMs");
+        QTest::newRow("429, 15 minutes") << 429 << QByteArray("900") << 900 * 1000 << 900 * 1000;
+        QTest::newRow("503, 2 minutes") << 503 << QByteArray("120") << 120 * 1000 << 120 * 1000;
+        // At most an hour, as Sugo Sync: more would overflow the timer's milliseconds.
+        QTest::newRow("huge") << 429 << QByteArray("2500000") << 3600 * 1000 << 3600 * 1000;
+        // Shorter than the backoff, or unreadable: the backoff's own delay.
+        QTest::newRow("shorter") << 429 << QByteArray("0") << 1 << 1000;
+        QTest::newRow("http date") << 503 << QByteArray("Wed, 21 Oct 2015 07:28:00 GMT") << 1 << 1000;
+    }
+    void retryAfterIsHonoured()
+    {
+        // A server asking for a longer pause (429, 503) is not asked again sooner.
+        QFETCH(int, http);
+        QFETCH(QByteArray, header);
+        QFETCH(int, atLeastMs);
+        QFETCH(int, atMostMs);
+        configureCustom();
+        m_server->defaultPut = http;
+        m_server->putRetryAfter = header;
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTRY_VERIFY(m_sync->retryIntervalForTesting() > 0);
+        QCOMPARE(m_server->count("PUT"), 1);
+        const int interval = m_sync->retryIntervalForTesting();
+        QVERIFY2(interval >= atLeastMs && interval <= atMostMs, QByteArray::number(interval).constData());
+        QCOMPARE(m_sync->pendingCount(), 1);
     }
 
     void serverErrorMessage()

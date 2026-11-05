@@ -481,7 +481,8 @@ int main(int argc, char *argv[])
     });
 
     // Quitting mid-phase ends it as an interrupted session instead of losing it.
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, timer, &TimerEngine::stop);
+    // Then the sessions the database refused get one last try (with the timer idle, nothing else would retry them).
+    SessionRecorder::connectQuit(&app, timer, recorder);
     // ... and always hands the notifications back before the process ends.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, silence, &SilenceController::shutdown);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, powerInhibitor, &PowerInhibitor::shutdown);

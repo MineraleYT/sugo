@@ -11,6 +11,7 @@
 #include "TimerPreset.h"
 
 class PresetModel;
+class QCoreApplication;
 
 /**
  * Stores every finished phase of the TimerEngine.
@@ -24,6 +25,7 @@ class PresetModel;
  *
  * A session that cannot be stored (database busy, disk full...) is not dropped: it is kept in
  * memory and stored again at the next phase end or retry, and isSaveFailing() says so meanwhile.
+ * Quitting tries once more (see connectQuit()).
  */
 class SessionRecorder : public QObject
 {
@@ -47,6 +49,16 @@ public:
     /// True while some ended sessions could not be stored yet.
     bool isSaveFailing() const { return !m_unsaved.isEmpty(); }
     void setRetryIntervalForTesting(int ms) { m_retryTimer.setInterval(ms); }
+
+    /// Connects quitting in the order that loses nothing: the engine stops first, so a running
+    /// phase is ended as an interrupted session, then the recorder tries once more to store the
+    /// sessions still waiting (with the timer idle, no phase end would retry them) and logs those
+    /// it still cannot store. Both are direct connections, called in the order they are made.
+    static void connectQuit(QCoreApplication *app, TimerEngine *engine, SessionRecorder *recorder);
+
+public Q_SLOTS:
+    /// The last try at quit; see connectQuit().
+    void storeBeforeQuit();
 
 Q_SIGNALS:
     void sessionRecorded();
