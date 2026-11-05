@@ -538,7 +538,12 @@ private Q_SLOTS:
         QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(""), &error), QString());
         QVERIFY(error.isEmpty());
 
-        for (const QString &bad : {QStringLiteral("cloud.example.org"), QStringLiteral("http://cloud.example.org"),
+        // Typed without its scheme: an https address.
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral(" cloud.example.org/ "), &error), QStringLiteral("https://cloud.example.org"));
+        QCOMPARE(CalendarSync::normalizeUrl(QStringLiteral("cloud.example.org:8443/nc"), &error), QStringLiteral("https://cloud.example.org:8443/nc"));
+        QVERIFY(error.isEmpty());
+
+        for (const QString &bad : {QStringLiteral("http://cloud.example.org"),
                                    QStringLiteral("ftp://cloud.example.org"), QStringLiteral("https://alice:pw@cloud.example.org"),
                                    QStringLiteral("https://")}) {
             error.clear();
@@ -559,12 +564,12 @@ private Q_SLOTS:
         QVERIFY(!m_sync->lastError().isEmpty());
         QCOMPARE(rejected.count(), 1);
         QCOMPARE(rejected.takeFirst().at(0).toString(), m_sync->lastError());
-        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
         QVERIFY(m_sync->calendarUrl().isEmpty());
         QCOMPARE(rejected.count(), 1);
         QVERIFY(!rejected.takeFirst().at(0).toString().isEmpty());
         // The same refusal twice is announced twice: lastErrorChanged alone would not tell.
-        m_sync->setCalendarUrl(QStringLiteral("cloud.example.org/dav"));
+        m_sync->setCalendarUrl(QStringLiteral("http://cloud.example.org/dav"));
         QCOMPARE(rejected.count(), 1);
         rejected.clear();
         m_sync->setServerUrl(QStringLiteral("https://cloud.example.org/"));

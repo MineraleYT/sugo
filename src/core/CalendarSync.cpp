@@ -296,14 +296,10 @@ QString CalendarSync::normalizeUrl(const QString &input, QString *error)
     if (trimmed.isEmpty()) {
         return {};
     }
+    // An address typed without its scheme ("cloud.example.org") is an https one.
     static const QRegularExpression schemeRe(QStringLiteral("^[A-Za-z][A-Za-z0-9+.-]*://"));
-    if (!schemeRe.match(trimmed).hasMatch()) {
-        if (error) {
-            *error = i18n("Please type the full address, starting with %1", QStringLiteral("https://"));
-        }
-        return {};
-    }
-    QUrl url(trimmed, QUrl::StrictMode);
+    const QString full = schemeRe.match(trimmed).hasMatch() ? trimmed : QStringLiteral("https://") + trimmed;
+    QUrl url(full, QUrl::StrictMode);
     if (!url.isValid() || url.host().isEmpty()) {
         if (error) {
             *error = i18n("This is not a valid web address.");
