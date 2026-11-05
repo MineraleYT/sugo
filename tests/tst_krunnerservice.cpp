@@ -32,6 +32,7 @@ private Q_SLOTS:
     void testUnknownPresetIsIgnored();
     void testCustomMinutesOutOfRangeAreIgnored();
     void testRunDoesOnlyOpenWhileControlIsOff();
+    void testOtherPresetsAreNotOfferedToStartWhileActive();
 
 private:
     /// The engine as main.cpp wires it: choosing another preset resets it (TimerBinding).
@@ -451,6 +452,37 @@ void TestKRunnerService::testRunDoesOnlyOpenWhileControlIsOff()
     f.service.Run(QStringLiteral("open"), QString());
     QCOMPARE(open.count(), 1);
     QVERIFY(f.timer.isIdle());
+}
+
+void TestKRunnerService::testOtherPresetsAreNotOfferedToStartWhileActive()
+{
+    Fixture f;
+    const auto matchFor = [&f](const QString &uuid) {
+        const auto matches = f.service.Match(QStringLiteral("pomodoro deep"));
+        const auto it = std::find_if(matches.cbegin(), matches.cend(),
+                                     [&uuid](const RemoteMatch &m) { return m.id == QStringLiteral("preset:") + uuid; });
+        return it == matches.cend() ? RemoteMatch() : *it;
+    };
+    const QString subtextKey = QStringLiteral("subtext");
+
+    // Idle: another preset is offered to start.
+    RemoteMatch idle = matchFor(f.deep);
+    QVERIFY(idle.text.startsWith(QStringLiteral("Start preset")));
+    QVERIFY(idle.properties.value(subtextKey).toString().contains(QStringLiteral("minute")));
+
+    // Running or paused: still listed, but saying the timer must be stopped first.
+    f.timer.start();
+    for (int i = 0; i < 2; ++i) {
+        RemoteMatch busy = matchFor(f.deep);
+        QCOMPARE(busy.id, QStringLiteral("preset:") + f.deep);
+        QVERIFY2(!busy.text.startsWith(QStringLiteral("Start")), qPrintable(busy.text));
+        QVERIFY(busy.properties.value(subtextKey).toString().contains(QStringLiteral("Stop it")));
+        f.timer.pause();
+    }
+
+    // The current preset is still offered: choosing it resumes.
+    f.presets.update(f.first, {{QStringLiteral("name"), QStringLiteral("Deep focus")}});
+    QVERIFY(matchFor(f.first).text.startsWith(QStringLiteral("Start preset")));
 }
 
 QTEST_MAIN(TestKRunnerService)
