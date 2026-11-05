@@ -1266,6 +1266,7 @@ QQC2.Page {
                         onActivated: AppSettings.soundTheme = currentValue
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Test")
                         iconName: "play"
                         onClicked: AppSettings.playSoundPreview(soundBox.currentValue, AppSettings.soundVolume)
@@ -1276,7 +1277,7 @@ QQC2.Page {
                     SSlider {
                         id: soundVolumeSlider
                         objectName: "soundVolumeSlider"
-                        Layout.preferredWidth: Theme.space4xl * 3.5
+                        Layout.preferredWidth: page.narrow ? Theme.sliderWidthCompact : Theme.sliderWidth
                         from: 0
                         to: 100
                         value: AppSettings.soundVolume
@@ -1317,6 +1318,7 @@ QQC2.Page {
                         onActivated: AppSettings.preAlarmSound = currentValue
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Test")
                         enabled: AppSettings.preAlarmEnabled
                         iconName: "play"
@@ -1349,7 +1351,7 @@ QQC2.Page {
                     enabled: AppSettings.focusSoundMode > 0
                     SSlider {
                         id: focusVolumeSlider
-                        Layout.preferredWidth: Theme.space4xl * 3
+                        Layout.preferredWidth: page.narrow ? Theme.sliderWidthCompact : Theme.sliderWidth
                         from: 0
                         to: 100
                         value: AppSettings.focusSoundVolume
@@ -1365,6 +1367,7 @@ QQC2.Page {
                         text: i18nc("volume percentage", "%1%", Math.round(focusVolumeSlider.value))
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Preview")
                         iconName: "play"
                         onClicked: FocusSoundController.preview(focusModeBox.currentValue, Math.round(focusVolumeSlider.value))
@@ -1547,6 +1550,7 @@ QQC2.Page {
                             onClicked: CalendarSync.cancelLogin()
                         }
                         SButton {
+                            kind: "ghost"
                             visible: page.calConnected && !page.calWaiting
                             text: i18n("Test")
                             iconName: page.calTestOk ? "check" : "refresh"
@@ -1568,6 +1572,7 @@ QQC2.Page {
                             }
                         }
                         SButton {
+                            kind: "ghost"
                             visible: page.calConnected && !page.calWaiting
                             text: i18n("Disconnect")
                             iconName: "close"
@@ -1646,6 +1651,7 @@ QQC2.Page {
                         visible: page.calCustom && page.calConfigured
                         title: i18n("Connection")
                         SButton {
+                            kind: "ghost"
                             text: i18n("Test")
                             iconName: page.calTestOk ? "check" : "refresh"
                             // Not while any request runs: the test would not run, yet look passed.
@@ -1666,6 +1672,7 @@ QQC2.Page {
                             }
                         }
                         SButton {
+                            kind: "ghost"
                             text: i18n("Disconnect")
                             iconName: "close"
                             onClicked: page.requestDisconnect()
@@ -2053,6 +2060,7 @@ QQC2.Page {
                             onClicked: SyncController.reviewDevice(deviceRow.modelData.id)
                         }
                         SButton {
+                            kind: "ghost"
                             visible: !deviceRow.modelData.current
                             text: i18n("Disconnect…")
                             destructive: true
@@ -2081,6 +2089,7 @@ QQC2.Page {
                     title: i18n("Recovery code")
                     description: i18n("With it, a new device opens your timers when none of your other devices is at hand. Without any device and without the code, the synced timers cannot be opened again.")
                     SButton {
+                        kind: "ghost"
                         visible: SyncController !== null && SyncController.recoveryCodeShowable
                         text: i18n("Show")
                         Accessible.name: i18n("Show recovery code")
@@ -2090,6 +2099,7 @@ QQC2.Page {
                         }
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Create a new one…")
                         Accessible.name: i18n("Create a new recovery code")
                         // It needs the timers' key: not while the keyring has not given it.
@@ -2102,6 +2112,7 @@ QQC2.Page {
                     title: i18n("Sign out")
                     description: i18n("This computer stops syncing. Your timers stay on it.")
                     SButton {
+                        kind: "ghost"
                         objectName: "syncSignOutButton"
                         text: i18n("Sign out…")
                         destructive: true
@@ -2147,6 +2158,7 @@ QQC2.Page {
                     title: i18n("Database")
                     description: DataManager ? DataManager.databasePath : ""
                     SButton {
+                        kind: "ghost"
                         text: DesktopStyle.macos ? i18n("Show in Finder") : i18n("Open folder")
                         iconName: "external"
                         visible: DataManager !== null && !DataManager.usingTemporaryDatabase
@@ -2166,6 +2178,7 @@ QQC2.Page {
                         onClicked: backupDialog.open()
                     }
                     SButton {
+                        kind: "ghost"
                         text: i18n("Restore…")
                         iconName: "upload"
                         enabled: !TimerEngine.active
@@ -2194,6 +2207,7 @@ QQC2.Page {
                         Accessible.name: i18n("Sessions to remove")
                     }
                     SButton {
+                        kind: "ghost"
                         id: clearHistoryButton
                         destructive: true
                         text: i18n("Clear history…")
@@ -2232,11 +2246,10 @@ QQC2.Page {
                                "sugo://toggle, start, pause, resume, stop, skip, show, start/<timer>, preset/<timer>")
                         : i18n("Sugo can be controlled through D-Bus at %1, for example with the command below. Available commands: %2.",
                                "io.github.mineraleyt.sugo /Timer", "toggle, start, pause, stop, skip, status, presets, selectPreset, nextPreset, previousPreset, startPreset")
-                    Item { implicitWidth: 1 }
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.bottomMargin: Theme.spaceMd
+                    Layout.bottomMargin: Theme.settingsRowPaddingY + Theme.hairline
                     Layout.preferredHeight: dbusRow.implicitHeight + Theme.spaceSm * 2
                     color: Theme.background
                     border.width: Theme.hairline
@@ -2245,17 +2258,17 @@ QQC2.Page {
                     RowLayout {
                         id: dbusRow
                         anchors.fill: parent
-                        anchors.leftMargin: Theme.spaceMd
-                        anchors.rightMargin: Theme.spaceXs
-                        spacing: Theme.spaceSm
+                        anchors.leftMargin: Theme.spaceMd + Theme.hairline * 2
+                        anchors.rightMargin: Theme.spaceSm
+                        spacing: Theme.spaceMd
                         TextEdit {
                             id: dbusLabel
                             Layout.fillWidth: true
                             readOnly: true
                             selectByMouse: true
                             text: DesktopStyle.macos ? "open sugo://toggle" : "qdbus6 io.github.mineraleyt.sugo /Timer toggle"
-                            color: Theme.foreground
-                            selectionColor: Theme.alpha(Theme.brand, 0.35)
+                            color: Theme.dim
+                            selectionColor: Theme.alpha(Theme.accent, 0.35)
                             font.family: Theme.monoFamily
                             font.pixelSize: Theme.fontCaption
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -2263,13 +2276,10 @@ QQC2.Page {
                         }
                         SButton {
                             kind: "ghost"
-                            iconOnly: true
+                            implicitHeight: Theme.controlHeightSm
                             iconName: "copy"
                             text: i18n("Copy command")
                             Accessible.name: text
-                            QQC2.ToolTip.text: text
-                            QQC2.ToolTip.visible: hovered
-                            QQC2.ToolTip.delay: Theme.toolTipDelay
                             onClicked: {
                                 dbusLabel.selectAll();
                                 dbusLabel.copy();
@@ -2285,6 +2295,7 @@ QQC2.Page {
                     title: i18n("Global shortcuts")
                     description: i18n("Assign keys to these commands in Plasma's System Settings.")
                     SButton {
+                        kind: "ghost"
                         text: i18n("Open Shortcut Settings")
                         iconName: "external"
                         onClicked: AppSettings.openShortcutsSettings()
@@ -2364,6 +2375,7 @@ QQC2.Page {
                     title: i18n("Welcome tour")
                     description: i18n("Go through the introduction to Sugo again.")
                     SButton {
+                        kind: "ghost"
                         text: i18n("Show the Welcome Tour")
                         iconName: "info"
                         onClicked: applicationWindow().navigate("welcome")
@@ -2373,6 +2385,7 @@ QQC2.Page {
                     title: i18n("Reset settings")
                     description: i18n("Put the settings back to what they were when you first started Sugo. Your timers, session history and calendar account are kept.")
                     SButton {
+                        kind: "ghost"
                         destructive: true
                         text: i18n("Reset Settings…")
                         iconName: "undo"
