@@ -421,6 +421,24 @@ private Q_SLOTS:
         QVERIFY(remoteNames(a).contains(QStringLiteral("Offline edit")));
     }
 
+    void hugeRetryAfterDoesNotRetryAtOnce()
+    {
+        Device a(*server);
+        signInFirst(a);
+        const int before = puts();
+        // 429496730 "seconds" of kUnitMs is 2^32 + 4 ms: a timer that took it as an int would fire
+        // after 4 ms, and hammer a server that asked to be left alone.
+        server->retryAfter = "429496730";
+        server->failNext(kBlobPath, 429, "PUT");
+        a.model->create({{QStringLiteral("name"), QStringLiteral("Rate limited")}});
+        QTRY_COMPARE(a.sync->state(), SyncController::Error);
+        QCOMPARE(a.sync->errorKind(), SyncController::RateLimited);
+        QCOMPARE(puts(), before + 1);
+        QTest::qWait(30 * kUnitMs);
+        QCOMPARE(puts(), before + 1); // the next try waits for the server (at most an hour)
+        QCOMPARE(a.sync->state(), SyncController::Error);
+    }
+
     void mergeEqualToRemoteIsNotUploaded()
     {
         Device a(*server);
