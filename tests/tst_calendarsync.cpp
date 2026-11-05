@@ -157,6 +157,7 @@ public:
     QList<int> putStatuses;            ///< Consumed one per PUT, then defaultPut.
     int defaultPut = 201;
     int deleteStatus = 204;
+    int propfindStatus = 0;            ///< Answers every PROPFIND with this status when not 0.
     QString prefix;                    ///< XML namespace prefix of the multistatus.
     int pollsBefore200 = 2;
     int polls = 0;
@@ -250,6 +251,10 @@ private:
         }
         if (!expectedAuth.isEmpty() && req.headers.value("authorization") != expectedAuth) {
             reply(s, 401, "no");
+            return;
+        }
+        if (req.method == "PROPFIND" && propfindStatus != 0) {
+            reply(s, propfindStatus);
             return;
         }
         if (req.method == "PROPFIND") {
@@ -763,6 +768,26 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->calendars().size(), 1);
         QCOMPARE(m_sync->calendars().first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Mine"));
         QCOMPARE(m_sync->calendars().first().toMap().value(QStringLiteral("url")).toString(), m_server->base() + QStringLiteral("/custom/calendar"));
+    }
+
+    void discovery403DoesNotPauseSending()
+    {
+        // The server does not let this account list the place asked (an ACL on the principal or
+        // the calendar home): a refusal of the address, not of the login. The calendar chosen
+        // still gets the events.
+        configureCustom();
+        m_server->propfindStatus = 403;
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        checkNoSecrets();
+
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 1);
     }
 
     void discoveryWrongPassword()

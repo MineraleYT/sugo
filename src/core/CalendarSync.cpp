@@ -1601,10 +1601,15 @@ void CalendarSync::listCalendars(const QUrl &url, std::function<bool()> stale, s
 
 void CalendarSync::discoveryFailed(const Result &r)
 {
-    if (r.http == 401 || r.http == 403) {
+    // Only a 401 is the login. A 403 to a PROPFIND is the server not letting this account list
+    // that place (an ACL on the principal or the calendar home, an address of someone else's):
+    // it says nothing about the calendar chosen, which keeps getting the events.
+    if (r.http == 401) {
         m_paused = true;
     }
-    const QString message = describeFailure(r);
+    const QString message = r.http == 403
+        ? i18n("The server does not let this account list the calendars at this address (HTTP 403): check the address.")
+        : describeFailure(r);
     setLastError(message);
     setStatus(Failed, message);
 }
