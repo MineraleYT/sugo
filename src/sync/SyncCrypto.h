@@ -120,8 +120,10 @@ QByteArray box(const SecretBytes &message, const QByteArray &theirPublicKey, con
 std::optional<SecretBytes> openBox(const QByteArray &sealed, const QByteArray &fromPublicKey,
                                    const SecretBytes &mySecretKey);
 
-/// Six digits from two public keys, the same whichever comes first; empty if a key is not
-/// 32 bytes. Both devices show it before K is sent.
+/// 80 bits of the two public keys' hash as 16 characters of Crockford's Base32 in four groups
+/// ("7KQ2-M4DX-…"), the same whichever key comes first; empty if a key is not 32 bytes. Both
+/// devices show it before K is sent: too long for a server relaying the keys to grind keys of
+/// its own until the two codes agree.
 QString verificationCode(const QByteArray &publicKeyA, const QByteArray &publicKeyB);
 
 // --- Recovery code -----------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include <QRegularExpression>
 #include <QTest>
 
 #include <algorithm>
@@ -34,7 +35,8 @@ const QByteArray kPublicB = QByteArray::fromHex("5869aff450549732cbaaed5e5df9b30
 const QByteArray kBoxAtoB = QByteArray::fromHex(
     "404142434445464748494a4b4c4d4e4f50515253545556579ed3d68a9d014d06bceef5b03b24ef006b5e2fe7162d5982"
     "6d0ad6b4a34481676ee7d4fdce2cc37f620a50b892255967");
-const QString kVerification = QStringLiteral("751713");
+/// Checked with Python's hashlib.blake2b (16 bytes, person "SugoVerifyCode"), first 80 bits in Base32.
+const QString kVerification = QStringLiteral("F4ZR-24T5-W1VE-3V1Z");
 
 const QByteArray kRecoveryBytes = range(0xf0, 16);
 const QString kRecoveryText = QStringLiteral("Y3RZ-5WZM-YQVF-FY7S-ZBXZ-SZFY-ZZG0");
@@ -207,8 +209,10 @@ private Q_SLOTS:
 
         const SyncCrypto::KeyPair other = SyncCrypto::generateKeyPair();
         const QString code = SyncCrypto::verificationCode(other.publicKey, kPublicB);
-        QCOMPARE(code.size(), 6);
-        QVERIFY(std::all_of(code.cbegin(), code.cend(), [](QChar c) { return c.isDigit(); }));
+        // 16 characters of Crockford's Base32 (80 bits) in four groups: a server that relays the
+        // keys cannot grind keys of its own until both screens show the same code.
+        QCOMPARE(code.size(), 19);
+        QVERIFY(QRegularExpression(QStringLiteral("^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$")).match(code).hasMatch());
         QCOMPARE(SyncCrypto::verificationCode(kPublicB, other.publicKey), code);
         QVERIFY(SyncCrypto::verificationCode(kPublicA, QByteArray(31, 'x')).isEmpty());
     }

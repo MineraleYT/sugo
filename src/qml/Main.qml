@@ -1782,23 +1782,29 @@ QQC2.ApplicationWindow {
             border.color: Theme.border
             Column {
                 anchors.centerIn: parent
+                width: parent.width - Theme.spaceLg * 2
                 spacing: Theme.spaceXs
                 Text {
                     id: approvalCaption
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
                     text: i18n("Verification code")
                     color: Theme.muted
                     font.pixelSize: Theme.fontCaption
                 }
                 Text {
                     id: approvalCode
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    // 19 characters ("XXXX-XXXX-XXXX-XXXX"): smaller rather than cut in a narrow window.
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
                     text: syncApprovalDialog.device.verificationCode || ""
                     color: Theme.foreground
                     font.family: Theme.monoFamily
                     font.pixelSize: Theme.fontDisplay
                     font.weight: Font.DemiBold
                     font.letterSpacing: Theme.letterSpacingCaps * 2
+                    fontSizeMode: Text.HorizontalFit
+                    minimumPixelSize: Theme.fontTitle
                     Accessible.role: Accessible.StaticText
                     Accessible.name: i18n("Verification code") + " " + text
                 }
