@@ -589,6 +589,18 @@ QQC2.ApplicationWindow {
                     fail(40, "The timer page shows \"" + page.title + "\" instead of \"" + PresetModel.currentName + "\"");
                     return true;
                 }
+                // Its timer button names the timer and lists the timers to choose from.
+                const chooser = findItem(page, item => item.objectName === "timerChooser");
+                if (!chooser || chooser.text !== PresetModel.currentName) {
+                    fail(40, "The timer page's button does not name the timer in use");
+                    return true;
+                }
+                chooser.clicked();
+                if (!commandPalette.visible || commandPalette.commands.length !== PresetModel.count + 1) {
+                    fail(40, "The timer page's button did not list the timers");
+                    return true;
+                }
+                commandPalette.close();
                 // A phase that has only just started stops at once.
                 TimerEngine.start();
                 page.requestStop();
@@ -1135,6 +1147,12 @@ QQC2.ApplicationWindow {
             list.push({ text: i18n("Stop the timer"), icon: "stop", run: () => root.requestEndPhase(false) });
             list.push({ text: i18n("Skip to the next phase"), icon: "skip", run: () => root.requestEndPhase(true) });
         }
+        return list.concat(root.timerCommands());
+    }
+
+    /// The timers, for the search: one chosen becomes the one in use and its page opens.
+    function timerCommands(): var {
+        const list = [];
         for (let i = 0; i < PresetModel.count; ++i) {
             const uuid = PresetModel.uuidAt(i);
             const preset = PresetModel.get(uuid);
@@ -1147,6 +1165,12 @@ QQC2.ApplicationWindow {
 
     function openSearch(): void {
         commandPalette.commands = root.paletteCommands();
+        commandPalette.open();
+    }
+
+    /// The search with only the timers and New timer (the timer button of the focus page).
+    function openTimerSearch(): void {
+        commandPalette.commands = root.timerCommands().concat([{ text: i18n("New timer"), icon: "plus", run: () => root.newTimer() }]);
         commandPalette.open();
     }
 

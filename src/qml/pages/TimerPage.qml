@@ -5,7 +5,7 @@ import QtQuick.Shapes
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// The focus page: the time in large, where it sits in the cycle, and the three controls.
+/// The focus page: the time in large, where it sits in the cycle, the three controls and the timer in use.
 QQC2.Page {
     id: page
 
@@ -370,35 +370,61 @@ QQC2.Page {
             }
         }
 
-        RowLayout {
+        // The timer in use; a click lists the timers, to choose another one or open its page.
+        QQC2.AbstractButton {
+            id: timerChooser
+            objectName: "timerChooser"
             Layout.alignment: Qt.AlignHCenter
-            spacing: Theme.spaceSm
-            Kbd {
-                text: i18nc("keyboard key", "Space")
-            }
-            Text {
-                id: spaceHint
-                text: TimerEngine.active && !TimerEngine.paused ? i18n("pause") : i18n("start")
-                color: Theme.subtle
-                font.pixelSize: Theme.fontCaption
-                // As wide as the wider word.
-                Layout.preferredWidth: Math.ceil(Math.max(hintMetrics.advanceWidth(i18n("pause")), hintMetrics.advanceWidth(i18n("start"))))
-                FontMetrics {
-                    id: hintMetrics
-                    font: spaceHint.font
+            Layout.maximumWidth: page.trackWidth
+            implicitHeight: Theme.controlHeight
+            implicitWidth: chooserRow.implicitWidth + leftPadding + rightPadding
+            leftPadding: Theme.spaceMd
+            rightPadding: Theme.spaceMd
+            hoverEnabled: true
+            focusPolicy: Qt.TabFocus
+            text: PresetModel.currentName
+            Accessible.name: text
+            Accessible.description: TimerEngine.active ? i18n("Stop the timer to switch to a different timer.") : ""
+            QQC2.ToolTip.visible: hovered && TimerEngine.active
+            QQC2.ToolTip.text: Accessible.description
+            QQC2.ToolTip.delay: Theme.toolTipDelay
+            onClicked: applicationWindow().openTimerSearch()
+
+            background: Rectangle {
+                radius: Theme.radius
+                color: timerChooser.down ? Theme.pressed : timerChooser.hovered ? Theme.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.durationShort } }
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: -Theme.hairline * 2
+                    radius: Theme.radius + Theme.hairline * 2
+                    color: "transparent"
+                    border.width: Theme.hairline
+                    border.color: Theme.focusRing
+                    visible: timerChooser.visualFocus
                 }
             }
-            // Faded rather than hidden: the hints beside them keep their place.
-            Kbd {
-                Layout.leftMargin: Theme.spaceSm
-                opacity: TimerEngine.active ? 1 : 0
-                text: i18nc("keyboard key", "S")
-            }
-            Text {
-                opacity: TimerEngine.active ? 1 : 0
-                text: i18n("skip")
-                color: Theme.subtle
-                font.pixelSize: Theme.fontCaption
+            contentItem: RowLayout {
+                id: chooserRow
+                spacing: Theme.spaceSm
+                LineIcon {
+                    name: "timer"
+                    size: Theme.iconSm
+                    color: Theme.muted
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: timerChooser.text
+                    elide: Text.ElideRight
+                    color: Theme.foreground
+                    font.pixelSize: Theme.fontBody
+                    font.weight: Font.Medium
+                }
+                LineIcon {
+                    name: "chevron-down"
+                    size: Theme.iconSm
+                    color: Theme.muted
+                }
             }
         }
     }

@@ -42,6 +42,7 @@
   "screens": {
     "timer": {
       "common": [
+        "button: Pomodoro",
         "button: Skip",
         "button: Start",
         "button: Stop"
