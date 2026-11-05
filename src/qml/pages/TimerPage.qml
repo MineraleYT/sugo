@@ -217,6 +217,7 @@ QQC2.Page {
                 implicitHeight: Theme.phaseDot
                 radius: width / 2
                 color: page.phaseColor
+                Behavior on color { ColorAnimation { duration: Theme.durationLong } }
                 SequentialAnimation on opacity {
                     running: page.running
                     loops: Animation.Infinite
@@ -231,6 +232,7 @@ QQC2.Page {
                 elide: Text.ElideRight
                 text: page.phaseText
                 color: page.phaseColor
+                Behavior on color { ColorAnimation { duration: Theme.durationLong } }
                 font.pixelSize: Theme.fontBody
                 font.weight: Font.Medium
             }
