@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QSet>
@@ -140,7 +141,9 @@ public Q_SLOTS:
     /// Sugo-Pending-Devices: lists the devices and asks about each new one (approvalRequested());
     /// with none waiting, lists them again if the list still shows one waiting.
     void checkPendingDevices(int count);
-    /// Sends K to a pending device, boxed for its public key by this device's key.
+    /// Sends K to a pending device, boxed for its public key by this device's key. Only for the
+    /// key whose verification code was shown (approvalRequested()): if the list now shows another
+    /// one, approvalFailed() and the device is asked about again, with the new code.
     void approveDevice(const QString &id);
     /// Asks no more about this device until the program restarts, or askAgain().
     void ignoreDevice(const QString &id);
@@ -280,7 +283,7 @@ private:
 
     // Approval of other devices
     bool m_checkingPending = false;
-    QSet<QString> m_asked;
+    QHash<QString, QByteArray> m_asked; ///< Device id → the public key its code was shown for.
     QSet<QString> m_ignored;
 
     bool m_recoveryShowable = false;

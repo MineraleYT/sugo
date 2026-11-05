@@ -385,6 +385,40 @@ private Q_SLOTS:
         QVERIFY(approved.wait(5000));
     }
 
+    void keySwappedAfterTheCodeIsNotApproved()
+    {
+        Client a(*server);
+        Client b(*server);
+        twoDevices(a, b);
+
+        QSignalSpy asked(a.account.get(), &SyncAccount::approvalRequested);
+        QSignalSpy approved(a.account.get(), &SyncAccount::deviceApproved);
+        QSignalSpy failed(a.account.get(), &SyncAccount::approvalFailed);
+        a.account->refreshDevices();
+        QVERIFY(asked.wait(5000));
+        QCOMPARE(asked.first().at(3).toString(), b.account->verificationCode());
+
+        // The user compared the code; before they approve, a compromised server lists the same
+        // waiting device with a key of its own.
+        const SyncCrypto::KeyPair attacker = SyncCrypto::generateKeyPair();
+        server->device(b.account->deviceId())->publicKey = attacker.publicKey;
+        QSignalSpy listed(a.account.get(), &SyncAccount::devicesChanged);
+        a.account->refreshDevices();
+        QVERIFY(listed.wait(5000));
+
+        const QByteArray keyPut = "/v1/devices/" + b.account->deviceId().toUtf8() + "/key";
+        a.account->approveDevice(b.account->deviceId());
+        QTest::qWait(100);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(approved.size(), 0);
+        QCOMPARE(server->count("PUT", keyPut), 0);
+
+        // The device is asked about again, with the code of the key it now shows.
+        QTRY_COMPARE_WITH_TIMEOUT(asked.size(), 2, 5000);
+        QCOMPARE(asked.last().at(3).toString(), SyncCrypto::verificationCode(a.account->publicKey(), attacker.publicKey));
+        QVERIFY(asked.last().at(3).toString() != b.account->verificationCode());
+    }
+
     void forgedSenderIsRejected_data()
     {
         QTest::addColumn<bool>("forgeKey");
