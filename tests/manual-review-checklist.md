@@ -50,6 +50,17 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] With a timer whose "Silence notifications while working" is on, start it: Do Not Disturb turns on; pause or stop it: it turns off. With the option off, nothing happens.
 - [ ] Run each installed shortcut once in Shortcuts: "On" turns on Do Not Disturb until turned off, "Off" turns it off.
 
+## macOS: Keychain
+
+Secrets (the calendar password; the sync's token and key once the sync is in) are items of the login Keychain, label "Sugo", service `io.github.mineraleyt.sugo`. Each item trusts the build that wrote it, and an ad hoc signed build is known by its code hash, so every update is a new build for the Keychain. Use two different builds of the app (a release and the next nightly, or two local builds of different commits), each replacing the other at the same path, as "Install update" does.
+
+- [ ] With build 1, save a calendar password (Settings → Calendar) and restart: no question from macOS.
+- [ ] Replace it with build 2 and start it: macOS asks once per stored secret to let Sugo use it. Note what the dialog asks for (Allow / Always Allow, or the login password) and that Sugo's window does not respond until it is answered. Choose "Always Allow", restart: no question.
+- [ ] With build 2, change the calendar password, restart: no question (the item is rewritten as build 2's). Go back to build 1: it asks again, as for any update.
+- [ ] After an update, answer "Deny" (start Sugo from a terminal, `Sugo.app/Contents/MacOS/Sugo`, to see its messages): Sugo goes on without the password (the calendar shows it as missing), nothing hangs, and the terminal shows the OSStatus of the refusal once (`Cannot read "calendar-caldav" from the Keychain, OSStatus -128`: "Deny" gave -128 on macOS 27; note it if it differs) followed by "Access to … was refused". Then finish two work sessions with the calendar on and use "Test connection": macOS does not ask again. Enter the password again: it is saved without a question and the queued sessions go out. Quit and start again: macOS asks once more (a new start asks again).
+- [ ] Without a usable Keychain (start `Sugo.app/Contents/MacOS/Sugo` from an SSH session, which has no login session: every Keychain call fails at once with OSStatus -25308, no dialog): Sugo starts normally; once the sync is in, Settings → Sync says it needs the system keyring and stays off (sync-plan S4), the same as on a Linux desktop without Secret Service.
+- [ ] Once the sync is in: sign in, update the app (build 1 → 2), let a sync run: at most one question per secret, then syncing goes on; "Sign out" removes Sugo's sync items from Keychain Access.
+
 ## No layout shift
 
 - [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).

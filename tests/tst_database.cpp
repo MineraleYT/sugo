@@ -92,8 +92,8 @@ private Q_SLOTS:
 
         QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
         QCOMPARE(tableNames(db.connectionName()),
-                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"),
-                              QStringLiteral("preset_option"), QStringLiteral("session")}));
+                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"), QStringLiteral("preset_option"),
+                              QStringLiteral("preset_tombstone"), QStringLiteral("session")}));
     }
 
     void foreignKeysAreEnforced()
@@ -143,6 +143,59 @@ private Q_SLOTS:
         }
     }
 
+    void version1TimersAreMigratedForSync()
+    {
+        // A file as Sugo 1.0 left it: schema 1, created_at in seconds.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("v1.db"));
+        const QString name = QStringLiteral("v1-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+        {
+            QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+            raw.setDatabaseName(path);
+            QVERIFY(raw.open());
+            QSqlQuery query(raw);
+            for (const char *statement : {
+                     "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                     "CREATE TABLE preset (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT NOT NULL UNIQUE, "
+                     "name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', work_sec INTEGER NOT NULL CHECK (work_sec > 0), "
+                     "short_break_sec INTEGER NOT NULL CHECK (short_break_sec >= 0), "
+                     "long_break_sec INTEGER NOT NULL CHECK (long_break_sec >= 0), "
+                     "cycles_before_long INTEGER NOT NULL DEFAULT 4 CHECK (cycles_before_long >= 0), "
+                     "is_builtin INTEGER NOT NULL DEFAULT 0, sort_order INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)",
+                     "CREATE TABLE preset_option (preset_id INTEGER NOT NULL REFERENCES preset(id) ON DELETE CASCADE, "
+                     "key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (preset_id, key))",
+                     "CREATE TABLE session (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, started_at INTEGER NOT NULL, "
+                     "ended_at INTEGER NOT NULL, duration_sec INTEGER NOT NULL, planned_sec INTEGER NOT NULL, "
+                     "completed INTEGER NOT NULL, preset_id INTEGER REFERENCES preset(id) ON DELETE SET NULL, "
+                     "preset_name TEXT NOT NULL, category TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '')",
+                     "INSERT INTO preset (uuid, name, work_sec, short_break_sec, long_break_sec, created_at) "
+                     "VALUES ('old', 'Old timer', 1500, 300, 900, 1700000000)",
+                 }) {
+                QVERIFY2(query.exec(QString::fromLatin1(statement)), statement);
+            }
+            QVERIFY(query.exec(QStringLiteral("PRAGMA application_id = %1").arg(Database::kApplicationId)));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 1")));
+            raw.close();
+        }
+        QSqlDatabase::removeDatabase(name);
+
+        Database db(path);
+        QVERIFY2(db.open(), qPrintable(db.lastError()));
+        QVERIFY(db.movedAsidePath().isEmpty());
+        QCOMPARE(db.schemaVersion(), 2);
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT created_at FROM preset WHERE uuid = 'old'")).toLongLong(),
+                 1700000000000LL); // now milliseconds
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT updated_at FROM preset WHERE uuid = 'old'")).toLongLong(), 0);
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT updated_by FROM preset WHERE uuid = 'old'")).toString(), QString());
+        QVERIFY(tableNames(db.connectionName()).contains(QStringLiteral("preset_tombstone")));
+
+        QSqlQuery query(QSqlDatabase::database(db.connectionName(), false));
+        QVERIFY(query.exec(QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 5)")));
+        QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT deleted_by FROM preset_tombstone")).toString(), QString());
+        QVERIFY(!query.exec(QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 6)"))); // one per uuid
+    }
+
     void databaseFromNewerVersionIsRefusedAndUntouched()
     {
         QTemporaryDir dir;
@@ -177,8 +230,8 @@ private Q_SLOTS:
         // The new database is complete and stamped.
         QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
         QCOMPARE(tableNames(db.connectionName()),
-                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"),
-                              QStringLiteral("preset_option"), QStringLiteral("session")}));
+                 (QStringList{QStringLiteral("meta"), QStringLiteral("preset"), QStringLiteral("preset_option"),
+                              QStringLiteral("preset_tombstone"), QStringLiteral("session")}));
         QCOMPARE(scalar(db.connectionName(), QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
 
         // The old file survives untouched under a new name.

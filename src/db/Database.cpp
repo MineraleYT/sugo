@@ -66,6 +66,21 @@ CREATE TABLE session (
             QStringLiteral("CREATE INDEX idx_session_started ON session(started_at)"),
             QStringLiteral("CREATE INDEX idx_session_kind_started ON session(kind, started_at)"),
         },
+        // Version 2: what Sugo Sync needs to merge timers (docs/sync-plan.md). Preset times are
+        // milliseconds since the epoch (UTC) from here on; version 1 stored created_at in seconds.
+        // updated_at 0: not changed since this version. updated_by / deleted_by: the Sugo Sync
+        // device that made the change, empty for this computer.
+        {
+            QStringLiteral("ALTER TABLE preset ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0"),
+            QStringLiteral("ALTER TABLE preset ADD COLUMN updated_by TEXT NOT NULL DEFAULT ''"),
+            QStringLiteral("UPDATE preset SET created_at = created_at * 1000"),
+            QStringLiteral(R"(
+CREATE TABLE preset_tombstone (
+    uuid       TEXT    PRIMARY KEY,
+    deleted_at INTEGER NOT NULL,
+    deleted_by TEXT    NOT NULL DEFAULT ''
+))"),
+        },
     };
     return list;
 }

@@ -512,7 +512,11 @@ bool DataManager::restoreDatabase(const QUrl &fileUrl)
         Q_EMIT operationFailed(i18n("Could not restore the backup: %1", error));
         return false;
     }
-    if (m_presets && m_presetsRepository) m_presets->setPresets(presets, currentUuid);
+    if (m_presets && m_presetsRepository) {
+        m_presets->setPresets(presets, currentUuid);
+        // Restoring is the user's choice: Sugo Sync publishes these timers over newer ones elsewhere.
+        m_presets->markAllModified();
+    }
     if (m_recorder) m_recorder->forgetHistory();
     if (m_stats) m_stats->refresh();
     Q_EMIT dataChanged();

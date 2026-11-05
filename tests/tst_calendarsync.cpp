@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "CalendarSync.h"
+#include "FakeSecretStore.h"
 #include "SecretStore.h"
 #include "Settings.h"
 
@@ -50,36 +51,6 @@ private:
 };
 
 const QString kPassword = QStringLiteral("s3cretPW-xyz");
-
-/// An in-memory keyring; copies share their contents, like a real keyring across restarts.
-class FakeSecretStore : public SecretStore
-{
-public:
-    std::shared_ptr<QHash<QString, QString>> secrets = std::make_shared<QHash<QString, QString>>();
-    std::shared_ptr<bool> available = std::make_shared<bool>(true);
-    std::shared_ptr<int> reads = std::make_shared<int>(0);
-
-    std::optional<QString> read(const QString &key) override
-    {
-        ++*reads;
-        if (!*available) {
-            return std::nullopt;
-        }
-        return secrets->value(key);
-    }
-    bool write(const QString &key, const QString &secret) override
-    {
-        if (!*available) {
-            return false;
-        }
-        if (secret.isEmpty()) {
-            secrets->remove(key);
-        } else {
-            secrets->insert(key, secret);
-        }
-        return true;
-    }
-};
 
 QByteArray basic(const QString &user, const QString &pw)
 {
@@ -366,7 +337,8 @@ private:
     std::unique_ptr<CalendarSync> makeSyncWithKeyring(const FakeSecretStore &keyring)
     {
         auto config = Settings::open(configPath());
-        auto store = std::make_unique<FakeSecretStore>(keyring);
+        // As createSecretStore() gives it: a refused secret is not asked for again.
+        auto store = std::make_unique<AskOnceSecretStore>(std::make_unique<FakeSecretStore>(keyring));
         auto sync = std::make_unique<CalendarSync>(config, std::move(store));
         sync->setRetryDelaysForTesting({40, 80});
         sync->setLoginPollIntervalForTesting(20);
@@ -1981,6 +1953,41 @@ private Q_SLOTS:
         QTRY_COMPARE(m_sync->pendingCount(), 0);
         QVERIFY(m_sync->hasPassword());
         QCOMPARE(m_server->stored.size(), 1);
+    }
+
+    void aRefusedKeyringIsNotAskedAgainAtEverySend()
+    {
+        FakeSecretStore keyring;
+        m_sync = makeSyncWithKeyring(keyring);
+        configureCustom();
+        QVERIFY(m_sync->isPasswordInKeyring());
+
+        // An update of the macOS app: the next start asks, and the user answers "Deny".
+        *keyring.refuses = true;
+        *keyring.reads = 0;
+        m_sync = makeSyncWithKeyring(keyring);
+        QVERIFY(!m_sync->hasPassword());
+        const int asked = *keyring.reads;
+        QCOMPARE(asked, 1);
+
+        // Work sessions, a connection test, a calendar refresh: no new question, nothing sent.
+        m_sync->enqueueWorkSession(record());
+        m_sync->enqueueWorkSession(record(8));
+        m_sync->testConnection();
+        m_sync->refreshCalendars();
+        QTest::qWait(200);
+        QCOMPARE(*keyring.reads, asked);
+        QVERIFY(!m_sync->hasPassword());
+        QCOMPARE(m_sync->pendingCount(), 2);
+        QCOMPARE(m_server->stored.size(), 0);
+
+        // Entering the password again stores it anew, and what was queued goes out.
+        m_sync->setPassword(kPassword);
+        QVERIFY(m_sync->hasPassword());
+        QVERIFY(m_sync->isPasswordInKeyring());
+        m_sync->enqueueWorkSession(record(9));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->stored.size(), 3);
     }
 
     void finishedWorkSessionsDoNotWaitForTheKeyring()

@@ -27,6 +27,21 @@ struct TimerPreset {
     int cyclesBeforeLong = 4; ///< 0 = never take a long break
     bool builtin = false;
     QVariantMap options;      ///< Only explicitly set options; the rest fall back to defaults.
+    /// Wall-clock times in milliseconds since the epoch (UTC), which Sugo Sync compares across
+    /// computers. 0: not known (the built-in preset as shipped, timers older than schema 2).
+    qint64 createdAt = 0;
+    qint64 updatedAt = 0;
+    /// The Sugo Sync device that made the last change; empty: this computer.
+    QString updatedBy;
+
+    /// Same timer, whatever its times: the fields and options a user can change.
+    bool sameContent(const TimerPreset &other) const
+    {
+        return uuid == other.uuid && name == other.name && category == other.category
+            && workSeconds == other.workSeconds && shortBreakSeconds == other.shortBreakSeconds
+            && longBreakSeconds == other.longBreakSeconds && cyclesBeforeLong == other.cyclesBeforeLong
+            && builtin == other.builtin && options == other.options;
+    }
 
     QVariant option(const QString &key) const
     {
@@ -39,5 +54,18 @@ struct TimerPreset {
     bool boolOption(const QString &key) const
     {
         return option(key).toBool();
+    }
+};
+
+/// A deleted timer, remembered so that Sugo Sync can tell other computers (and not bring the timer
+/// back from them). Kept for PresetRepository::TombstoneLifetimeMs.
+struct PresetTombstone {
+    QString uuid;
+    qint64 deletedAt = 0; ///< Milliseconds since the epoch (UTC).
+    QString deletedBy;    ///< The Sugo Sync device that deleted it; empty: this computer.
+
+    bool operator==(const PresetTombstone &other) const
+    {
+        return uuid == other.uuid && deletedAt == other.deletedAt && deletedBy == other.deletedBy;
     }
 };

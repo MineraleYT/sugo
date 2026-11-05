@@ -67,7 +67,7 @@ jobs:
           sudo apt-get install --no-install-recommends -y \
             appstream cmake ninja-build g++ dbus-daemon dbus-bin \
             qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
-            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules
+            qt6-svg-plugins qt6-multimedia-dev libqt6sql6-sqlite extra-cmake-modules libsodium-dev pkgconf
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON

@@ -85,6 +85,16 @@ PresetModel::PresetModel(QObject *parent)
     m_presets.append(makeDefaultPreset());
 }
 
+void PresetModel::setNowProvider(std::function<QDateTime()> provider)
+{
+    m_now = std::move(provider);
+}
+
+qint64 PresetModel::nowMs() const
+{
+    return (m_now ? m_now() : QDateTime::currentDateTimeUtc()).toMSecsSinceEpoch();
+}
+
 TimerPreset PresetModel::makeDefaultPreset()
 {
     // The one timer a new user starts with: the classic 25/5, with a long break of 15 after four,
@@ -391,6 +401,7 @@ QString PresetModel::create(const QVariantMap &fields)
     preset.uuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
     preset.name = i18n("New Timer");
     const QStringList adjusted = applyFields(preset, fields);
+    preset.createdAt = preset.updatedAt = nowMs();
 
     const int row = count();
     beginInsertRows({}, row, row);
@@ -410,7 +421,12 @@ bool PresetModel::update(const QString &uuid, const QVariantMap &fields)
     if (row < 0) {
         return false;
     }
+    const TimerPreset before = m_presets.at(row);
     const QStringList adjusted = applyFields(m_presets[row], fields);
+    if (!m_presets.at(row).sameContent(before)) {
+        m_presets[row].updatedAt = nowMs();
+        m_presets[row].updatedBy.clear();
+    }
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {
@@ -437,6 +453,8 @@ QString PresetModel::duplicate(const QString &uuid)
     const auto suffixLength = static_cast<int>(i18n("%1 (copy)", QString()).size());
     const QString base = limitedText(copy.name, PresetLimits::MaxNameLength - suffixLength);
     copy.name = limitedText(i18n("%1 (copy)", base));
+    copy.createdAt = copy.updatedAt = nowMs();
+    copy.updatedBy.clear();
 
     const int row = source + 1;
     beginInsertRows({}, row, row);
@@ -468,6 +486,16 @@ bool PresetModel::remove(const QString &uuid)
     return true;
 }
 
+void PresetModel::markAllModified()
+{
+    const qint64 now = nowMs();
+    for (TimerPreset &preset : m_presets) {
+        preset.updatedAt = now;
+        preset.updatedBy.clear();
+    }
+    Q_EMIT modified();
+}
+
 bool PresetModel::reset(const QString &uuid)
 {
     const int row = indexOf(uuid);
@@ -475,6 +503,7 @@ bool PresetModel::reset(const QString &uuid)
         return false;
     }
     m_presets[row] = makeDefaultPreset();
+    m_presets[row].updatedAt = nowMs(); // the reset itself is a change other computers must see
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {
@@ -499,7 +528,13 @@ bool PresetModel::setOption(const QString &uuid, const QString &key, const QVari
     if (row < 0 || !descriptor) {
         return false;
     }
-    m_presets[row].options.insert(key, coercedOption(*descriptor, value));
+    const QVariant coerced = coercedOption(*descriptor, value);
+    QVariantMap &options = m_presets[row].options;
+    if (!options.contains(key) || options.value(key) != coerced) {
+        options.insert(key, coerced);
+        m_presets[row].updatedAt = nowMs();
+        m_presets[row].updatedBy.clear();
+    }
     Q_EMIT dataChanged(index(row), index(row));
     Q_EMIT presetChanged(uuid);
     if (uuid == m_currentUuid) {

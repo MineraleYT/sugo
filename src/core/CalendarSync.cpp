@@ -4,6 +4,7 @@
 #include "SecretStore.h"
 
 #include "Localization.h"
+#include "UrlPolicy.h"
 
 #include <QColor>
 #include <QCoreApplication>
@@ -67,12 +68,6 @@ QString appVersion()
 #else
     return QCoreApplication::applicationVersion();
 #endif
-}
-
-bool isLoopbackHost(const QString &host)
-{
-    return host == QLatin1String("localhost") || host == QLatin1String("127.0.0.1") || host == QLatin1String("::1")
-        || host == QLatin1String("[::1]");
 }
 
 /// The URL as text, without a trailing slash and without query or fragment.
@@ -257,13 +252,10 @@ QByteArray CalendarSync::buildIcs(const SessionRecord &record, bool includeNote,
 
 bool CalendarSync::isUrlAllowed(const QUrl &url, QString *error)
 {
+    if (UrlPolicy::isAllowed(url)) {
+        return true;
+    }
     const QString scheme = url.scheme().toLower();
-    if (scheme == QLatin1String("https") && !url.host().isEmpty()) {
-        return true;
-    }
-    if (scheme == QLatin1String("http") && isLoopbackHost(url.host().toLower())) {
-        return true;
-    }
     if (error) {
         if (scheme == QLatin1String("http")) {
             *error = i18n("Plain %1 addresses are not allowed because the password would be sent unencrypted. Use an %2 address.", QStringLiteral("http://"), QStringLiteral("https://"));

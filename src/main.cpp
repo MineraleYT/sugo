@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <QApplication>
+#include <QClipboard>
 #include <QCommandLineParser>
+#include <QDesktopServices>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
@@ -59,6 +61,7 @@
 #include "Diagnostics.h"
 #include "CalendarSync.h"
 #include "DesktopStyle.h"
+#include "SyncController.h"
 #include "ThemeIcons.h"
 #include "UpdateChecker.h"
 
@@ -390,6 +393,20 @@ int main(int argc, char *argv[])
             QObject::connect(calendarSync, signal, calendarSync, updateRedactions);
         }
     }
+    // Sugo Sync of the timers. Not in a smoke run: there it stays Off and never reads the keyring.
+    auto *presetSync = engine.singletonInstance<SyncController *>("io.github.mineraleyt.sugo", "SyncController");
+    if (presetSync && !smokeTest) {
+        presetSync->setDesktopActions([](const QUrl &url) { return QDesktopServices::openUrl(url); },
+                                      [](const QString &text) { QGuiApplication::clipboard()->setText(text); });
+        presetSync->attach(presets, presetPersistence, &presetRepository);
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, presetSync, [presetSync](Qt::ApplicationState state) {
+            if (state == Qt::ApplicationActive) {
+                presetSync->windowActivated();
+            } else {
+                presetSync->windowDeactivated();
+            }
+        });
+    }
     auto *focusSound = new FocusSoundController(&services);
     focusSound->attach(timer, settings);
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), focusSound);
@@ -551,6 +568,9 @@ int main(int argc, char *argv[])
     dbusTimer->attach(nullptr, nullptr);
 #endif
     engine.rootContext()->setContextProperty(QStringLiteral("DataManager"), QVariant::fromValue<QObject *>(nullptr));
+    if (presetSync) {
+        presetSync->attach(nullptr, nullptr, nullptr); // its persistence goes with `services`
+    }
     engine.rootContext()->setContextProperty(QStringLiteral("FocusSoundController"), QVariant::fromValue<QObject *>(nullptr));
     if (smokeTest && status == EXIT_SUCCESS && smokeWarnings > 0) {
         qCritical() << "The smoke test produced" << smokeWarnings << "QML warning(s)";

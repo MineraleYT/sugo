@@ -64,6 +64,11 @@ else()
     set(SUGO_DBUS "")
 endif()
 
+# Sugo Sync's encryption, the same library on every system (docs/sync-plan.md). 1.0.18 is the
+# oldest the supported distributions ship.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(sodium REQUIRED IMPORTED_TARGET libsodium>=1.0.18)
+
 # QML modules live under qrc:/qt/qml/ (QTP0001). Qt >= 6.8: one qmldir per QML subdirectory (QTP0004).
 qt6_policy(SET QTP0001 NEW)
 if(QT_KNOWN_POLICY_QTP0004)

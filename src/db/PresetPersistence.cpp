@@ -39,11 +39,18 @@ PresetPersistence::PresetPersistence(PresetModel *model, PresetRepository *repos
 
 void PresetPersistence::savePresets()
 {
-    const bool saved = m_repository->saveAll(m_model->presets());
-    setSaveFailing(!saved);
-    if (saved) {
+    save();
+}
+
+bool PresetPersistence::save(const QList<PresetTombstone> &received)
+{
+    const bool stored = m_repository->saveAll(m_model->presets(), received);
+    setSaveFailing(!stored);
+    if (stored) {
         saveSelection();
+        Q_EMIT saved();
     }
+    return stored;
 }
 
 void PresetPersistence::saveSelection()
