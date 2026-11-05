@@ -139,10 +139,18 @@ QQC2.Page {
             : i18nc("the round of work in a set", "Round %1 of %2", round, cycles);
     }
 
+    // Above the controls: the time, centred in the room they leave.
+    Item {
+        id: focusArea
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: dock.top
+    }
+
     ColumnLayout {
         id: clockColumn
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -Theme.spaceXl
+        anchors.centerIn: focusArea
         width: Math.min(implicitWidth, page.width - Theme.space2xl * 2)
         spacing: Theme.spaceXl
 
@@ -316,93 +324,6 @@ QQC2.Page {
                 }
             }
         }
-
-        // Stop · start/pause · skip.
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: Theme.spaceSm
-            spacing: Theme.spaceXl
-
-            RoundButton {
-                diameter: Theme.space3xl + Theme.spaceMd
-                iconName: "stop"
-                text: i18n("Stop")
-                enabled: TimerEngine.active
-                onClicked: page.requestStop()
-            }
-            RoundButton {
-                diameter: Theme.space4xl + Theme.spaceXl
-                primary: true
-                iconName: page.isIdle || TimerEngine.paused ? "play" : "pause"
-                text: TimerEngine.paused ? i18n("Resume") : page.isIdle ? (page.isWorkPhase ? i18n("Start") : i18n("Start break")) : i18n("Pause")
-                onClicked: TimerEngine.toggle()
-            }
-            RoundButton {
-                diameter: Theme.space3xl + Theme.spaceMd
-                iconName: "skip"
-                text: i18n("Skip")
-                enabled: TimerEngine.active
-                onClicked: page.requestSkip()
-            }
-        }
-
-        // The timer in use; a click lists the timers, to choose another one or open its page.
-        QQC2.AbstractButton {
-            id: timerChooser
-            objectName: "timerChooser"
-            Layout.alignment: Qt.AlignHCenter
-            Layout.maximumWidth: page.trackWidth
-            implicitHeight: Theme.controlHeight
-            implicitWidth: chooserRow.implicitWidth + leftPadding + rightPadding
-            leftPadding: Theme.spaceMd
-            rightPadding: Theme.spaceMd
-            hoverEnabled: true
-            focusPolicy: Qt.TabFocus
-            text: PresetModel.currentName
-            Accessible.name: text
-            Accessible.description: TimerEngine.active ? i18n("Stop the timer to switch to a different timer.") : ""
-            QQC2.ToolTip.visible: hovered && TimerEngine.active
-            QQC2.ToolTip.text: Accessible.description
-            QQC2.ToolTip.delay: Theme.toolTipDelay
-            onClicked: applicationWindow().openTimerSearch()
-
-            background: Rectangle {
-                radius: Theme.radius
-                color: timerChooser.down ? Theme.pressed : timerChooser.hovered ? Theme.hover : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.durationShort } }
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -Theme.hairline * 2
-                    radius: Theme.radius + Theme.hairline * 2
-                    color: "transparent"
-                    border.width: Theme.hairline
-                    border.color: Theme.focusRing
-                    visible: timerChooser.visualFocus
-                }
-            }
-            contentItem: RowLayout {
-                id: chooserRow
-                spacing: Theme.spaceSm
-                LineIcon {
-                    name: "timer"
-                    size: Theme.iconSm
-                    color: Theme.muted
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: timerChooser.text
-                    elide: Text.ElideRight
-                    color: Theme.foreground
-                    font.pixelSize: Theme.fontBody
-                    font.weight: Font.Medium
-                }
-                LineIcon {
-                    name: "chevron-down"
-                    size: Theme.iconSm
-                    color: Theme.muted
-                }
-            }
-        }
     }
 
     // Paused by the screen lock or by sleep: say so, and offer to go on.
@@ -435,67 +356,54 @@ QQC2.Page {
         }
     }
 
-    // Reminder that the desktop is not showing notifications because of us.
-    RowLayout {
+    // The controls, and under them what today brought.
+    ColumnLayout {
+        id: dock
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.spaceXl
-        spacing: Theme.spaceSm
-        visible: SilenceController.available && SilenceController.active
-        LineIcon {
-            name: "bell-off"
-            size: Theme.iconSm
-            color: Theme.subtle
+        anchors.bottomMargin: Theme.dockBottomMargin
+        width: Math.max(0, Math.min(Theme.composerWidth, page.width - Theme.spaceLg * 2))
+        spacing: Theme.dockSpacing
+
+        Composer {
+            id: composer
+            Layout.fillWidth: true
+            app: applicationWindow()
+            compact: page.compact
+            onTimerMenuRequested: applicationWindow().openTimerSearch()
         }
-        Text {
-            text: i18n("Notifications silenced until the break")
-            color: Theme.subtle
-            font.pixelSize: Theme.fontCaption
+
+        // Today: the work sessions finished, the time focused and the streak (not in a narrow window).
+        Row {
+            id: todayLine
+            objectName: "todayLine"
+            Layout.alignment: Qt.AlignHCenter
+            spacing: Theme.spaceXl
+            // The figures in the text colour, the words around them muted.
+            function emphasized(text: string): string {
+                return text.replace(/<b>/g, '<b><font color="' + Theme.foreground + '">').replace(/<\/b>/g, '</font></b>');
+            }
+
+            TodayText {
+                text: todayLine.emphasized(i18ncp("the focus page's line about today: work sessions finished",
+                                                  "Today <b>%1 session</b>", "Today <b>%1 sessions</b>",
+                                                  StatsModel.todayCompletedSessions))
+            }
+            TodayText {
+                text: todayLine.emphasized(i18nc("the focus page's line about today: time spent working",
+                                                 "<b>%1</b> focused", StatsModel.formatDuration(StatsModel.todayWorkSeconds)))
+            }
+            TodayText {
+                visible: !page.compact
+                text: todayLine.emphasized(i18ncp("the focus page's line about today: days in a row with work",
+                                                  "Streak <b>%1 day</b>", "Streak <b>%1 days</b>", StatsModel.currentStreak))
+            }
         }
     }
 
-    /// A round control: the main one is filled with the text colour.
-    component RoundButton: QQC2.AbstractButton {
-        id: round
-        property real diameter: Theme.space3xl
-        property bool primary: false
-        property string iconName
-
-        implicitWidth: diameter
-        implicitHeight: diameter
-        hoverEnabled: true
-        focusPolicy: Qt.TabFocus
-        Accessible.name: text
-        QQC2.ToolTip.visible: hovered && !primary
-        QQC2.ToolTip.text: text
-        QQC2.ToolTip.delay: Theme.toolTipDelay
-
-        background: Rectangle {
-            radius: width / 2
-            color: round.primary ? Theme.alpha(Theme.primary, round.down ? 0.8 : (round.hovered ? 0.9 : 1))
-                                 : (round.down ? Theme.pressed : (round.hovered && round.enabled ? Theme.hover : "transparent"))
-            border.width: round.primary ? 0 : Theme.hairline
-            border.color: Theme.borderStrong
-            scale: round.down ? 0.96 : 1
-            Behavior on scale { NumberAnimation { duration: Theme.durationShort } }
-            Behavior on color { ColorAnimation { duration: Theme.durationShort } }
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: -Theme.hairline * 3
-                radius: width / 2
-                color: "transparent"
-                border.width: Theme.hairline
-                border.color: Theme.focusRing
-                visible: round.visualFocus
-            }
-        }
-        contentItem: Item {
-            LineIcon {
-                anchors.centerIn: parent
-                name: round.iconName
-                size: round.primary ? Theme.iconMd + Theme.spaceXs : Theme.icon
-                color: round.primary ? Theme.primaryText : (round.enabled ? Theme.foreground : Theme.subtle)
-            }
-        }
+    component TodayText: Text {
+        textFormat: Text.StyledText
+        color: Theme.muted
+        font.pixelSize: Theme.fontCaption
     }
 }

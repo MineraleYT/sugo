@@ -590,7 +590,7 @@ QQC2.ApplicationWindow {
                     return true;
                 }
                 // Its timer button names the timer and lists the timers to choose from.
-                const chooser = findItem(page, item => item.objectName === "timerChooser");
+                const chooser = findItem(page, item => item.objectName === "composerTimerButton");
                 if (!chooser || chooser.text !== PresetModel.currentName) {
                     fail(40, "The timer page's button does not name the timer in use");
                     return true;
