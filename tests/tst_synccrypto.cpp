@@ -252,6 +252,7 @@ private Q_SLOTS:
         QVERIFY(!SyncCrypto::parseRecoveryCode(QString()));
         QVERIFY(!SyncCrypto::parseRecoveryCode(kRecoveryText.left(30)));
         QVERIFY(!SyncCrypto::parseRecoveryCode(kRecoveryText + QStringLiteral("-A")));
+        QVERIFY(!SyncCrypto::parseRecoveryCode(kRecoveryText + kRecoveryText)); // twice as long
         QString withU = kRecoveryText;
         withU[0] = QLatin1Char('U'); // not in Crockford's alphabet
         QVERIFY(!SyncCrypto::parseRecoveryCode(withU));

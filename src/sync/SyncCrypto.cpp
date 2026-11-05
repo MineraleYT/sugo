@@ -4,6 +4,7 @@
 #include <sodium.h>
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 
 // --- SecretBytes ---------------------------------------------------------------------------------
@@ -371,7 +372,14 @@ std::optional<SecretBytes> parseRecoveryCode(const QString &text)
     if (!init()) {
         return std::nullopt;
     }
-    std::vector<int> values;
+    // The code's characters as values, wiped on every way out (a mistyped code is most of one).
+    // Fixed size: a growing vector would leave copies behind in the memory it gave up.
+    struct Values
+    {
+        std::array<int, kRecoveryChars> at{};
+        size_t count = 0;
+        ~Values() { sodium_memzero(at.data(), sizeof(at)); }
+    } values;
     for (QChar ch : text) {
         if (ch == QLatin1Char('-') || ch.isSpace()) {
             continue;
@@ -383,25 +391,24 @@ std::optional<SecretBytes> parseRecoveryCode(const QString &text)
             c = '1';
         }
         const char *found = c ? std::strchr(kAlphabet, c) : nullptr;
-        if (!found) {
+        if (!found || values.count == values.at.size()) {
             return std::nullopt;
         }
-        values.push_back(int(found - kAlphabet));
+        values.at[values.count++] = int(found - kAlphabet);
     }
-    if (values.size() != size_t(kRecoveryChars)) {
+    if (values.count != values.at.size()) {
         return std::nullopt;
     }
     SecretBytes code(RecoveryCodeBytes);
     int check = 0;
     for (int index = 0; index < kRecoveryChars * 5; ++index) {
-        const int bit = (values[size_t(index / 5)] >> (4 - index % 5)) & 1;
+        const int bit = (values.at[size_t(index / 5)] >> (4 - index % 5)) & 1;
         if (index < RecoveryCodeBytes * 8) {
             code.data()[index / 8] = static_cast<unsigned char>(code.data()[index / 8] | (bit << (7 - index % 8)));
         } else {
             check = (check << 1) | bit;
         }
     }
-    sodium_memzero(values.data(), values.size() * sizeof(int));
     if (check != recoveryCheck(code)) {
         return std::nullopt;
     }
