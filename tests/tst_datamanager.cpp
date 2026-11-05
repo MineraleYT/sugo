@@ -21,6 +21,7 @@
 #include "PresetModel.h"
 #include "PresetPersistence.h"
 #include "PresetRepository.h"
+#include "Sugo100Database.h"
 #include "SessionRecorder.h"
 #include "SessionRepository.h"
 #include "TimerEngine.h"
@@ -280,6 +281,43 @@ private Q_SLOTS:
         QCOMPARE(failed.count(), 2);
         QCOMPARE(manager->sessionCount(), 1);
         QCOMPARE(sessions->between(0, 2000).first().presetName, QStringLiteral("Existing"));
+    }
+
+    void backupOfSugo100IsRestored()
+    {
+        // Sugo 1.0.0 had its own application id and numbering of the schema: its backups (and its
+        // databases that 1.0.1 moved aside as sugo.db.foreign-*) are still Sugo's.
+        QVERIFY(sessions->insert(sampleRecord(QStringLiteral("Current"))));
+        const QString backupPath = dir.filePath(QStringLiteral("backup.db"));
+        createSugo100Database(backupPath);
+        QFile backupFile(backupPath);
+        QVERIFY(backupFile.open(QIODevice::ReadOnly));
+        const QByteArray backupBefore = backupFile.readAll();
+        backupFile.close();
+        QSignalSpy failed(manager.get(), &DataManager::operationFailed);
+
+        QVERIFY(manager->restoreDatabase(QUrl::fromLocalFile(backupPath)));
+        QCOMPARE(failed.count(), 0);
+
+        QCOMPARE(manager->sessionCount(), 1);
+        const QList<SessionRecord> restored = sessions->between(0, std::numeric_limits<qint64>::max());
+        QCOMPARE(restored.size(), 1);
+        QCOMPARE(restored.first().presetName, QStringLiteral("Deep work"));
+        QCOMPARE(restored.first().note, QStringLiteral("Chapter 3"));
+        QCOMPARE(restored.first().startedAtMs, 1761876100000LL);
+        bool found = false;
+        for (const TimerPreset &preset : presetModel->presets()) {
+            if (preset.uuid == QLatin1String("mine")) {
+                found = true;
+                QCOMPARE(preset.name, QStringLiteral("Deep work"));
+                QCOMPARE(preset.workSeconds, 3000);
+            }
+        }
+        QVERIFY(found);
+
+        // The user's file is only read.
+        QVERIFY(backupFile.open(QIODevice::ReadOnly));
+        QCOMPARE(backupFile.readAll(), backupBefore);
     }
 
     void backupIsReadableOnlyByItsOwner()
