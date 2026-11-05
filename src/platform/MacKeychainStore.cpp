@@ -128,6 +128,60 @@ std::optional<QString> MacKeychainStore::read(const QString &key)
     return QString::fromUtf8(reinterpret_cast<const char *>(CFDataGetBytePtr(bytes)), length);
 }
 
+std::optional<QStringList> MacKeychainStore::keys()
+{
+    // The service's items, attributes only: listing those of another build does not ask the user.
+    const CFRef<CFMutableDictionaryRef> query(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                                                                        &kCFTypeDictionaryValueCallBacks));
+    const CFRef<CFStringRef> serviceString(m_service.toCFString());
+    CFDictionarySetValue(query.get(), kSecClass, kSecClassGenericPassword);
+    CFDictionarySetValue(query.get(), kSecAttrService, serviceString.get());
+    CFDictionarySetValue(query.get(), kSecReturnAttributes, kCFBooleanTrue);
+    CFDictionarySetValue(query.get(), kSecMatchLimit, kSecMatchLimitAll);
+
+    CFTypeRef result = nullptr;
+    const OSStatus status = SecItemCopyMatching(query.get(), &result);
+    const CFRef<CFTypeRef> items(result);
+    m_lastStatus = static_cast<int>(status);
+    if (status == errSecItemNotFound) {
+        return QStringList();
+    }
+    if (status != errSecSuccess || !items.get() || CFGetTypeID(items.get()) != CFArrayGetTypeID()) {
+        qCWarning(lcKeychain) << "Cannot list the Keychain items, OSStatus" << status;
+        return std::nullopt;
+    }
+    QStringList keys;
+    const auto array = static_cast<CFArrayRef>(items.get());
+    for (CFIndex i = 0; i < CFArrayGetCount(array); ++i) {
+        const auto item = CFArrayGetValueAtIndex(array, i);
+        if (CFGetTypeID(item) != CFDictionaryGetTypeID()) {
+            continue;
+        }
+        const auto account = CFDictionaryGetValue(static_cast<CFDictionaryRef>(item), kSecAttrAccount);
+        if (account && CFGetTypeID(account) == CFStringGetTypeID()) {
+            if (const QString key = QString::fromCFString(static_cast<CFStringRef>(account)); !key.isEmpty() && !keys.contains(key)) {
+                keys.append(key);
+            }
+        }
+    }
+    return keys;
+}
+
+std::optional<QString> MacKeychainStore::readWithoutAsking(const QString &key)
+{
+    // Process-wide, so put back at once. An item that would make macOS ask then fails with
+    // errSecAuthFailed instead (tried on macOS 27).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    Boolean allowed = true;
+    SecKeychainGetUserInteractionAllowed(&allowed);
+    SecKeychainSetUserInteractionAllowed(false);
+    auto secret = read(key);
+    SecKeychainSetUserInteractionAllowed(allowed);
+#pragma clang diagnostic pop
+    return secret;
+}
+
 bool MacKeychainStore::remove(const QString &key)
 {
     const CFRef<CFMutableDictionaryRef> query(newItemQuery(m_service, key));
@@ -150,7 +204,8 @@ bool MacKeychainStore::write(const QString &key, const QString &secret)
     // Replaced, not updated: the item's access list trusts the build that created it, and an ad
     // hoc signed build (each update has another code hash) may still change the data of an item
     // it cannot read. SecItemUpdate then succeeds, but leaves an item that neither build reads
-    // without asking the user. Deleting needs no permission, and the new item is this build's.
+    // without asking the user. The new item is this build's. Deleting an item of another build
+    // fails (errSecInvalidOwnerEdit) unless the user let this build use it ("Always Allow").
     SecretBytes utf8 = secretUtf8(secret);
     const SecretData data(utf8);
     if (!data.get()) {

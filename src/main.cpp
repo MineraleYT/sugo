@@ -42,6 +42,8 @@
 #include "UpdateInstaller.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
+#include "MacKeychainStore.h"
+#include "SecretHandoff.h"
 #include "QuitPolicy.h"
 #include "ShortcutsFocusInhibitor.h"
 #include "ShortcutsFocusInstaller.h"
@@ -257,6 +259,14 @@ int main(int argc, char *argv[])
     if (!singleInstance.acquire(!background)) {
         return EXIT_SUCCESS;
     }
+#ifdef Q_OS_MACOS
+    // The Keychain secrets the previous version left when it installed this one (it quit just
+    // before): this version's items from now on, before anything reads them.
+    {
+        MacKeychainStore keychain(secretStoreService());
+        SecretHandoff::takeBack(keychain, SecretHandoff::defaultPath());
+    }
+#endif
 
     // Lifetimes: objects are destroyed in reverse order of declaration. The database, the
     // repositories and the notification inhibitor are declared before the QML engine (whose
@@ -664,6 +674,15 @@ int main(int argc, char *argv[])
         qCritical() << "The smoke test produced" << smokeWarnings << "QML warning(s)";
         return 30;
     }
+#ifdef Q_OS_MACOS
+    // The next start is another build, which could not read this one's Keychain items without
+    // macOS asking the user: it takes the secrets back from a file (SecretHandoff). If the new
+    // Sugo.app does not get in place after all, this build takes them back itself.
+    if (updates && updates->status() == UpdateChecker::Status::ReadyToRestart) {
+        MacKeychainStore keychain(secretStoreService());
+        SecretHandoff::handOver(keychain, SecretHandoff::defaultPath());
+    }
+#endif
     // "Restart to update": the updated AppImage, or the new Sugo.app put in place now, starts once
     // this process has ended (on macOS a plain quit also puts it in place).
     if (updates) {

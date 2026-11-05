@@ -42,9 +42,14 @@ bool AskOnceSecretStore::write(const QString &key, const QString &secret)
     return m_store->write(key, secret);
 }
 
+QString secretStoreService()
+{
+    return QStringLiteral("io.github.mineraleyt.sugo");
+}
+
 std::unique_ptr<SecretStore> createSecretStore()
 {
-    const QString applicationId = QStringLiteral("io.github.mineraleyt.sugo");
+    const QString applicationId = secretStoreService();
 #ifdef Q_OS_MACOS
     return std::make_unique<AskOnceSecretStore>(std::make_unique<MacKeychainStore>(applicationId));
 #else

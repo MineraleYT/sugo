@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
-#include "SecretStore.h"
+#include "SecretHandoff.h"
 #include "SyncCrypto.h"
 
 #include <CoreFoundation/CoreFoundation.h>
@@ -20,9 +20,11 @@
  * new item fails after the old one was deleted, write() puts the old secret back when it knows it
  * without asking (this store read or wrote it last); otherwise it is lost with the failed write.
  * What it knows it keeps as SecretBytes, wiped when replaced and when the store goes away.
+ * An update cannot delete the items of the build before it either (errSecInvalidOwnerEdit, or
+ * macOS asks): SecretHandoff carries the secrets over the updates Sugo installs itself.
  * (tests/manual-review-checklist.md, "macOS: Keychain".)
  */
-class MacKeychainStore final : public SecretStore
+class MacKeychainStore final : public SecretHandoffStore
 {
 public:
     explicit MacKeychainStore(const QString &service);
@@ -32,6 +34,8 @@ public:
     /// The user refused when macOS asked: "Deny" gives errSecUserCanceled (-128, seen on macOS 27);
     /// errSecAuthFailed (-25293) is what a refused access gives where no dialog is shown.
     bool lastReadRefused() const override { return m_lastReadRefused; }
+    std::optional<QStringList> keys() override;
+    std::optional<QString> readWithoutAsking(const QString &key) override;
 
     /// The OSStatus of the last call (errSecSuccess = 0), for tests and diagnostics.
     int lastStatus() const { return m_lastStatus; }
