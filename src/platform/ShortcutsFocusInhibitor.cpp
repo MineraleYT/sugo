@@ -37,6 +37,7 @@ void ShortcutsFocusInhibitor::setShortcutNames(const QString &onShortcut, const 
     }
     m_onShortcut = on;
     m_offShortcut = off;
+    m_onFailed = false; // other shortcuts: worth another try
     report();
     refreshShortcutList();
 }
@@ -70,13 +71,19 @@ void ShortcutsFocusInhibitor::refreshShortcutList()
     m_listing = true;
     runProgram({QStringLiteral("list")}, m_listTimeoutMs, [this](bool ok, bool, const QByteArray &output, const QString &error) {
         m_listing = false;
+        QStringList list;
         if (ok) {
-            m_list = parseShortcutList(output);
+            list = parseShortcutList(output);
         } else {
             qCWarning(lcShortcutsInhibitor) << "Cannot list the shortcuts:" << error;
-            m_list.clear();
         }
-        m_onFailed = false; // the shortcuts may have been fixed: worth another try
+        if (list != m_list) {
+            m_list = list;
+            // The shortcuts may have been fixed: worth another try. The same list again (read
+            // each time the application becomes active) is not, or a broken "on" would run on
+            // every activation.
+            m_onFailed = false;
+        }
         report();
         Q_EMIT shortcutListChanged();
         if (m_listAgain) {

@@ -23,7 +23,8 @@
  *
  * Like FreedesktopInhibitor, a small asynchronous state machine: it remembers what is wanted
  * and, one `shortcuts run` at a time, makes the Focus match. A run that fails leaves the state
- * as it was (logged) and is not retried until the next inhibit() or a new list; one that
+ * as it was (logged) and is not retried until the next inhibit(), new names or a list that
+ * changed (the same list read again does not count); one that
  * times out is killed. An "on" whose outcome is unknown (timed out)
  * counts as on, so the release still runs the "off" shortcut: turning a Focus off twice is
  * harmless, leaving it on is not. Killing the `shortcuts` client may not stop the shortcut
