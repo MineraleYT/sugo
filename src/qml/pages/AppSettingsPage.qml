@@ -2175,16 +2175,6 @@ QQC2.Page {
                     }
                 }
                 SettingRow {
-                    title: i18n("Export history")
-                    description: i18n("Save all recorded sessions as a spreadsheet (CSV) or JSON file.")
-                    SButton {
-                        text: i18n("Export…")
-                        iconName: "download"
-                        enabled: DataManager !== null && DataManager.sessionCount > 0
-                        onClicked: exportHistoryDialog.open()
-                    }
-                }
-                SettingRow {
                     title: i18n("Session history")
                     description: i18n("Remove recorded sessions and their statistics.")
                     SComboBox {
@@ -2586,17 +2576,6 @@ QQC2.Page {
             defaultSuffix: "db"
             nameFilters: [i18n("SQLite database (*.db)")]
             onAccepted: DataManager.backupDatabase(selectedFile)
-        }
-
-        FileDialog {
-            id: exportHistoryDialog
-            title: i18n("Export session history")
-            fileMode: FileDialog.SaveFile
-            // The ending of the chosen type: "history" with JSON chosen becomes history.json.
-            defaultSuffix: selectedNameFilter && selectedNameFilter.extensions.length > 0
-                           ? selectedNameFilter.extensions[0] : "csv"
-            nameFilters: [i18n("CSV spreadsheet (*.csv)"), i18n("JSON (*.json)")]
-            onAccepted: DataManager.exportHistory(selectedFile)
         }
 
         FileDialog {
