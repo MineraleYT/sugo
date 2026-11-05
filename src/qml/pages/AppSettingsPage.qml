@@ -1107,6 +1107,27 @@ QQC2.Page {
                     description: i18n("Sugo looks for a new version every few hours and tells you; it downloads it only when you click Install. Turned off, it only looks when you ask, in About.")
                     SettingSwitch { setting: "autoCheckUpdates" }
                 }
+                // Nightly builds are for people who want the newest changes and can live with bugs.
+                SettingRow {
+                    title: i18n("Update channel")
+                    description: AppSettings.updateChannel === "nightly"
+                                 ? i18n("Every new build, as soon as it is made. May have bugs.")
+                                 : UpdateChecker.currentVersion.indexOf("-nightly") >= 0
+                                   ? i18n("Tested releases. This nightly build stays until a newer release comes out.")
+                                   : i18n("Tested releases.")
+                    descriptionVariants: [i18n("Every new build, as soon as it is made. May have bugs."),
+                                          i18n("Tested releases. This nightly build stays until a newer release comes out."),
+                                          i18n("Tested releases.")]
+                    Segmented {
+                        model: [
+                            { id: "stable", text: i18n("Stable") },
+                            { id: "nightly", text: i18n("Nightly") }
+                        ]
+                        current: AppSettings.updateChannel
+                        Accessible.name: i18n("Update channel")
+                        onActivated: id => AppSettings.updateChannel = id
+                    }
+                }
             }
 
             SettingsCard {
@@ -2228,32 +2249,6 @@ QQC2.Page {
                         text: i18n("Open Shortcut Settings")
                         iconName: "external"
                         onClicked: AppSettings.openShortcutsSettings()
-                    }
-                }
-            }
-
-            // Nightly builds are for people who want the newest changes and can live with bugs.
-            SettingsCard {
-                category: "advanced"
-                available: UpdateChecker.canInstall
-                title: i18n("Pre-release builds")
-                iconName: "system-software-update"
-                SettingRow {
-                    first: true
-                    title: i18n("Update channel")
-                    description: AppSettings.updateChannel === "nightly"
-                                 ? i18n("Every new build, as soon as it is made. May have bugs.")
-                                 : UpdateChecker.currentVersion.indexOf("-nightly") >= 0
-                                   ? i18n("Tested releases. This nightly build stays until a newer release comes out.")
-                                   : i18n("Tested releases.")
-                    Segmented {
-                        model: [
-                            { id: "stable", text: i18n("Stable") },
-                            { id: "nightly", text: i18n("Nightly") }
-                        ]
-                        current: AppSettings.updateChannel
-                        Accessible.name: i18n("Update channel")
-                        onActivated: id => AppSettings.updateChannel = id
                     }
                 }
             }
