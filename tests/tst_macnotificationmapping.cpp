@@ -130,6 +130,41 @@ private Q_SLOTS:
         QCOMPARE(registry.size(), 1);
     }
 
+    void aNewNotificationReplacesTheEarlierOnesOfItsContext()
+    {
+        MacNotificationRegistry registry;
+        QObject phases;
+        QObject other;
+        QStringList ran;
+        Notifier::Notification n;
+        Notifier::Reply reply;
+        reply.replied = [&ran](const QString &text) { ran << text; };
+        n.reply = reply;
+        auto *gone = new QObject;
+
+        const QString oldSession = registry.add(&phases, n);
+        const QString otherContext = registry.add(&other, n);
+        const QString orphan = registry.add(gone, n);
+        delete gone;
+
+        // The next phase notification: the earlier one of the same context (and the one whose
+        // context is gone) go, so their banners can be taken out of the Notification Center.
+        const QStringList replaced = registry.takeEarlier(&phases);
+        QCOMPARE(replaced.size(), 2);
+        QVERIFY(replaced.contains(oldSession));
+        QVERIFY(replaced.contains(orphan));
+        QVERIFY(!registry.contains(oldSession));
+        QVERIFY(!registry.contains(orphan));
+        QVERIFY(registry.contains(otherContext));
+        const QString newSession = registry.add(&phases, n);
+
+        // A reply still typed into the old banner reaches nothing.
+        QVERIFY(!registry.respond(oldSession, replyActionId(), QStringLiteral("stale")));
+        QVERIFY(registry.respond(newSession, replyActionId(), QStringLiteral("fresh")));
+        QCOMPARE(ran, QStringList{QStringLiteral("fresh")});
+        QVERIFY(registry.takeEarlier(&phases).isEmpty());
+    }
+
     void anUnshownRequestIsHandedBackWhole()
     {
         MacNotificationRegistry registry;

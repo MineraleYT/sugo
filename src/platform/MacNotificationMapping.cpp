@@ -88,6 +88,21 @@ void MacNotificationRegistry::remove(const QString &requestId)
     m_order.removeOne(requestId);
 }
 
+QStringList MacNotificationRegistry::takeEarlier(QObject *context)
+{
+    QStringList taken;
+    for (const QString &id : std::as_const(m_order)) {
+        const QObject *owner = m_entries.value(id).context.data();
+        if (!owner || owner == context) {
+            taken.append(id);
+        }
+    }
+    for (const QString &id : std::as_const(taken)) {
+        remove(id);
+    }
+    return taken;
+}
+
 std::optional<MacNotificationRegistry::Unshown> MacNotificationRegistry::takeUnshown(const QString &requestId)
 {
     const auto it = m_entries.constFind(requestId);
