@@ -282,6 +282,8 @@ private:
     QList<LeftoverTest> m_leftoverTests;
     SessionRecord m_inFlightRecord; ///< What the request on its way carries.
     bool m_paused = false;
+    /// 403s in a row to the events sent and the test's, with nothing accepted between.
+    int m_forbiddenStreak = 0;
     bool m_sendFailing = false; ///< The last attempt failed for a reason that may pass.
     bool m_loginStarting = false;
     QTimer m_retryTimer;

@@ -163,6 +163,21 @@ QString calendarRefusesEvents()
     return i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
                 "or choose another calendar.");
 }
+
+/// Some servers and authentication proxies answer a wrong password with 403 rather than 401.
+/// Trying it again every few minutes for ever could get the account locked: after this many
+/// 403s in a row, with nothing accepted between, sending waits for the user as after a 401.
+/// With the usual backoff that is about two and a half minutes after the first refusal.
+constexpr int kForbiddenBeforePause = 3;
+
+/// Why sending is paused after kForbiddenBeforePause 403s: either cause is possible.
+QString forbiddenTooOften()
+{
+    return i18n("Sending paused: the server refused %1 times in a row (HTTP 403). Either this calendar does not accept "
+                "new events, or the server rejects the username and app password this way. Check both, then test "
+                "the connection.",
+                kForbiddenBeforePause);
+}
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -874,6 +889,7 @@ void CalendarSync::disconnect()
     m_retryTimer.stop();
     m_retryStep = 0;
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
 
     const bool hadPassword = hasPassword();
@@ -907,6 +923,7 @@ void CalendarSync::credentialsChanged()
 {
     // New credentials (or calendar) deserve a fresh attempt, immediately.
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
     m_retryTimer.stop();
     m_retryStep = 0;
@@ -1004,7 +1021,8 @@ void CalendarSync::refreshIdleStatus()
         return;
     }
     if (m_paused) {
-        setStatus(Failed, i18n("Login rejected: check username and app password"));
+        setStatus(Failed, m_forbiddenStreak >= kForbiddenBeforePause ? forbiddenTooOften()
+                                                                     : i18n("Login rejected: check username and app password"));
     } else if (!configured()) {
         if (!m_username.isEmpty() && !m_password.isEmpty()) {
             setStatus(NotConfigured, i18n("Signed in as %1. Choose a calendar to finish.", m_username));
@@ -1338,6 +1356,7 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
             m_queue.removeAt(index);
         }
         m_retryStep = 0;
+        m_forbiddenStreak = 0;
         m_sendFailing = false;
         m_lastSuccess = QDateTime::currentDateTime();
         setLastError(QString());
@@ -1358,6 +1377,14 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
     if (r.http == 401) {
         const QString message = describeFailure(r);
         m_paused = true;
+        m_forbiddenStreak = 0;
+        setLastError(message);
+        setStatus(Failed, message);
+        return;
+    }
+    if (r.http == 403 && ++m_forbiddenStreak >= kForbiddenBeforePause) {
+        const QString message = forbiddenTooOften();
+        m_paused = true;
         setLastError(message);
         setStatus(Failed, message);
         return;
@@ -1377,9 +1404,9 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         return;
     }
     m_sendFailing = true;
-    // 403: the server knows who we are, but the calendar does not take new events (shared
-    // read-only, a full quota). The password is not the problem, so sending is not paused on it:
-    // the events wait, and go once the calendar accepts them or another one is chosen.
+    // 403: most likely the server knows who we are, but the calendar does not take new events
+    // (shared read-only, a full quota). Sending is not paused on the first ones: the events wait,
+    // and go once the calendar accepts them or another one is chosen (see kForbiddenBeforePause).
     setLastError(r.http == 403 ? calendarRefusesEvents() : describeFailure(r));
     refreshIdleStatus();
     scheduleRetry();
@@ -1433,10 +1460,17 @@ void CalendarSync::testConnection()
 
     auto fail = [this](const Result &r) {
         --m_busy;
-        // As for a real event (onSendFinished()): only a 401 is the login, and pauses sending.
-        const QString message = r.http == 403 ? calendarRefusesEvents() : describeFailure(r);
+        // As for a real event (onSendFinished()): a 401 is the login and pauses sending, a 403
+        // only once it comes kForbiddenBeforePause times in a row.
         if (r.http == 401) {
             m_paused = true;
+            m_forbiddenStreak = 0;
+        } else if (r.http == 403 && ++m_forbiddenStreak >= kForbiddenBeforePause) {
+            m_paused = true;
+        }
+        QString message = describeFailure(r);
+        if (r.http == 403) {
+            message = m_forbiddenStreak >= kForbiddenBeforePause ? forbiddenTooOften() : calendarRefusesEvents();
         }
         setLastError(message);
         setStatus(Failed, message);
@@ -1480,6 +1514,7 @@ void CalendarSync::testConnection()
             }
             --m_busy;
             m_paused = false;
+            m_forbiddenStreak = 0;
             m_sendFailing = false;
             m_retryTimer.stop();
             m_retryStep = 0;
@@ -1602,6 +1637,7 @@ void CalendarSync::listCalendars(const QUrl &url, std::function<bool()> stale, s
                     Q_EMIT calendarsChanged();
                     setLastError(QString());
                     m_paused = false;
+                    m_forbiddenStreak = 0; // the login was taken: the 403s were the calendar's
                     refreshIdleStatus();
                     done(true);
                     return;
@@ -1618,6 +1654,7 @@ void CalendarSync::discoveryFailed(const Result &r)
     // it says nothing about the calendar chosen, which keeps getting the events.
     if (r.http == 401) {
         m_paused = true;
+        m_forbiddenStreak = 0;
     }
     const QString message = r.http == 403
         ? i18n("The server does not let this account list the calendars at this address (HTTP 403): check the address.")
@@ -1856,6 +1893,7 @@ void CalendarSync::finishLogin(const QByteArray &json)
         Q_EMIT hasPasswordChanged();
     }
     m_paused = false;
+    m_forbiddenStreak = 0;
     m_sendFailing = false;
 
     discover([this](bool ok) {

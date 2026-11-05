@@ -981,6 +981,62 @@ private Q_SLOTS:
         QVERIFY(m_sync->lastError().isEmpty());
     }
 
+    void put403InARowPausesSending()
+    {
+        // Some servers answer a wrong password with 403: not retried for ever (an account lock),
+        // but paused after three in a row, with a message that names both possible causes.
+        configureCustom();
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 3);
+        QCOMPARE(m_sync->status(), CalendarSync::Failed);
+        for (const QString &text : {m_sync->statusText(), m_sync->lastError()}) {
+            QVERIFY2(text.contains(QStringLiteral("403")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("does not accept new events")), qPrintable(text));
+            QVERIFY2(text.contains(QStringLiteral("app password")), qPrintable(text));
+            QVERIFY2(!text.startsWith(QStringLiteral("Login rejected")), qPrintable(text));
+        }
+        QTest::qWait(250);
+        QCOMPARE(m_server->count("PUT"), 3); // not retried while paused
+        QCOMPARE(m_sync->pendingCount(), 1);
+        checkNoSecrets();
+
+        // A test that is refused too keeps it paused, with the same message.
+        m_sync->testConnection();
+        QTRY_COMPARE(m_server->count("PUT"), 4);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(m_sync->isSendingPaused());
+        QVERIFY(m_sync->statusText().contains(QStringLiteral("app password")));
+
+        // A new password is tried at once.
+        m_server->expectedAuth = basic(QStringLiteral("alice"), QStringLiteral("rotated"));
+        m_server->defaultPut = 201;
+        m_sync->setPassword(QStringLiteral("rotated"));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
+    void anAcceptedEventStartsThe403CountAgain()
+    {
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({150, 300});
+        m_server->putStatuses = {403, 403, 201};
+        m_server->defaultPut = 403;
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->count("PUT"), 3);
+        QVERIFY(!m_sync->isSendingPaused());
+
+        // Two refusals after the one accepted: still waiting with the backoff, not paused.
+        m_sync->enqueueWorkSession(record(2));
+        QTRY_COMPARE(m_server->count("PUT"), 5);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_VERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_server->count("PUT"), 6);
+    }
+
     void aRefusalByThePreviousCalendarDoesNotHoldBackTheNewOne_data()
     {
         QTest::addColumn<int>("http");
