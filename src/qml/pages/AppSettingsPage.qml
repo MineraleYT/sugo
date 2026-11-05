@@ -1733,6 +1733,7 @@ QQC2.Page {
                                          .concat(SyncController ? SyncController.errorTexts : [])
                     StatusPill {
                         objectName: "syncStatusPill"
+                        labels: [i18n("Syncing"), i18n("Offline"), i18n("Not synced"), i18n("Up to date")]
                         text: page.syncSyncing ? i18n("Syncing")
                             : page.syncError ? (page.syncErrorKind === SyncController.Network ? i18n("Offline") : i18n("Not synced"))
                             : i18n("Up to date")

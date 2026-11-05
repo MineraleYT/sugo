@@ -10,8 +10,18 @@ Rectangle {
     property string text
     property color dotColor: Theme.brand
     property bool pulsing: false
+    /// Every text the pill takes in turn ("Syncing", "Up to date"): it is as wide as with the
+    /// widest, so nothing beside it moves when the text changes.
+    property var labels: []
+    readonly property real labelsExtraWidth: {
+        let widest = 0;
+        for (const label of labels) {
+            widest = Math.max(widest, labelMetrics.advanceWidth(label));
+        }
+        return Math.max(0, Math.ceil(widest - labelMetrics.advanceWidth(text)));
+    }
 
-    implicitWidth: row.implicitWidth + Theme.spaceLg * 2
+    implicitWidth: row.implicitWidth + Theme.spaceLg * 2 + labelsExtraWidth
     /// The narrowest it gets, the dot alone: given less than its implicit width, the text is cut.
     readonly property real compactWidth: Theme.spaceSm + Theme.spaceLg * 2
     implicitHeight: row.implicitHeight + Theme.spaceXs * 2
@@ -21,6 +31,11 @@ Rectangle {
     border.color: Theme.border
     Accessible.role: Accessible.StaticText
     Accessible.name: text
+
+    FontMetrics {
+        id: labelMetrics
+        font: label.font
+    }
 
     RowLayout {
         id: row
@@ -42,6 +57,7 @@ Rectangle {
             }
         }
         Text {
+            id: label
             text: pill.text
             color: Theme.muted
             font.pixelSize: Theme.fontCaption
