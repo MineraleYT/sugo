@@ -474,6 +474,22 @@ QQC2.ApplicationWindow {
                     return false;
                 }
             }
+            // The status pill is as wide with every text it takes, so "Sync now" beside it stays
+            // put. Its width follows its texts at once, so it is read right after each one.
+            const pill = findItem(page, item => item.objectName === "syncStatusPill");
+            if (!pill || pill.labels.length < 2) {
+                fail(60, "The Sync tab's status pill, or the texts it can show, is missing");
+                return false;
+            }
+            const pillWidths = [];
+            for (const label of pill.labels) {
+                pill.text = label;
+                pillWidths.push(pill.implicitWidth);
+            }
+            if (pillWidths.some(width => width !== pillWidths[0])) {
+                fail(60, "The Sync tab's status pill changes width with its text: " + pillWidths.join(", "));
+                return false;
+            }
             // Signing out asks first.
             page.requestSyncSignOut();
             const asked = page.syncSignOutConfirming;

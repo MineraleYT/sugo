@@ -13,15 +13,23 @@ Rectangle {
     /// Every text the pill takes in turn ("Syncing", "Up to date"): it is as wide as with the
     /// widest, so nothing beside it moves when the text changes.
     property var labels: []
-    readonly property real labelsExtraWidth: {
-        let widest = 0;
+    /// With labels, the room of the text: the widest of them (and the text), in whole pixels
+    /// plus one, as the text's own width differs from the measured one by a fraction of a pixel.
+    /// It leaves out the current text's width, which would make the pill a pixel wider or
+    /// narrower with each text.
+    readonly property real labelsWidth: {
+        if (labels.length === 0) {
+            return 0;
+        }
+        let widest = labelMetrics.font.pixelSize > 0 ? labelMetrics.advanceWidth(text) : 0;
         for (const label of labels) {
             widest = Math.max(widest, labelMetrics.advanceWidth(label));
         }
-        return Math.max(0, Math.ceil(widest - labelMetrics.advanceWidth(text)));
+        return Math.ceil(widest) + 1;
     }
 
-    implicitWidth: row.implicitWidth + Theme.spaceLg * 2 + labelsExtraWidth
+    implicitWidth: (labels.length > 0 ? dot.implicitWidth + row.spacing + labelsWidth : row.implicitWidth)
+                   + Theme.spaceLg * 2
     /// The narrowest it gets, the dot alone: given less than its implicit width, the text is cut.
     readonly property real compactWidth: Theme.spaceSm + Theme.spaceLg * 2
     implicitHeight: row.implicitHeight + Theme.spaceXs * 2
