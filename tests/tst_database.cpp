@@ -85,7 +85,8 @@ constexpr int kSugo100ApplicationId = 0x6B546D74;
 /**
  * Writes a database exactly as Sugo 1.0.0 (tag v1.0.0) left it: its two migrations (version 1,
  * then version 2 adding session.note), user_version 2, the 1.0.0 application id stamped after
- * the migrations (here after the rows, which changes nothing), WAL mode, preset times in seconds. One timer with an option, one session with
+ * the migrations (here after the rows, which changes nothing), WAL mode, preset times in seconds
+ * (session times in milliseconds). One timer with an option, one session with
  * a note, one meta key.
  */
 void createSugo100Database(const QString &path)
@@ -142,7 +143,7 @@ void createSugo100Database(const QString &path)
                  "INSERT INTO preset_option (preset_id, key, value) VALUES (1, 'autoStartBreaks', 'true')",
                  "INSERT INTO session (kind, started_at, ended_at, duration_sec, planned_sec, completed, "
                  "preset_id, preset_name, category, note) "
-                 "VALUES ('work', 1761876100, 1761879100, 3000, 3000, 1, 1, 'Deep work', 'Study', 'Chapter 3')",
+                 "VALUES ('work', 1761876100000, 1761879100000, 3000, 3000, 1, 1, 'Deep work', 'Study', 'Chapter 3')",
                  "INSERT INTO meta (key, value) VALUES ('selectedPreset', 'mine')",
              }) {
             QVERIFY2(query.exec(QString::fromLatin1(statement)), statement);
@@ -324,10 +325,10 @@ private Q_SLOTS:
                      QStringLiteral("true"));
             QVERIFY(tableNames(c).contains(QStringLiteral("preset_tombstone")));
 
-            // The history, untouched (session times were and are seconds).
+            // The history, untouched (session times were milliseconds already).
             QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM session")).toInt(), 1);
             QCOMPARE(scalar(c, QStringLiteral("SELECT note FROM session")).toString(), QStringLiteral("Chapter 3"));
-            QCOMPARE(scalar(c, QStringLiteral("SELECT started_at FROM session")).toLongLong(), 1761876100LL);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT started_at FROM session")).toLongLong(), 1761876100000LL);
             QCOMPARE(scalar(c, QStringLiteral("SELECT preset_id FROM session")).toInt(), 1);
             QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM meta WHERE key = 'selectedPreset'")).toString(),
                      QStringLiteral("mine"));
