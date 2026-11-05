@@ -9,13 +9,28 @@ import io.github.mineraleyt.sugo
 QQC2.ComboBox {
     id: combo
 
-    implicitWidth: Math.max(Theme.selectMinWidth, implicitContentWidth + leftPadding + rightPadding)
+    /// The width of the longest entry's text. (ComboBox.WidestText measures the entries only for a
+    /// content item that takes typing, which this one does not.)
+    readonly property real widestTextWidth: {
+        void model;
+        let widest = textMetrics.advanceWidth(displayText);
+        for (let i = 0; i < count; ++i) {
+            widest = Math.max(widest, textMetrics.advanceWidth(textAt(i)));
+        }
+        return Math.ceil(widest);
+    }
+
+    implicitWidth: Math.max(Theme.selectMinWidth, widestTextWidth + leftPadding + rightPadding)
     implicitHeight: Theme.controlHeightSm
-    implicitContentWidthPolicy: QQC2.ComboBox.WidestText
     leftPadding: Theme.spaceMd + Theme.hairline * 2
     rightPadding: Theme.spaceMd * 2 + Theme.iconSm
     font.pixelSize: Theme.fontBody
     hoverEnabled: true
+
+    FontMetrics {
+        id: textMetrics
+        font: combo.font
+    }
 
     background: Rectangle {
         radius: Theme.radius
