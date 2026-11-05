@@ -24,6 +24,9 @@ finish-args:
   # Pauses the timer when the computer goes to sleep (logind's PrepareForSleep signal) or the
   # session is locked (its LockedHint, Lock and Unlock).
   - --system-talk-name=org.freedesktop.login1
+  # Read only: the data of Sugo 1.0.2 and older, whose Flatpak had the app ID
+  # io.github.mineraleyt.sugo, copied over at the first start (src/platform/LegacyAppId.h).
+  - --filesystem=~/.var/app/io.github.mineraleyt.sugo:ro
 modules:
   # Sugo Sync's encryption: neither the KDE runtime nor the freedesktop SDK under it has libsodium.
   - name: libsodium

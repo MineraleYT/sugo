@@ -8,6 +8,9 @@
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QElapsedTimer>
+#include <QStandardPaths>
+#include <QFile>
+#include <QDir>
 #include <QTimer>
 #include <QDebug>
 #include <QEvent>
@@ -28,6 +31,7 @@
 #include "DataManager.h"
 #include "Database.h"
 #include "InhibitorFactory.h"
+#include "LegacyAppId.h"
 #include "NotifierFactory.h"
 #include "FocusSoundController.h"
 #include "PhaseNotifier.h"
@@ -265,6 +269,16 @@ int main(int argc, char *argv[])
     {
         MacKeychainStore keychain(secretStoreService());
         SecretHandoff::takeBack(keychain, SecretHandoff::defaultPath());
+    }
+#endif
+
+#ifdef Q_OS_LINUX
+    // Inside the Flatpak: the data of Sugo 1.0.2 and older, whose Flatpak had another app ID
+    // (io.github.mineraleyt.sugo), is copied over the first time, before anything reads ours.
+    if (QFile::exists(QStringLiteral("/.flatpak-info")) && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
+        LegacyAppId::importFlatpakData(QDir::homePath() + QStringLiteral("/.var/app/") + LegacyAppId::id(),
+                                       QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation),
+                                       QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
     }
 #endif
 

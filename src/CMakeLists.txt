@@ -113,6 +113,8 @@ target_sources(sugo_core PRIVATE
     platform/UnixSignals.cpp
     platform/Autostart.h
     platform/Autostart.cpp
+    platform/LegacyAppId.h
+    platform/LegacyAppId.cpp
     platform/SystemTray.h
     platform/SystemTray.cpp
     platform/ScreenLockWatcher.h
