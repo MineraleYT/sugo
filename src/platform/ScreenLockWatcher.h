@@ -11,6 +11,7 @@ class AppSettings;
 class MacSessionEvents;
 #else
 #include <QDBusConnection>
+#include <QString>
 #endif
 class TimerEngine;
 
@@ -19,6 +20,11 @@ class TimerEngine;
  * and org.gnome.ScreenSaver (GNOME).
  * Automatically pauses the active work phase when the screen is locked, and
  * signals when the user returns so they can resume or review their session.
+ *
+ * If the name that reported the lock loses its owner (the locker crashed or restarted), its
+ * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
+ * as a repeat. The locker going away most likely means the session is usable again, and a locker
+ * that comes back locked reports a new lock, which pauses nothing (the phase is already paused).
  *
  * Also pauses whatever phase is running when the computer goes to sleep (logind's
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
@@ -73,12 +79,24 @@ Q_SIGNALS:
     /// The computer woke up while the phase it paused is still paused.
     void wokeUpAfterPause();
 
+#ifndef Q_OS_MACOS
+private Q_SLOTS:
+    // ActiveChanged from the owner of each name, which is remembered with the lock.
+    void onFreedesktopActiveChanged(bool active);
+    void onGnomeActiveChanged(bool active);
+#endif
+
 private:
     void setPausedBySleep(bool paused);
+    /// `source`: the D-Bus name that reported the change, or empty (macOS, direct calls).
+    void setScreenLocked(bool locked, const QString &source);
 
 #ifndef Q_OS_MACOS
+    void onLockerGone(const QString &name);
+
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
+    QString m_lockSource; // the name whose owner reported the current lock
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;
