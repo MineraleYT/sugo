@@ -79,6 +79,8 @@ struct MacUpdateTools {
     QString ditto = QStringLiteral("/usr/bin/ditto");
     QString xattr = QStringLiteral("/usr/bin/xattr");
     QString open = QStringLiteral("/usr/bin/open");
+    /// How long hdiutil attach may take (tests shorten it); 0 for the default, two minutes.
+    int attachTimeoutMs = 0;
     /// The process finish() waits for instead of the one it is given (tests); 0 for none.
     qint64 waitPid = 0;
     /// Renames the bundles in finish(); empty for QDir::rename (tests make it fail).
@@ -128,6 +130,8 @@ private:
     void copied();
     void fail(const QString &message);
     void detach(const std::function<void()> &then);
+    /// After hdiutil attach was killed: `hdiutil detach -force` of the mount point, then `then`.
+    void detachCutOffAttach(const std::function<void()> &then);
     void conclude(const QString &error);
     void removeLeftovers();
     bool rename(const QString &from, const QString &to) const;
@@ -138,4 +142,6 @@ private:
     QPointer<QProcess> m_process; ///< The step running; finished steps of a cancelled install are ignored.
     QString m_mountPoint;
     bool m_mounted = false;
+    bool m_attaching = false; ///< hdiutil attach is running: if it is killed, the image may be attached.
+    bool m_stepTimedOut = false; ///< The last step that ended was killed for taking too long.
 };

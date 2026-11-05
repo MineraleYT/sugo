@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <QXmlStreamReader>
 
+#include <utility>
+
 namespace
 {
 constexpr int kAttachTimeoutMs = 2 * 60 * 1000;
@@ -193,6 +195,7 @@ void MacBundleInstaller::run(const QString &program, const QStringList &argument
             return; // cancelled
         }
         m_process = nullptr;
+        m_stepTimedOut = *timedOut;
         then(ok && !*timedOut, output);
     };
     connect(process, &QProcess::finished, this, [end](int code, QProcess::ExitStatus status) {
@@ -223,17 +226,28 @@ void MacBundleInstaller::install(QSaveFile &download, Done done)
     }
     mount.setAutoRemove(false); // removed with rmdir() only, so never with a disk image still in it
     m_mountPoint = mount.path();
+    m_attaching = true;
 
     run(m_tools.hdiutil,
         {QStringLiteral("attach"), QStringLiteral("-nobrowse"), QStringLiteral("-readonly"), QStringLiteral("-noautoopen"),
          QStringLiteral("-mountpoint"), m_mountPoint, downloadPath()},
-        kAttachTimeoutMs, [this](bool ok, const QString &output) {
-            if (!ok) {
-                fail(i18n("Cannot open the downloaded disk image: %1", firstLine(output)));
+        m_tools.attachTimeoutMs > 0 ? m_tools.attachTimeoutMs : kAttachTimeoutMs, [this](bool ok, const QString &output) {
+            m_attaching = false;
+            if (ok) {
+                m_mounted = true;
+                attached();
                 return;
             }
-            m_mounted = true;
-            attached();
+            const QString message = i18n("Cannot open the downloaded disk image: %1", firstLine(output));
+            if (!m_stepTimedOut) {
+                fail(message);
+                return;
+            }
+            // Killed, it may have attached the image all the same: off with it, or the disk image
+            // would be deleted while still attached and its mount point left behind.
+            detachCutOffAttach([this, message]() {
+                fail(message);
+            });
         });
 }
 
@@ -304,6 +318,16 @@ void MacBundleInstaller::detach(const std::function<void()> &then)
     });
 }
 
+void MacBundleInstaller::detachCutOffAttach(const std::function<void()> &then)
+{
+    // Whatever the answer: when nothing was attached, there is nothing to detach either, and the
+    // mount point is removed only if empty (rmdir), never with an image still in it.
+    run(m_tools.hdiutil, {QStringLiteral("detach"), m_mountPoint, QStringLiteral("-force")}, kSmallStepTimeoutMs,
+        [then](bool, const QString &) {
+            then();
+        });
+}
+
 void MacBundleInstaller::fail(const QString &message)
 {
     detach([this, message]() {
@@ -342,10 +366,13 @@ void MacBundleInstaller::cancel()
         process->kill();
         process->waitForFinished(kCancelWaitMs);
     }
-    if (m_mounted) {
+    // An attach cut off may have attached the image all the same (see detachCutOffAttach()).
+    const bool attaching = std::exchange(m_attaching, false);
+    if (m_mounted || attaching) {
         QProcess detach;
         detach.start(m_tools.hdiutil, {QStringLiteral("detach"), m_mountPoint, QStringLiteral("-force")});
-        m_mounted = !(detach.waitForFinished(kCancelWaitMs) && detach.exitStatus() == QProcess::NormalExit && detach.exitCode() == 0);
+        const bool detached = detach.waitForFinished(kCancelWaitMs) && detach.exitStatus() == QProcess::NormalExit && detach.exitCode() == 0;
+        m_mounted = m_mounted && !detached;
     }
     QDir(newBundlePath()).removeRecursively();
     removeLeftovers();
