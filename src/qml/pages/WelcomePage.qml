@@ -380,8 +380,8 @@ QQC2.Page {
                 title: i18n("Work in rounds, rest in between")
                 // macOS does not let applications silence notifications (Focus modes do that).
                 text: DesktopStyle.macos
-                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the sidebar.")
-                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the sidebar.")
+                      ? i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro; add your own from the timer menu on the Focus page.")
+                      : i18n("A timer alternates focus and short breaks, with a longer break every few rounds. You start with a classic Pomodoro that keeps notifications quiet while you work; add your own from the timer menu on the Focus page.")
             }
 
             Panel {
