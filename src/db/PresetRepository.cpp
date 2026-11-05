@@ -195,6 +195,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
                 replaced.append(key);
             }
         }
+        if (storedOptions.lastError().isValid()) {
+            return fail(storedOptions);
+        }
         storedOptions.finish();
         for (const QString &key : std::as_const(replaced)) {
             clearOptions.addBindValue(id);
@@ -226,6 +229,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
             stale.append(uuid);
             staleUpdatedAt.insert(uuid, existing.value(1).toLongLong());
         }
+    }
+    if (existing.lastError().isValid()) {
+        return fail(existing);
     }
     existing.finish();
     for (const QString &uuid : std::as_const(stale)) {
