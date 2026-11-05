@@ -53,6 +53,7 @@ set_tests_properties(tst_themeicons PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offs
 
 sugo_add_test(tst_localization Qt6::Core Qt6::Qml)
 sugo_add_test(tst_unixsignals Qt6::Core)
+sugo_add_test(tst_quitpolicy Qt6::Core)
 
 # Sugo Sync: no D-Bus, the same tests on Linux and macOS.
 sugo_add_test(tst_synccrypto Qt6::Core)
