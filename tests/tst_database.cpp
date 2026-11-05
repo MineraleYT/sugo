@@ -624,6 +624,20 @@ private Q_SLOTS:
             QVERIFY(db.recoveredFromPath().isEmpty());
         }
 
+        // Those two are passed over, the one with data after them is still found.
+        {
+            QTemporaryDir other;
+            const QString otherPath = other.filePath(QStringLiteral("sugo.db"));
+            for (const QString &name : QDir(dir.path()).entryList(QDir::Files)) {
+                QVERIFY(QFile::copy(dir.filePath(name), other.filePath(name)));
+            }
+            const QString wanted = setUpMovedAsideSugo100(QDir(other.path()), QStringLiteral("20261103-100000"));
+            Database db(otherPath);
+            QVERIFY(db.open());
+            QVERIFY(db.recoverSugo100Database());
+            QCOMPARE(db.recoveredFromPath(), wanted);
+        }
+
         // Two 1.0.0 files with data: no way to tell which one the user wants.
         setUpMovedAsideSugo100(QDir(dir.path()), QStringLiteral("20261103-100000"));
         setUpMovedAsideSugo100(QDir(dir.path()), QStringLiteral("20261104-100000"));

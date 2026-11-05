@@ -510,6 +510,7 @@ bool Database::recoverSugo100Database()
     QString found;
     QString foundCopy;
     int candidates = 0;
+    int copies = 0;
     const QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
     for (const QString &name : names) {
         if (name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"))) {
@@ -521,7 +522,7 @@ bool Database::recoverSugo100Database()
         if (headerId != kSugo100ApplicationId && !(headerId == 0 && QFile::exists(original + QStringLiteral("-wal")))) {
             continue;
         }
-        const QString copy = work.filePath(QString::number(candidates + 1) + QStringLiteral(".db"));
+        const QString copy = work.filePath(QString::number(++copies) + QStringLiteral(".db"));
         bool copied = QFile::copy(original, copy);
         if (copied && QFile::exists(original + QStringLiteral("-wal"))) {
             copied = QFile::copy(original + QStringLiteral("-wal"), copy + QStringLiteral("-wal"));
