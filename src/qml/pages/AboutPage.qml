@@ -128,99 +128,102 @@ QQC2.Page {
             Section {
                 title: i18n("Updates")
 
+                // One row: what the updates are doing on the left, in a place of two lines whatever
+                // it says, and what can be done about it on the right, so the card keeps its height.
+                // The furthest step wins: ready, downloading, an error, a newer version found.
                 RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spaceMd
-                    Text {
-                        text: aboutPage.upToDateShown ? i18n("Sugo is up to date.")
-                              : !UpdateChecker.canInstall ? i18n("Look for a newer version on GitHub.")
-                              : AppSettings.updateChannel === "nightly"
-                                ? (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new nightly builds by itself.")
-                                                                  : i18n("Updates come from the nightly builds."))
-                                : (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new releases by itself.")
-                                                                  : i18n("Updates come from the stable releases."))
-                        color: aboutPage.upToDateShown ? Theme.positive : Theme.muted
-                        font.pixelSize: Theme.fontBody
-                        wrapMode: Text.WordWrap
-                        maximumLineCount: 2
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
-                        Layout.fillWidth: true
-                        // Room for two lines whatever it says, so the card keeps its height.
-                        Layout.preferredHeight: statusMetrics.lineSpacing * 2
-                        FontMetrics {
-                            id: statusMetrics
-                            font.pixelSize: Theme.fontBody
-                        }
-                    }
-                    SButton {
-                        iconName: aboutPage.upToDateShown ? "check" : "download"
-                        text: UpdateChecker.checking ? i18n("Checking for updates…") : i18n("Check for Updates")
-                        labels: [i18n("Checking for updates…"), i18n("Check for Updates")]
-                        enabled: !UpdateChecker.checking && UpdateChecker.status !== UpdateChecker.Downloading
-                                 && UpdateChecker.status !== UpdateChecker.ReadyToRestart
-                        onClicked: {
-                            aboutPage.updateStatusDismissed = false;
-                            UpdateChecker.checkForUpdates();
-                        }
-                    }
-                }
-
-                // What the update is doing, in one place of fixed height under the button, so
-                // nothing moves when it changes. The furthest step wins: ready, downloading, an
-                // error, a newer version found.
-                MessageSlot {
-                    id: updateMessage
+                    id: updateRow
                     objectName: "updateMessage"
                     readonly property string step: UpdateChecker.status === UpdateChecker.ReadyToRestart ? "ready"
                         : UpdateChecker.status === UpdateChecker.Downloading ? "downloading"
                         : !aboutPage.updateStatusDismissed && UpdateChecker.status === UpdateChecker.Error ? "error"
                         : UpdateChecker.hasUpdate ? "available" : ""
                     Layout.fillWidth: true
-                    shown: step.length > 0
-                    tone: step === "error" ? "danger" : step === "available" ? "warning" : "info"
-                    text: {
-                        switch (step) {
-                        case "ready":
-                            // On macOS the new Sugo.app waits next to this one and takes its place when Sugo quits.
-                            return DesktopStyle.macos ? i18n("Sugo %1 is ready. It replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
-                                                      : i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion);
-                        case "downloading":
-                            return i18n("Downloading Sugo %1… %2%", UpdateChecker.latestVersion, Math.round(UpdateChecker.progress * 100));
-                        case "error":
-                            return i18n("Could not update Sugo: %1", UpdateChecker.errorMessage);
-                        case "available":
-                            return i18n("A newer version (%1) of Sugo is available.", UpdateChecker.latestVersion);
+                    spacing: Theme.spaceMd
+
+                    Text {
+                        id: updateText
+                        text: {
+                            switch (updateRow.step) {
+                            case "ready":
+                                // On macOS the new Sugo.app waits next to this one and takes its place when Sugo quits.
+                                return DesktopStyle.macos ? i18n("Sugo %1 is ready. It replaces this version when Sugo restarts.", UpdateChecker.latestVersion)
+                                                          : i18n("Sugo %1 is installed. It starts after a restart.", UpdateChecker.latestVersion);
+                            case "downloading":
+                                return i18n("Downloading Sugo %1… %2%", UpdateChecker.latestVersion, Math.round(UpdateChecker.progress * 100));
+                            case "error":
+                                return i18n("Could not update Sugo: %1", UpdateChecker.errorMessage);
+                            case "available":
+                                return i18n("A newer version (%1) of Sugo is available.", UpdateChecker.latestVersion);
+                            }
+                            return aboutPage.upToDateShown ? i18n("Sugo is up to date.")
+                                 : !UpdateChecker.canInstall ? i18n("Look for a newer version on GitHub.")
+                                 : AppSettings.updateChannel === "nightly"
+                                   ? (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new nightly builds by itself.")
+                                                                     : i18n("Updates come from the nightly builds."))
+                                   : (AppSettings.autoCheckUpdates ? i18n("Sugo looks for new releases by itself.")
+                                                                     : i18n("Updates come from the stable releases."));
                         }
-                        return "";
+                        color: updateRow.step === "error" ? Theme.danger
+                             : updateRow.step === "available" || updateRow.step === "ready" ? Theme.foreground
+                             : aboutPage.upToDateShown && updateRow.step === "" ? Theme.positive : Theme.muted
+                        font.pixelSize: Theme.fontBody
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        verticalAlignment: Text.AlignVCenter
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: statusMetrics.lineSpacing * 2
+                        Accessible.role: updateRow.step.length > 0 ? Accessible.AlertMessage : Accessible.StaticText
+                        Accessible.name: text
+                        // A longer error is cut after two lines: all of it on hover.
+                        QQC2.ToolTip.text: text
+                        QQC2.ToolTip.visible: updateTextHover.hovered && truncated
+                        QQC2.ToolTip.delay: Theme.toolTipDelay
+                        HoverHandler { id: updateTextHover }
+                        FontMetrics {
+                            id: statusMetrics
+                            font.pixelSize: Theme.fontBody
+                        }
                     }
 
                     SButton {
-                        visible: updateMessage.step === "available" && UpdateChecker.installable
+                        visible: updateRow.step === "" || updateRow.step === "downloading"
+                        iconName: aboutPage.upToDateShown ? "check" : "download"
+                        text: UpdateChecker.checking ? i18n("Checking for updates…") : i18n("Check for Updates")
+                        labels: [i18n("Checking for updates…"), i18n("Check for Updates")]
+                        enabled: !UpdateChecker.checking && updateRow.step === ""
+                        onClicked: {
+                            aboutPage.updateStatusDismissed = false;
+                            UpdateChecker.checkForUpdates();
+                        }
+                    }
+                    SButton {
+                        visible: updateRow.step === "available" && UpdateChecker.installable
                         kind: "primary"
                         text: i18n("Install")
                         onClicked: UpdateChecker.installUpdate()
                     }
                     SButton {
-                        visible: updateMessage.step === "available"
+                        visible: updateRow.step === "available"
                         kind: UpdateChecker.installable ? "ghost" : "primary"
                         text: i18n("View Release")
                         onClicked: Qt.openUrlExternally(UpdateChecker.releaseUrl)
                     }
                     SButton {
-                        visible: updateMessage.step === "ready"
+                        visible: updateRow.step === "ready"
                         kind: "primary"
                         text: i18n("Restart Now")
                         onClicked: aboutPage.Window.window.requestRestart()
                     }
                     SButton {
-                        visible: updateMessage.step === "error"
+                        visible: updateRow.step === "error"
                         kind: "ghost"
                         text: i18n("Open Releases Page")
                         onClicked: Qt.openUrlExternally("https://github.com/MineraleYT/sugo/releases")
                     }
                     SButton {
-                        visible: updateMessage.step === "error"
+                        visible: updateRow.step === "error"
                         kind: "ghost"
                         iconOnly: true
                         iconName: "close"
