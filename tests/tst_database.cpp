@@ -78,6 +78,80 @@ QStringList movedAsideFiles(const QDir &dir)
 {
     return dir.entryList({QStringLiteral("*.foreign-*")}, QDir::Files);
 }
+
+/// The application id Sugo 1.0.0 stamped its files with ("kTmt" in ASCII).
+constexpr int kSugo100ApplicationId = 0x6B546D74;
+
+/**
+ * Writes a database exactly as Sugo 1.0.0 (tag v1.0.0) left it: its two migrations (version 1,
+ * then version 2 adding session.note), user_version 2, the 1.0.0 application id stamped after
+ * the migrations (here after the rows, which changes nothing), WAL mode, preset times in seconds. One timer with an option, one session with
+ * a note, one meta key.
+ */
+void createSugo100Database(const QString &path)
+{
+    const QString name = QStringLiteral("v100-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    {
+        QSqlDatabase raw = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+        raw.setDatabaseName(path);
+        QVERIFY(raw.open());
+        QSqlQuery query(raw);
+        for (const char *statement : {
+                 "PRAGMA foreign_keys = ON",
+                 "PRAGMA journal_mode = WAL",
+                 // v1.0.0, migration 1
+                 "CREATE TABLE meta (\n    key   TEXT PRIMARY KEY,\n    value TEXT NOT NULL\n)",
+                 "CREATE TABLE preset (\n"
+                 "    id                 INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+                 "    uuid               TEXT    NOT NULL UNIQUE,\n"
+                 "    name               TEXT    NOT NULL,\n"
+                 "    category           TEXT    NOT NULL DEFAULT '',\n"
+                 "    work_sec           INTEGER NOT NULL CHECK (work_sec > 0),\n"
+                 "    short_break_sec    INTEGER NOT NULL CHECK (short_break_sec >= 0),\n"
+                 "    long_break_sec     INTEGER NOT NULL CHECK (long_break_sec >= 0),\n"
+                 "    cycles_before_long INTEGER NOT NULL DEFAULT 4 CHECK (cycles_before_long >= 0),\n"
+                 "    is_builtin         INTEGER NOT NULL DEFAULT 0,\n"
+                 "    sort_order         INTEGER NOT NULL DEFAULT 0,\n"
+                 "    created_at         INTEGER NOT NULL\n)",
+                 "CREATE TABLE preset_option (\n"
+                 "    preset_id INTEGER NOT NULL REFERENCES preset(id) ON DELETE CASCADE,\n"
+                 "    key       TEXT    NOT NULL,\n"
+                 "    value     TEXT    NOT NULL,\n"
+                 "    PRIMARY KEY (preset_id, key)\n)",
+                 "CREATE TABLE session (\n"
+                 "    id           INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+                 "    kind         TEXT    NOT NULL CHECK (kind IN ('work', 'short_break', 'long_break')),\n"
+                 "    started_at   INTEGER NOT NULL,\n"
+                 "    ended_at     INTEGER NOT NULL,\n"
+                 "    duration_sec INTEGER NOT NULL,\n"
+                 "    planned_sec  INTEGER NOT NULL,\n"
+                 "    completed    INTEGER NOT NULL,\n"
+                 "    preset_id    INTEGER REFERENCES preset(id) ON DELETE SET NULL,\n"
+                 "    preset_name  TEXT    NOT NULL,\n"
+                 "    category     TEXT    NOT NULL DEFAULT ''\n)",
+                 "CREATE INDEX idx_session_started ON session(started_at)",
+                 "CREATE INDEX idx_session_kind_started ON session(kind, started_at)",
+                 "PRAGMA user_version = 1",
+                 // v1.0.0, migration 2
+                 "ALTER TABLE session ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+                 "PRAGMA user_version = 2",
+                 // What a user of 1.0.0 had saved.
+                 "INSERT INTO preset (uuid, name, category, work_sec, short_break_sec, long_break_sec, "
+                 "cycles_before_long, is_builtin, sort_order, created_at) "
+                 "VALUES ('mine', 'Deep work', 'Study', 3000, 600, 1200, 3, 0, 0, 1761876000)",
+                 "INSERT INTO preset_option (preset_id, key, value) VALUES (1, 'autoStartBreaks', 'true')",
+                 "INSERT INTO session (kind, started_at, ended_at, duration_sec, planned_sec, completed, "
+                 "preset_id, preset_name, category, note) "
+                 "VALUES ('work', 1761876100, 1761879100, 3000, 3000, 1, 1, 'Deep work', 'Study', 'Chapter 3')",
+                 "INSERT INTO meta (key, value) VALUES ('selectedPreset', 'mine')",
+             }) {
+            QVERIFY2(query.exec(QString::fromLatin1(statement)), statement);
+        }
+        QVERIFY(query.exec(QStringLiteral("PRAGMA application_id = %1").arg(kSugo100ApplicationId)));
+        raw.close();
+    }
+    QSqlDatabase::removeDatabase(name);
+}
 } // namespace
 
 class DatabaseTest : public QObject
@@ -194,6 +268,57 @@ private Q_SLOTS:
         QVERIFY(query.exec(QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 5)")));
         QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT deleted_by FROM preset_tombstone")).toString(), QString());
         QVERIFY(!query.exec(QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 6)"))); // one per uuid
+    }
+
+    void sugo100DatabaseIsKeptAndUpgraded()
+    {
+        // Sugo 1.0.0 was released with another application id and its own numbering of
+        // user_version: its version 2 (session.note) is today's version 1. Such a file is ours.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        createSugo100Database(path);
+
+        {
+            Database db(path);
+            QVERIFY2(db.open(), qPrintable(db.lastError()));
+            const QString c = db.connectionName();
+
+            QVERIFY2(db.movedAsidePath().isEmpty(), qPrintable(db.movedAsidePath()));
+            QVERIFY(movedAsideFiles(QDir(dir.path())).isEmpty());
+            QCOMPARE(scalar(c, QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
+            QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
+
+            // The timer, now with what Sugo Sync needs, and its times in milliseconds.
+            QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM preset")).toInt(), 1);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT name FROM preset WHERE uuid = 'mine'")).toString(),
+                     QStringLiteral("Deep work"));
+            QCOMPARE(scalar(c, QStringLiteral("SELECT work_sec FROM preset WHERE uuid = 'mine'")).toInt(), 3000);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT created_at FROM preset WHERE uuid = 'mine'")).toLongLong(),
+                     1761876000000LL);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT updated_at FROM preset WHERE uuid = 'mine'")).toLongLong(), 0);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT updated_by FROM preset WHERE uuid = 'mine'")).toString(), QString());
+            QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM preset_option WHERE key = 'autoStartBreaks'")).toString(),
+                     QStringLiteral("true"));
+            QVERIFY(tableNames(c).contains(QStringLiteral("preset_tombstone")));
+
+            // The history, untouched (session times were and are seconds).
+            QCOMPARE(scalar(c, QStringLiteral("SELECT count(*) FROM session")).toInt(), 1);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT note FROM session")).toString(), QStringLiteral("Chapter 3"));
+            QCOMPARE(scalar(c, QStringLiteral("SELECT started_at FROM session")).toLongLong(), 1761876100LL);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT preset_id FROM session")).toInt(), 1);
+            QCOMPARE(scalar(c, QStringLiteral("SELECT value FROM meta WHERE key = 'selectedPreset'")).toString(),
+                     QStringLiteral("mine"));
+            QCOMPARE(scalar(c, QStringLiteral("PRAGMA foreign_key_check")), QVariant());
+        }
+        {
+            // Opening it again changes nothing more (milliseconds are not multiplied twice).
+            Database db(path);
+            QVERIFY2(db.open(), qPrintable(db.lastError()));
+            QVERIFY(db.movedAsidePath().isEmpty());
+            QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT created_at FROM preset WHERE uuid = 'mine'")).toLongLong(),
+                     1761876000000LL);
+        }
     }
 
     void databaseFromNewerVersionIsRefusedAndUntouched()
