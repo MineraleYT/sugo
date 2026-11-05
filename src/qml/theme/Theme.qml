@@ -30,10 +30,14 @@ QtObject {
     readonly property color selected: dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
     readonly property color track: dark ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(0, 0, 0, 0.07)
     readonly property color scrim: Qt.rgba(0, 0, 0, dark ? 0.6 : 0.3)
+    /// Under what floats over the page: the composer, menus, sheets.
+    readonly property color shadow: Qt.rgba(0, 0, 0, dark ? 0.55 : 0.14)
 
     // --- Text --------------------------------------------------------------------------------
     readonly property color foreground: dark ? "#ececee" : "#18181b"
     readonly property color muted: dark ? "#8e8e97" : "#6b6b74"
+    /// Text a little quieter than the foreground: menu rows, the bars of a breakdown.
+    readonly property color dim: theme.alpha(foreground, 0.75)
     readonly property color subtle: dark ? "#5d5d66" : "#a1a1aa"
 
     /// The main action: the text colour as a fill.
@@ -136,6 +140,98 @@ QtObject {
     readonly property int windowMinHeight: 520
     /// Below this window width the sidebar becomes a drawer.
     readonly property int wideBreakpoint: 680
+
+    // The redesign's sizes, one block per part of the window (each part adds its own here).
+    readonly property int radiusXs: 4
+    readonly property int radiusXl: 16
+    readonly property int controlHeightSm: 28
+    readonly property int iconButton: 28
+    readonly property int roundButton: 34
+    readonly property int switchWidth: 30
+    readonly property int switchHeight: 18
+    readonly property int switchKnob: 12
+    readonly property int sliderWidth: 140
+    readonly property int sliderWidthCompact: 110
+    readonly property int sliderTrack: 4
+    readonly property int sliderKnob: 14
+    readonly property int selectMinWidth: 120
+    readonly property int selectMinWidthWide: 150
+    readonly property int fieldWidthWide: 220
+    readonly property int numberFieldWidth: 76
+    readonly property int swatchSize: 14
+    readonly property int phaseDot: 6
+
+    // --- Title bar
+    readonly property int titleBarHeight: 44
+    readonly property int titleBarPaddingLeft: 14
+    readonly property int titleBarPaddingRight: 8
+    /// Room for the traffic lights of macOS at the left of the title bar.
+    readonly property int titleBarMacInset: 84
+    readonly property int tabHeight: 28
+    readonly property int tabPaddingX: 12
+    readonly property int tabPaddingXCompact: 8
+    readonly property int logoSmall: 20
+    /// Below this window width the title bar and the pages use their compact layout.
+    readonly property int compactBreakpoint: 560
+
+    // --- Menus
+    /// A menu opens this far from its button, and stays this far from the window's edges.
+    readonly property int menuOffset: 4
+    readonly property int menuEdgeMargin: 8
+    readonly property int menuPadding: 5
+    readonly property int menuRowHeight: 28
+    readonly property int menuRowHeightTwoLine: 42
+    readonly property int menuHeaderHeight: 22
+    readonly property int menuMinWidth: 180
+    readonly property int menuMaxWidth: 340
+    readonly property int menuAutoStartWidth: 250
+    readonly property int durationMenu: 150
+    /// A menu grows from this scale to full size while it opens.
+    readonly property real menuScaleFrom: 0.96
+    readonly property int paletteWidth: 500
+    readonly property int paletteTop: 64
+    readonly property int paletteFieldHeight: 42
+    readonly property int sheetWidth: 420
+    readonly property int sheetPadding: 18
+
+    // --- Focus page
+    readonly property int clockSize: 128
+    readonly property int clockSizeCompact: 88
+    readonly property int cycleTrackWidth: 420
+    readonly property int cycleTrackHeight: 4
+    readonly property int cycleTrackGap: 3
+    readonly property int composerWidth: 520
+    readonly property int composerPadding: 10
+    readonly property int dockBottomMargin: 16
+    readonly property int dockSpacing: 10
+
+    // --- Statistics
+    readonly property int pagePaddingX: 28
+    readonly property int pagePaddingY: 22
+    readonly property int pagePaddingCompact: 16
+    readonly property int chartHeight: 110
+    readonly property int chartHeightCompact: 90
+    readonly property int chartBarMaxWidth: 34
+    readonly property int breakdownBarHeight: 4
+
+    // --- Settings
+    readonly property int settingsNavWidth: 178
+    readonly property int settingsNavItemHeight: 30
+    /// Below this window width the list of categories becomes a menu.
+    readonly property int settingsNavBreakpoint: 640
+    readonly property int settingsBodyPaddingX: 26
+    readonly property int settingsBodyPaddingY: 20
+    readonly property int settingsRowMinHeight: 46
+    readonly property int settingsRowPaddingX: 14
+    readonly property int settingsRowPaddingY: 10
+    readonly property int aboutLogo: 56
+
+    // --- Welcome
+    readonly property int logoWelcome: 88
+    readonly property int welcomeTextWidth: 400
+    readonly property int welcomeGroupWidth: 440
+    readonly property int welcomeFooterHeight: 56
+    readonly property int fontWelcomeTitle: 22
 
     // --- Type --------------------------------------------------------------------------------
     /// The system's fixed-width font ("monospace" is a fontconfig alias, unknown to macOS).
