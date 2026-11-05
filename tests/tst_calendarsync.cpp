@@ -18,6 +18,7 @@
 
 #include "CalendarSync.h"
 #include "FakeSecretStore.h"
+#include "RedirectServer.h"
 #include "SecretStore.h"
 #include "Settings.h"
 
@@ -1154,6 +1155,64 @@ private Q_SLOTS:
         QVERIFY2(puts.at(2).at - puts.at(1).at >= 70, "second retry came too early");
         QCOMPARE(m_sync->status(), CalendarSync::Ready);
         QVERIFY(m_sync->lastError().isEmpty());
+    }
+
+    void aRedirectToAnotherServerNeverCarriesThePassword_data()
+    {
+        QTest::addColumn<int>("status");
+        QTest::newRow("302") << 302;
+        QTest::newRow("307") << 307;
+        QTest::newRow("308") << 308;
+    }
+    void aRedirectToAnotherServerNeverCarriesThePassword()
+    {
+        // The calendar's server sends the event elsewhere (another port: another origin). The
+        // password goes to the calendar's server only: the redirect is not followed, the event
+        // stays queued and is tried again later, still never at the other server.
+        QFETCH(int, status);
+        RedirectServer calendar;
+        calendar.status = status;
+        calendar.target = m_server->base();
+        m_sync->setProvider(QStringLiteral("caldav"));
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->setCalendarUrl(calendar.base() + QStringLiteral("/cal/personal/"));
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QTRY_VERIFY(calendar.requests.size() >= 2); // tried again, with the backoff
+        const QByteArray auth = basic(QStringLiteral("alice"), kPassword);
+        QCOMPARE(calendar.requests.first().method, QByteArray("PUT"));
+        QCOMPARE(calendar.requests.first().headers.value("authorization"), auth); // the password was there to leak
+        QVERIFY2(m_server->requests.isEmpty(), "the redirect to another server was followed");
+        QCOMPARE(m_sync->pendingCount(), 1);
+        QVERIFY(m_server->stored.isEmpty());
+        QVERIFY(!m_sync->isSendingPaused());
+        checkNoSecrets();
+    }
+
+    void aRedirectOnTheSameServerIsFollowed()
+    {
+        // The control for the test above: the fake redirect works and is followed when it stays
+        // on the calendar's server, with the password.
+        RedirectServer calendar;
+        calendar.target = calendar.base() + QStringLiteral("/moved");
+        calendar.answers.append({"/moved/", 201, QByteArray()});
+        m_sync->setProvider(QStringLiteral("caldav"));
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->setCalendarUrl(calendar.base() + QStringLiteral("/cal/personal/"));
+        m_sync->setEnabled(true);
+        m_sync->enqueueWorkSession(record());
+
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(calendar.requests.size(), 2);
+        const RedirectServer::Request &followed = calendar.requests.at(1);
+        QCOMPARE(followed.method, QByteArray("PUT"));
+        QVERIFY(followed.path.startsWith("/moved/cal/personal/"));
+        QCOMPARE(followed.headers.value("authorization"), basic(QStringLiteral("alice"), kPassword));
+        QVERIFY(followed.body.contains("SUMMARY:Deep work"));
     }
 
     void putRefusedForTheCalendarKeepsTheQueue_data()

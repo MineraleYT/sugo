@@ -2,9 +2,11 @@
 #pragma once
 
 #include "SecretStore.h"
+#include "SyncCrypto.h"
 
 #include <CoreFoundation/CoreFoundation.h>
-#include <QHash>
+
+#include <unordered_map>
 
 /**
  * macOS only: secrets in the user's login Keychain (Security.framework, SecItem* API), as
@@ -17,6 +19,7 @@
  * replaces the item, so what this build writes it can read again without asking. If storing the
  * new item fails after the old one was deleted, write() puts the old secret back when it knows it
  * without asking (this store read or wrote it last); otherwise it is lost with the failed write.
+ * What it knows it keeps as SecretBytes, wiped when replaced and when the store goes away.
  * (tests/manual-review-checklist.md, "macOS: Keychain".)
  */
 class MacKeychainStore final : public SecretStore
@@ -40,11 +43,12 @@ public:
 private:
     bool remove(const QString &key);
     OSStatus addItem(const QString &key, CFDataRef data) const;
-    void restore(const QString &key, const std::optional<QString> &previous);
+    void restore(const QString &key, std::optional<SecretBytes> previous);
 
-    /// What each item holds as far as this store knows (its last read or write; empty: no item),
-    /// to put back when replacing it fails. Unknown keys are not read again: that may ask the user.
-    QHash<QString, QString> m_known;
+    /// What each item holds as far as this store knows (its last read or write, UTF-8; empty: no
+    /// item), to put back when replacing it fails. Unknown keys are not read again: that may ask
+    /// the user. A copy of its own, never the text read() returns, so it is wiped with the entry.
+    std::unordered_map<QString, SecretBytes> m_known;
     int m_failNextAdd = 0;
 
     QString m_service;

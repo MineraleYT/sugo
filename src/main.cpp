@@ -42,6 +42,7 @@
 #include "UpdateInstaller.h"
 #include "LocalSingleInstance.h"
 #include "MacApp.h"
+#include "QuitPolicy.h"
 #include "ShortcutsFocusInhibitor.h"
 #include "ShortcutsFocusInstaller.h"
 #else
@@ -81,14 +82,21 @@ namespace
  *   on a notification) also shows a hidden window. After a `--background` launch the
  *   activation macOS may give a newly launched application is ignored: the filter is armed a
  *   moment after the event loop starts.
- * - Cmd+Q, Quit in the Dock menu, logging out or shutting down: Cocoa asks
- *   applicationShouldTerminate:, Qt sends QEvent::Quit to the application, which closes every
- *   window and quits only if they all accept (otherwise macOS cancels the logout). The window
- *   refuses closing (it hides, or asks first) unless its `platformQuitting` property is set:
- *   set it here, before Qt closes it. QCoreApplication::quit() takes the same way on macOS,
- *   so this also covers the window's own Quit (requestQuit(), which the menu bar icon's Quit
- *   calls too), once it has asked. The running phase is then saved as
- *   interrupted by the aboutToQuit -> TimerEngine::stop connection.
+ * - Quitting: every way ends in Cocoa's applicationShouldTerminate:, which Qt turns into
+ *   QEvent::Quit to the application; Qt then closes every window and quits only if they all
+ *   accept, and an ignored event makes Cocoa cancel the termination (and a logout with it).
+ *   Cmd+Q, Sugo › Quit Sugo and the menu bar icon's Quit never come here first: they call the
+ *   window's requestQuit(), which asks while a phase runs or is paused and then quits with
+ *   QCoreApplication::quit(); on macOS that (like a SIGTERM) takes this same way, as Sugo's own
+ *   quit. What else arrives is a `quit` Apple event from another program: Quit in the Dock
+ *   menu, Activity Monitor, AppleScript. While a phase is active that one is refused and
+ *   turned into the window's requestQuit() (QuitPolicy), so the Dock's Quit asks like Cmd+Q;
+ *   the window comes to the front for it. Logging out, restarting or shutting down (a `quit`
+ *   event with a reason) go through: refusing them would cancel the logout, and the user chose
+ *   to end the session.
+ *   A quit that goes through sets the window's `platformQuitting` property before Qt closes it
+ *   (the window otherwise refuses closing: it hides, or asks), and the running phase is saved
+ *   as interrupted by the aboutToQuit -> TimerEngine::stop connection.
  * - A sugo:// link (`open sugo://toggle`, the Shortcuts app's "Open URLs"): Cocoa's GetURL
  *   event, which Qt delivers as a QFileOpenEvent with a URL, handed to `openUrl`. Opening a link
  *   also activates the application; that must not pop the hidden window up for a command like
@@ -98,10 +106,11 @@ namespace
 class MacApplicationEvents : public QObject
 {
 public:
-    MacApplicationEvents(QQuickWindow *window, std::function<void()> showWindow, std::function<void(const QUrl &)> openUrl,
-                         bool armed, QObject *parent)
+    MacApplicationEvents(QQuickWindow *window, TimerEngine *timer, std::function<void()> showWindow,
+                         std::function<void(const QUrl &)> openUrl, bool armed, QObject *parent)
         : QObject(parent)
         , m_window(window)
+        , m_timer(timer)
         , m_showWindow(std::move(showWindow))
         , m_openUrl(std::move(openUrl))
         , m_armed(armed)
@@ -126,6 +135,18 @@ public:
                     m_pendingShow.start();
                 }
             } else if (event->type() == QEvent::Quit) {
+                const bool phaseActive = m_timer && m_timer->isActive();
+                if (QuitPolicy::needsConfirmation(macCurrentQuitOrigin(), phaseActive)) {
+                    // Not inside applicationShouldTerminate:, which waits for the answer.
+                    QTimer::singleShot(0, this, [this]() {
+                        if (m_window) {
+                            m_showWindow();
+                            QMetaObject::invokeMethod(m_window, "requestQuit");
+                        }
+                    });
+                    event->ignore();
+                    return true;
+                }
                 m_window->setProperty("platformQuitting", true);
             } else if (event->type() == QEvent::FileOpen) {
                 const QUrl url = static_cast<QFileOpenEvent *>(event)->url();
@@ -145,6 +166,7 @@ private:
     static constexpr int kUrlActivationMs = 1000;  ///< How long an activation may follow its link.
 
     QPointer<QQuickWindow> m_window;
+    QPointer<TimerEngine> m_timer;
     std::function<void()> m_showWindow;
     std::function<void(const QUrl &)> m_openUrl;
     bool m_armed;
@@ -536,7 +558,8 @@ int main(int argc, char *argv[])
             }
         };
         // The Dock icon, links, and quitting from the system (see MacApplicationEvents).
-        auto *macEvents = new MacApplicationEvents(window, [activateWindow]() { activateWindow(); }, openUrl, !background, &services);
+        auto *macEvents = new MacApplicationEvents(window, timer, [activateWindow]() { activateWindow(); }, openUrl, !background,
+                                                   &services);
         app.installEventFilter(macEvents);
         if (background) {
             QTimer::singleShot(1000, macEvents, [macEvents]() { macEvents->arm(); });

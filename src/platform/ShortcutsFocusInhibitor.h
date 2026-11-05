@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -18,6 +19,10 @@
  * off, and picks them in the settings (AppSettings::focusOnShortcut / focusOffShortcut).
  *
  * Available when the tool exists and both shortcuts are among those `shortcuts list` printed.
+ * `shortcuts run` takes an argument that starts with "-" for an option (`run -- <name>` does
+ * not work either), so a shortcut whose name does is run by its identifier: when the list has
+ * such a name, `shortcuts list --show-identifiers` is read too, and without an identifier
+ * (a tool without the option) that shortcut counts as missing.
  * The list is read again whenever the names change and when refreshShortcutList() is called
  * (the settings page, the application becoming active).
  *
@@ -55,8 +60,9 @@ public:
     void release() override;
     bool isInhibited() const override { return m_on || m_busy; }
     bool isReleasing() const override { return isInhibited() && !m_wanted; }
-    /// An "on" in flight, the pause after it if it timed out, then the "off".
-    int releaseTimeoutMs() const override { return 2 * m_runTimeoutMs + m_retryDelayMs + 500; }
+    /// The longest release: an "on" in flight that times out, the pause, an "off" that times
+    /// out, the pause, the retried "off" (three runs, two pauses), plus a margin.
+    int releaseTimeoutMs() const override { return 3 * m_runTimeoutMs + 2 * m_retryDelayMs + 500; }
 
     /// The shortcuts to run; reads the list again when they change.
     void setShortcutNames(const QString &onShortcut, const QString &offShortcut);
@@ -80,6 +86,12 @@ public:
 
     /// The names of the shortcuts in the output of `shortcuts list`: one per line.
     static QStringList parseShortcutList(const QByteArray &output);
+    /// The identifiers in the output of `shortcuts list --show-identifiers` ("<name> (<UUID>)"
+    /// per line), by name; the first one of a name that appears twice.
+    static QHash<QString, QString> parseShortcutIdentifiers(const QByteArray &output);
+    /// What `shortcuts run` is given for `name`: the name, or for one that starts with "-" its
+    /// identifier in `identifiers` (empty if it has none: it cannot be run).
+    static QString runArgument(const QString &name, const QHash<QString, QString> &identifiers);
 
 Q_SIGNALS:
     /// The list was read (it may be the same as before).
@@ -90,13 +102,15 @@ private:
     void runProgram(const QStringList &arguments, int timeoutMs, Done done);
     void sync();
     void pauseThenSync();
+    void finishListing(const QStringList &list, const QHash<QString, QString> &identifiers);
     void report();
 
     QString m_program;
     QString m_onShortcut;
     QString m_offShortcut;
-    QString m_releaseShortcut; ///< The "off" paired with the "on" that last ran; the release runs it.
+    QString m_releaseShortcut; ///< The run argument of the "off" paired with the "on" that last ran; the release runs it.
     QStringList m_list;
+    QHash<QString, QString> m_identifiers; ///< Read only when a name in m_list starts with "-".
     bool m_listing = false;      ///< `shortcuts list` is running.
     bool m_listAgain = false;    ///< Asked for a refresh while one was running.
     bool m_wasAvailable = false; ///< Last value announced through availableChanged().

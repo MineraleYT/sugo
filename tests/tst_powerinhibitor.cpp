@@ -62,6 +62,38 @@ public:
     bool setEnabled(bool) override { return false; }
     void repair() override {}
 };
+
+/// Counts the refusals of Inhibit the client has handled: it warns about each one in its reply
+/// handler, which also starts the retry. (The fake screen saver counts its calls before the
+/// client has the reply.)
+class RefusalCounter
+{
+public:
+    RefusalCounter()
+    {
+        s_count = 0;
+        s_previous = qInstallMessageHandler(&RefusalCounter::handle);
+    }
+    ~RefusalCounter() { qInstallMessageHandler(s_previous); }
+    RefusalCounter(const RefusalCounter &) = delete;
+    RefusalCounter &operator=(const RefusalCounter &) = delete;
+
+    int count() const { return s_count; }
+
+private:
+    static void handle(QtMsgType type, const QMessageLogContext &context, const QString &message)
+    {
+        if (type == QtWarningMsg && qstrcmp(context.category, "sugo.platform.power") == 0
+            && message.startsWith(QLatin1String("Failed to inhibit"))) {
+            ++s_count;
+        }
+        if (s_previous) {
+            s_previous(type, context, message);
+        }
+    }
+    static inline int s_count = 0;
+    static inline QtMessageHandler s_previous = nullptr;
+};
 }
 
 class PowerInhibitorTest : public QObject
@@ -133,9 +165,15 @@ private Q_SLOTS:
 
     void cleanup()
     {
-        // The release on destruction is asynchronous: let it land before the next test starts.
+        // The release is asynchronous: let it land before the next test starts. The screen saver
+        // may have handed out its cookie with the reply still on its way: quit as the program does
+        // (shutdown() waits for that reply and hands the cookie back), since a plain destruction
+        // would drop the reply and with it the UnInhibit.
         const bool wasInhibited = inhibitor && screenInhibited();
         const int before = server.calls.size();
+        if (inhibitor) {
+            inhibitor->shutdown();
+        }
         inhibitor.reset();
         if (wasInhibited) {
             QTRY_COMPARE_WITH_TIMEOUT(server.calls.size(), before + 1, 3000);
@@ -282,8 +320,12 @@ private Q_SLOTS:
     void aNewPhaseDoesNotInheritTheOldRetry()
     {
         server.failures = 100;
+        RefusalCounter refusals;
         engine->start();
-        QTest::qWait(300); // the first Inhibit failed and a retry is due
+        // The first Inhibit failed and a retry is due. (Waiting for the client's reply, not for
+        // the server: with the reply still in flight, the new phase would take over the request.)
+        QTRY_COMPARE_WITH_TIMEOUT(refusals.count(), 1, 3000);
+        QCOMPARE(server.calls.size(), 1);
         engine->stop();
         engine->start();
         // One refused call, then the new phase's request and three retries.

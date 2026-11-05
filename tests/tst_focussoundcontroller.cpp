@@ -44,6 +44,20 @@ private:
         return pids;
     }
 
+    /// The names of the players started so far (those that failed too), oldest first.
+    QStringList startedPrograms() const
+    {
+        QFile file(dir.filePath(QStringLiteral("audio.raw.programs")));
+        return file.open(QIODevice::ReadOnly) ? QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts) : QStringList();
+    }
+
+    /// The fake player of that name exits with an error at once from now on.
+    bool makeFail(const char *program)
+    {
+        QFile file(dir.filePath(QStringLiteral("audio.raw.fail-") + QLatin1String(program)));
+        return file.open(QIODevice::WriteOnly);
+    }
+
     /// The process exists and has not ended (a zombie not yet reaped counts as ended).
     static bool isRunning(qint64 pid)
     {
@@ -93,11 +107,21 @@ private Q_SLOTS:
         QVERIFY(dir.isValid());
         const QString bin = dir.filePath(QStringLiteral("bin"));
         QVERIFY(QDir().mkpath(bin));
-        QFile player(bin + QStringLiteral("/pw-play"));
-        QVERIFY(player.open(QIODevice::WriteOnly));
-        player.write("#!/bin/sh\necho $$ >> \"$FOCUS_SOUND_CAPTURE.pids\"\nexec cat > \"$FOCUS_SOUND_CAPTURE\"\n");
-        player.close();
-        QVERIFY(player.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        // The same fake player under both names. Each start is recorded in .programs; a file
+        // .fail-<name> makes that player exit with an error at once, as pw-play does where no
+        // PipeWire daemon runs.
+        for (const char *name : {"pw-play", "aplay"}) {
+            QFile player(bin + QLatin1Char('/') + QLatin1String(name));
+            QVERIFY(player.open(QIODevice::WriteOnly));
+            player.write("#!/bin/sh\n"
+                         "name=$(basename \"$0\")\n"
+                         "echo \"$name\" >> \"$FOCUS_SOUND_CAPTURE.programs\"\n"
+                         "[ -f \"$FOCUS_SOUND_CAPTURE.fail-$name\" ] && { echo \"$name: cannot connect\" >&2; exit 1; }\n"
+                         "echo $$ >> \"$FOCUS_SOUND_CAPTURE.pids\"\n"
+                         "exec cat > \"$FOCUS_SOUND_CAPTURE\"\n");
+            player.close();
+            QVERIFY(player.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        }
         oldPath = qgetenv("PATH");
         oldCapture = qgetenv("FOCUS_SOUND_CAPTURE");
         QByteArray path = bin.toLocal8Bit();
@@ -118,6 +142,9 @@ private Q_SLOTS:
     {
         QFile::remove(dir.filePath(QStringLiteral("audio.raw")));
         QFile::remove(dir.filePath(QStringLiteral("audio.raw.pids")));
+        QFile::remove(dir.filePath(QStringLiteral("audio.raw.programs")));
+        QFile::remove(dir.filePath(QStringLiteral("audio.raw.fail-pw-play")));
+        QFile::remove(dir.filePath(QStringLiteral("audio.raw.fail-aplay")));
         clock = FakeClock();
         engine = std::make_unique<TimerEngine>(&clock, nullptr);
         sounds = std::make_unique<FocusSoundController>();
@@ -189,6 +216,44 @@ private Q_SLOTS:
 
         QTRY_VERIFY(!isRunning(first));
         QTRY_VERIFY_WITH_TIMEOUT(startedPlayers().size() == 2 && soundPlaying(), 5000);
+    }
+
+    void aPlayerThatCannotPlayHereGivesWayToTheNext()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and aplay are the Linux players; macOS plays through Qt Multimedia only");
+#endif
+        // pw-play is installed but exits at once (no PipeWire daemon): aplay takes over.
+        QVERIFY(makeFail("pw-play"));
+        engine->start();
+        QTRY_VERIFY_WITH_TIMEOUT(soundPlaying(), 3000);
+        QCOMPARE(startedPrograms(), (QStringList{QStringLiteral("pw-play"), QStringLiteral("aplay")}));
+
+        // Remembered: the next work phase goes straight to aplay.
+        engine->pause();
+        QTRY_VERIFY_WITH_TIMEOUT(!playerRunning(), 5000);
+        engine->resume();
+        QTRY_VERIFY_WITH_TIMEOUT(startedPlayers().size() == 2 && soundPlaying(), 3000);
+        QCOMPARE(startedPrograms(), (QStringList{QStringLiteral("pw-play"), QStringLiteral("aplay"), QStringLiteral("aplay")}));
+    }
+
+    void whenNoPlayerProgramCanPlayQtMultimediaTakesOver()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and aplay are the Linux players; macOS plays through Qt Multimedia only");
+#endif
+        QVERIFY(makeFail("pw-play"));
+        QVERIFY(makeFail("aplay"));
+        sounds->setVolume(0);
+        engine->start();
+        // Each tried once, then never again: Qt Multimedia plays (or, without a device, retries).
+        QTest::qWait(2500);
+        QCOMPARE(startedPrograms(), (QStringList{QStringLiteral("pw-play"), QStringLiteral("aplay")}));
+        QVERIFY(startedPlayers().isEmpty());
+        if (!QMediaDevices::defaultAudioOutput().isNull()) {
+            QVERIFY(sounds->isPlaying());
+        }
+        sounds.reset();
     }
 
     void keepsHalfASecondBufferedAhead()

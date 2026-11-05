@@ -8,6 +8,7 @@
 
 #include "FakeSecretStore.h"
 #include "FakeSyncServer.h"
+#include "RedirectServer.h"
 #include "SyncApi.h"
 #include "SyncCrypto.h"
 #include "SyncSecrets.h"
@@ -178,6 +179,78 @@ private Q_SLOTS:
         qunsetenv("SUGO_SYNC_URL");
 
         QVERIFY(SyncApi(secrets.get(), QUrl(QStringLiteral("https://sugo-sync-dev.minerale.workers.dev"))).baseUrlAllowed());
+    }
+
+    void aRedirectedRenewalNeverCarriesTheRefreshToken_data()
+    {
+        QTest::addColumn<int>("status");
+        QTest::newRow("302") << 302;
+        QTest::newRow("307") << 307;
+        QTest::newRow("308") << 308;
+    }
+    void aRedirectedRenewalNeverCarriesTheRefreshToken()
+    {
+        // The sync server sends the renewal elsewhere (another port: another origin): the
+        // refresh token in its body goes to the sync server only, and stays the device's.
+        QFETCH(int, status);
+        link();
+        const QString refreshToken = secrets->refreshToken();
+        QVERIFY(!refreshToken.isEmpty());
+        RedirectServer sync;
+        sync.status = status;
+        sync.target = server->base();
+        SyncApi redirected(secrets.get(), QUrl(sync.base()));
+
+        const SyncReply reply = wait([&](auto cb) { redirected.getBlob(QByteArray(), cb); });
+        QVERIFY(!reply.ok());
+        QVERIFY(!redirected.hasAccessToken());
+        QCOMPARE(sync.requests.size(), 1);
+        QCOMPARE(sync.requests.first().path, QByteArray("/v1/auth/token"));
+        QVERIFY(sync.sawAnywhere(refreshToken.toUtf8())); // it was there to leak
+        QVERIFY2(server->requests.isEmpty(), "the redirect to another server was followed");
+        QCOMPARE(secrets->refreshToken(), refreshToken);
+    }
+
+    void aRedirectedRequestNeverCarriesTheAccessToken_data()
+    {
+        aRedirectedRenewalNeverCarriesTheRefreshToken_data();
+    }
+    void aRedirectedRequestNeverCarriesTheAccessToken()
+    {
+        QFETCH(int, status);
+        link();
+        RedirectServer sync;
+        sync.status = status;
+        sync.target = server->base();
+        sync.answers.append({"/v1/auth/token", 200,
+                             R"({"access_token":"acc_redirect_test","refresh_token":"ref_redirect_test","expires_in":3600})"});
+        SyncApi redirected(secrets.get(), QUrl(sync.base()));
+
+        const SyncReply reply = wait([&](auto cb) { redirected.getBlob(QByteArray(), cb); });
+        QVERIFY(!reply.ok());
+        QCOMPARE(sync.requests.size(), 2);
+        QCOMPARE(sync.requests.at(1).path, QByteArray("/v1/blob/presets"));
+        QCOMPARE(sync.requests.at(1).headers.value("authorization"), QByteArray("Bearer acc_redirect_test")); // there to leak
+        QVERIFY2(server->requests.isEmpty(), "the redirect to another server was followed");
+    }
+
+    void aRedirectOnTheSameServerIsFollowed()
+    {
+        // The control for the tests above: the fake redirect works and is followed when it stays
+        // on the sync server, with the token.
+        link();
+        RedirectServer sync;
+        sync.target = sync.base() + QStringLiteral("/moved");
+        sync.answers.append({"/v1/auth/token", 200,
+                             R"({"access_token":"acc_redirect_test","refresh_token":"ref_redirect_test","expires_in":3600})"});
+        sync.answers.append({"/moved/", 200, "{}"});
+        SyncApi redirected(secrets.get(), QUrl(sync.base()));
+
+        const SyncReply reply = wait([&](auto cb) { redirected.listDevices(cb); });
+        QVERIFY(reply.ok());
+        QCOMPARE(sync.requests.size(), 3);
+        QCOMPARE(sync.requests.at(2).path, QByteArray("/moved/v1/devices"));
+        QCOMPARE(sync.requests.at(2).headers.value("authorization"), QByteArray("Bearer acc_redirect_test"));
     }
 
     void parallelCallsRefreshOnce()

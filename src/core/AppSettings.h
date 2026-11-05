@@ -240,6 +240,12 @@ public:
     Q_INVOKABLE void playSoundPreview(const QString &soundName, int volume = -1);
     /// The fade level (0..1) of an alert sound at a position; the duration is 0 while unknown.
     static double alertFadeGain(qint64 positionMs, qint64 durationMs);
+    /// Plays a file with pw-play or paplay (afplay on macOS), at a fixed volume: where Qt
+    /// Multimedia cannot. A player that fails to start or exits with an error right away gives way
+    /// to the next for this sound; it is not tried again in this session if it failed to start, or
+    /// if the next one played the file it could not (pw-play with no PipeWire daemon).
+    /// Public for tests.
+    static void playWithPlayerProgram(const QString &file, int volume);
     /// Tests: called with the sound name and volume instead of starting a player.
     void setSoundPlayerForTesting(std::function<void(const QString &, int)> player) { m_soundPlayer = std::move(player); }
     /// canberra-gtk-play arguments for an event sound name at a volume of 1..100 (in whole dB for

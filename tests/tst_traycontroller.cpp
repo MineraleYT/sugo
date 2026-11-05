@@ -205,6 +205,29 @@ private Q_SLOTS:
         QVERIFY(actionNamed(timers->menu(), QStringLiteral("Deep reading")));
     }
 
+    void namesWithAnAmpersandKeepIt()
+    {
+        // "&" marks a mnemonic in menu texts: a timer named "R&D" must not show as "RD" or with an
+        // underlined D, nor "Tom & Jerry" lose its "&".
+        const QString rnd = presets->create({{QStringLiteral("name"), QStringLiteral("R&D")}});
+        presets->create({{QStringLiteral("name"), QStringLiteral("Tom & Jerry")}});
+        presets->setCurrentUuid(rnd);
+        openMenu();
+        QAction *timers = actionNamed(menu(), QStringLiteral("Timer"));
+        QVERIFY(timers && timers->menu());
+        QAction *entry = actionNamed(timers->menu(), QStringLiteral("R&&D"));
+        QVERIFY(entry);
+        QCOMPARE(entry->iconText(), QStringLiteral("R&D")); // what the menu shows
+        QVERIFY(entry->isChecked());
+        QAction *tom = actionNamed(timers->menu(), QStringLiteral("Tom && Jerry"));
+        QVERIFY(tom);
+        QCOMPARE(tom->iconText(), QStringLiteral("Tom & Jerry"));
+
+        QAction *status = menu()->actions().first();
+        QVERIFY2(status->text().endsWith(QStringLiteral(" R&&D")), qPrintable(status->text()));
+        QVERIFY2(status->iconText().endsWith(QStringLiteral(" R&D")), qPrintable(status->iconText()));
+    }
+
     void menuOpensPagesAndTheWindow()
     {
         QSignalSpy pages(tray.get(), &TrayController::openPageRequested);

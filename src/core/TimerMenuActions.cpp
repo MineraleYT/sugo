@@ -3,6 +3,7 @@
 
 #include "PresetModel.h"
 #include "TimerEngine.h"
+#include "TrayPresenter.h"
 
 #include "Localization.h"
 
@@ -124,7 +125,8 @@ void TimerMenuActions::rebuildTimerMenu()
         for (int row = 0; row < list.size(); ++row) {
             const TimerPreset &preset = list.at(row);
             const QString iconName = m_presets->data(m_presets->index(row), PresetModel::IconNameRole).toString();
-            QAction *action = m_timerMenu->addAction(iconName.isEmpty() ? QIcon() : QIcon::fromTheme(iconName), preset.name);
+            QAction *action = m_timerMenu->addAction(iconName.isEmpty() ? QIcon() : QIcon::fromTheme(iconName),
+                                                     menuText(preset.name));
             action->setCheckable(true);
             action->setData(preset.uuid);
             m_timerGroup->addAction(action);

@@ -2,6 +2,7 @@
 #include "KRunnerService.h"
 
 #include "PresetModel.h"
+#include "TimerCommands.h"
 #include "TimerEngine.h"
 
 #include "Localization.h"
@@ -149,8 +150,10 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
         return matches;
     }
 
-    // 3. Presets by name: "pomodoro deep" starts "Deep work".
+    // 3. Presets by name: "pomodoro deep" starts "Deep work". While a phase is active another
+    // preset would throw it away, so (as over D-Bus) it is refused: it is still listed, saying why.
     if (!subCommand.isEmpty()) {
+        const QString currentUuid = m_presets ? m_presets->currentUuid() : QString();
         for (int row = 0; m_presets && row < m_presets->count(); ++row) {
             const QModelIndex index = m_presets->index(row, 0);
             const QString name = index.data(PresetModel::NameRole).toString();
@@ -158,10 +161,13 @@ QList<RemoteMatch> KRunnerService::Match(const QString &searchTerm)
             if (!lowerName.contains(subCommand)) {
                 continue;
             }
-            RemoteMatch m = commandMatch(QStringLiteral("preset:") + index.data(PresetModel::UuidRole).toString(),
-                                         i18n("Start preset %1", name),
-                                         i18np("%1 minute of work", "%1 minutes of work",
-                                               index.data(PresetModel::WorkMinutesRole).toInt()),
+            const QString uuid = index.data(PresetModel::UuidRole).toString();
+            const bool blocked = m_timer->isActive() && uuid != currentUuid;
+            RemoteMatch m = commandMatch(QStringLiteral("preset:") + uuid,
+                                         blocked ? i18n("Preset %1", name) : i18n("Start preset %1", name),
+                                         blocked ? i18n("A timer is running. Stop it before choosing another timer.")
+                                                 : i18np("%1 minute of work", "%1 minutes of work",
+                                                         index.data(PresetModel::WorkMinutesRole).toInt()),
                                          index.data(PresetModel::IconNameRole).toString());
             if (m.iconName.isEmpty()) {
                 m.iconName = QStringLiteral("io.github.mineraleyt.sugo");
@@ -247,15 +253,10 @@ void KRunnerService::Run(const QString &id, const QString &actionId)
     } else if (id.startsWith(QStringLiteral("preset:"))) {
         const QString uuid = id.mid(7);
         if (m_presets && m_presets->indexOf(uuid) >= 0) {
-            // Choosing the current preset changes nothing, so a paused phase of it would stay
-            // paused: "Start preset" resumes it. Another preset resets the timer, which starts.
-            const bool alreadyCurrent = uuid == m_presets->currentUuid();
-            m_presets->setCurrentUuid(uuid);
-            if (alreadyCurrent && m_timer->isPaused()) {
-                m_timer->resume();
-            } else {
-                m_timer->start();
-            }
+            // The rule of D-Bus startPreset: the current preset starts, or resumes when paused;
+            // another one is chosen and started only while no phase is active (choosing it
+            // resets the timer, which would throw the phase away). A refusal does nothing.
+            TimerCommands(m_timer, m_presets).startPreset(uuid);
         }
     } else {
         runCommand(id);

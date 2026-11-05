@@ -18,6 +18,15 @@ void macSetDockBadge(const QString &label);
 /// it again (a regular application). Showing it again does not activate the application.
 void macSetDockIconHidden(bool hidden);
 
+#include "QuitPolicy.h"
+
+/// Where the request to quit being handled comes from, told by the Apple event Cocoa is handling
+/// (call it while applicationShouldTerminate: runs, i.e. from the QEvent::Quit Qt sends then):
+/// a `quit` event (the Dock's Quit, Activity Monitor, AppleScript) is External, or SessionEnding
+/// when it carries a reason (kAEQuitReason: logging out, restarting, shutting down); no Apple
+/// event means Sugo's own QCoreApplication::quit() (Application).
+QuitPolicy::Origin macCurrentQuitOrigin();
+
 class QWindow;
 /// Hides the title text the system draws in the window's title bar (the traffic lights stay):
 /// the title bar of the window already shows the name. The title still names the window in the Window menu and

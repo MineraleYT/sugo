@@ -66,6 +66,57 @@ public:
 private:
     std::shared_ptr<FakeState> m_state;
 };
+
+/// Stand-ins for pw-play and paplay, first on PATH while the object lives. Each call is logged
+/// as "<program> <file name>". Both fail at once (exit 1) on a file whose name contains "bad";
+/// after setNoPipeWire(), pw-play fails on every file, as where no PipeWire daemon runs.
+class FakeAlertPlayers
+{
+public:
+    FakeAlertPlayers()
+        : m_oldPath(qgetenv("PATH"))
+    {
+        for (const char *name : {"pw-play", "paplay"}) {
+            QFile file(m_dir.filePath(QLatin1String(name)));
+            if (!file.open(QIODevice::WriteOnly)) {
+                return;
+            }
+            file.write(R"SH(#!/bin/sh
+dir=$(dirname "$0")
+name=$(basename "$0")
+for last; do :; done
+echo "$name $(basename "$last")" >> "$dir/calls.log"
+case "$last" in *bad*) echo "$name: cannot decode $last" >&2; exit 1 ;; esac
+[ "$name" = pw-play ] && [ -f "$dir/no-pipewire" ] && { echo "pw-play: cannot connect" >&2; exit 1; }
+exit 0
+)SH");
+            file.close();
+            file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        }
+        qputenv("PATH", QByteArray(m_dir.path().toLocal8Bit() + ':' + m_oldPath));
+    }
+    ~FakeAlertPlayers() { qputenv("PATH", m_oldPath); }
+    FakeAlertPlayers(const FakeAlertPlayers &) = delete;
+    FakeAlertPlayers &operator=(const FakeAlertPlayers &) = delete;
+
+    bool isValid() const { return m_dir.isValid() && QFileInfo(m_dir.filePath(QStringLiteral("paplay"))).isExecutable(); }
+    void setNoPipeWire()
+    {
+        QFile file(m_dir.filePath(QStringLiteral("no-pipewire")));
+        (void)file.open(QIODevice::WriteOnly);
+    }
+    /// A sound file's path (the fakes never read it).
+    QString file(const char *name) const { return m_dir.filePath(QLatin1String(name)); }
+    QStringList calls() const
+    {
+        QFile log(m_dir.filePath(QStringLiteral("calls.log")));
+        return log.open(QIODevice::ReadOnly) ? QString::fromUtf8(log.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts) : QStringList();
+    }
+
+private:
+    QTemporaryDir m_dir;
+    QByteArray m_oldPath;
+};
 } // namespace
 
 class AppSettingsTest : public QObject
@@ -1034,6 +1085,44 @@ private Q_SLOTS:
             QVERIFY2(!file.isEmpty(), name);
             QVERIFY2(QFileInfo::exists(file + QStringLiteral(".license")), name);
         }
+    }
+
+    // The two tests below share the remembered unusable players (process-wide): this one, first,
+    // leaves none behind, as nothing in it fails to start or fails where the other one plays.
+    void aFileNoPlayerCanPlayDoesNotSilenceTheNextAlert()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and paplay are the Linux players; macOS uses afplay");
+#endif
+        FakeAlertPlayers players;
+        QVERIFY(players.isValid());
+        // Both players fail on a broken file: each is tried, for that file only.
+        AppSettings::playWithPlayerProgram(players.file("bad.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(), (QStringList{QStringLiteral("pw-play bad.oga"), QStringLiteral("paplay bad.oga")}), 3000);
+        // pw-play is not given up on: it plays the next, good file.
+        AppSettings::playWithPlayerProgram(players.file("bell.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(),
+                                  (QStringList{QStringLiteral("pw-play bad.oga"), QStringLiteral("paplay bad.oga"), QStringLiteral("pw-play bell.oga")}), 3000);
+        QTest::qWait(300); // and nothing else is started for it
+        QCOMPARE(players.calls().size(), 3);
+    }
+
+    void anAlertPlayerThatCannotPlayHereGivesWayToTheNext()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("pw-play and paplay are the Linux players; macOS uses afplay");
+#endif
+        // pw-play is installed but exits at once with an error (no PipeWire daemon): paplay
+        // plays the sound instead.
+        FakeAlertPlayers players;
+        QVERIFY(players.isValid());
+        players.setNoPipeWire();
+        AppSettings::playWithPlayerProgram(players.file("bell.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(), (QStringList{QStringLiteral("pw-play bell.oga"), QStringLiteral("paplay bell.oga")}), 3000);
+        // paplay played what pw-play could not: the next alert goes straight to paplay.
+        AppSettings::playWithPlayerProgram(players.file("complete.oga"), 50);
+        QTRY_COMPARE_WITH_TIMEOUT(players.calls(),
+                                  (QStringList{QStringLiteral("pw-play bell.oga"), QStringLiteral("paplay bell.oga"), QStringLiteral("paplay complete.oga")}), 3000);
     }
 
     void afplayGetsOnlyFormatsItReads()
