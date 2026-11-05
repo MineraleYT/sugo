@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
@@ -146,6 +147,52 @@ QQC2.Page {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: dock.top
+    }
+
+    // A soft glow of the phase colour behind the clock, only while time is running: a circle
+    // whose colour fades to nothing at its edge, stretched into a wide ellipse. It follows the
+    // accent colour for work and the break colour for breaks.
+    Shape {
+        id: glow
+        readonly property color tint: page.isWorkPhase ? Theme.accent : Theme.breakAccent
+        readonly property real diameter: page.clockSize * 4.4
+        anchors.centerIn: clockColumn
+        anchors.verticalCenterOffset: -page.clockSize * 0.3
+        width: diameter
+        height: diameter
+        transform: Scale {
+            origin.x: glow.width / 2
+            origin.y: glow.height / 2
+            xScale: 1.5
+            yScale: 0.9
+        }
+        opacity: page.running ? (Theme.dark ? 1 : 0.6) : 0
+        visible: opacity > 0
+        preferredRendererType: Shape.CurveRenderer
+        Behavior on opacity { NumberAnimation { duration: Theme.durationLong * 3; easing.type: Easing.InOutQuad } }
+
+        ShapePath {
+            strokeColor: "transparent"
+            fillGradient: RadialGradient {
+                centerX: glow.diameter / 2
+                centerY: glow.diameter / 2
+                centerRadius: glow.diameter / 2
+                focalX: centerX
+                focalY: centerY
+                GradientStop { position: 0; color: Theme.alpha(glow.tint, 0.16) }
+                GradientStop { position: 0.4; color: Theme.alpha(glow.tint, 0.08) }
+                GradientStop { position: 0.75; color: Theme.alpha(glow.tint, 0.02) }
+                GradientStop { position: 1; color: Theme.alpha(glow.tint, 0) }
+            }
+            PathAngleArc {
+                centerX: glow.diameter / 2
+                centerY: glow.diameter / 2
+                radiusX: glow.diameter / 2
+                radiusY: glow.diameter / 2
+                startAngle: 0
+                sweepAngle: 360
+            }
+        }
     }
 
     ColumnLayout {
