@@ -604,6 +604,10 @@ private Q_SLOTS:
         QCOMPARE(a.keyringReads(), 0); // not while the window first shows
         QCOMPARE(a.sync->state(), SyncController::Syncing);
         QCOMPARE(a.sync->statusText(), QStringLiteral("Waiting for the keyring…"));
+        QVERIFY(!a.sync->keysLoaded());
+        QSignalSpy stateChanged(a.sync.get(), &SyncController::stateChanged);
+        QTRY_VERIFY(a.sync->keysLoaded());
+        QVERIFY(!stateChanged.isEmpty()); // announced, also while the state stays Syncing
         QTRY_COMPARE(a.sync->state(), SyncController::Idle);
         QCOMPARE(a.keyringReads(), 1);
 
@@ -624,6 +628,7 @@ private Q_SLOTS:
         a.build(*server);
         QTRY_COMPARE(a.sync->state(), SyncController::Error);
         QCOMPARE(a.sync->errorKind(), SyncController::KeyringUnavailable);
+        QVERIFY(!a.sync->keysLoaded()); // no new recovery code without the key
         QCOMPARE(a.keyringReads(), 1);
         QVERIFY(a.settings->contains(QStringLiteral("Sync/DeviceId"))); // still linked
 

@@ -1836,6 +1836,8 @@ QQC2.Page {
                     SButton {
                         text: i18n("Create a new one…")
                         Accessible.name: i18n("Create a new recovery code")
+                        // It needs the timers' key: not while the keyring has not given it.
+                        enabled: SyncController !== null && SyncController.keysLoaded
                         onClicked: syncNewRecoveryDialog.open()
                     }
                 }

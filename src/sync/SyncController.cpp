@@ -698,9 +698,10 @@ void SyncController::updateState()
         }
         break;
     }
-    if (state != m_state || m_errorKind != m_lastErrorKind) {
+    if (state != m_state || m_errorKind != m_lastErrorKind || keysLoaded() != m_lastKeysLoaded) {
         m_state = state;
-        m_lastErrorKind = m_errorKind; // errorKind shares the notification
+        m_lastErrorKind = m_errorKind; // errorKind and keysLoaded share the notification
+        m_lastKeysLoaded = keysLoaded();
         Q_EMIT stateChanged();
     }
     const QString text = statusText();
@@ -708,6 +709,11 @@ void SyncController::updateState()
         m_lastStatusText = text;
         Q_EMIT statusTextChanged();
     }
+}
+
+bool SyncController::keysLoaded() const
+{
+    return m_account->phase() == SyncAccount::Phase::Ready;
 }
 
 QString SyncController::statusText() const

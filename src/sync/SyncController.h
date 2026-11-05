@@ -65,6 +65,9 @@ class SyncController : public QObject
     /// longest of them.
     Q_PROPERTY(QStringList errorTexts READ errorTexts CONSTANT FINAL)
     Q_PROPERTY(ErrorKind errorKind READ errorKind NOTIFY stateChanged FINAL)
+    /// Linked with the keys read from the keyring (not "Waiting for the keyring…" nor
+    /// KeyringUnavailable): what needs the timers' key, such as a new recovery code, can work.
+    Q_PROPERTY(bool keysLoaded READ keysLoaded NOTIFY stateChanged FINAL)
     Q_PROPERTY(bool keyringAvailable READ keyringAvailable NOTIFY keyringAvailableChanged FINAL)
     Q_PROPERTY(QDateTime lastSync READ lastSync NOTIFY lastSyncChanged FINAL)
 
@@ -141,6 +144,7 @@ public:
     QString statusText() const;
     static QStringList errorTexts();
     ErrorKind errorKind() const { return m_errorKind; }
+    bool keysLoaded() const;
     bool keyringAvailable() const;
     QDateTime lastSync() const;
 
@@ -291,6 +295,7 @@ private:
     State m_state = Off;
     ErrorKind m_errorKind = NoError;
     ErrorKind m_lastErrorKind = NoError; ///< As last announced by stateChanged().
+    bool m_lastKeysLoaded = false;       ///< As last announced by stateChanged().
     QString m_lastStatusText;
 
     enum class Load { NotYet, Waiting, Done, Failed };
