@@ -27,7 +27,7 @@ This guide describes how to install Sugo and use it day to day, on Linux and on 
 
 ## Installing
 
-Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three packages:
+Every [release](https://github.com/sugoHQ/sugo/releases/latest) offers three packages:
 
 | Package | For | Updates |
 |:---|:---|:---|
@@ -39,7 +39,7 @@ Every [release](https://github.com/MineraleYT/sugo/releases/latest) offers three
 
 One file that runs on any recent x86_64 Linux and keeps itself up to date (the recommended package on Linux):
 
-1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.AppImage` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest).
 2. Make it executable and start it:
    ```sh
    chmod +x Sugo-*-x86_64.AppImage
@@ -52,7 +52,7 @@ Keep the file in a folder you can write to (for example `~/Applications`): Sugo 
 
 The Flatpak bundle is attached to each release as `Sugo-<version>-x86_64.flatpak`. It is not on Flathub yet, so it is installed from the file:
 
-1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest).
+1. Download `Sugo-<version>-x86_64.flatpak` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest).
 2. Install it for your user, then start Sugo from the application menu, or with:
    ```sh
    flatpak install --user ./Sugo-*-x86_64.flatpak
@@ -70,7 +70,7 @@ The first install also downloads the KDE runtime from Flathub, if it is not inst
 
 One app for both Apple Silicon and Intel Macs, for **macOS 13 Ventura or later**:
 
-1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/MineraleYT/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
+1. Download `Sugo-<version>-macOS-universal.dmg` from the [latest release](https://github.com/sugoHQ/sugo/releases/latest), open it and drag **Sugo** to **Applications**.
 2. Start it. Sugo is not notarized by Apple yet, so macOS blocks the first launch:
    - on macOS 15 Sequoia or later, open **System Settings → Privacy & Security**, scroll to the message about Sugo and click **Open Anyway**;
    - on macOS 13 and 14, Control-click Sugo in Applications, choose **Open**, then **Open** again;
@@ -312,6 +312,6 @@ There is no telemetry.
 
 - **The AppImage and the macOS app update themselves, when you say so.** A minute after Sugo starts, and every six hours, it looks for a newer version on its channel; when there is one, the title bar shows **Install update** (only its icon in a narrow window). Nothing is downloaded before you click it. Sugo then downloads the new version (the AppImage next to itself, the macOS app its disk image), checks that the file is complete and intact (its size and SHA-256 checksum), and only then prepares it. The same button then shows **Restart to update**; the new version starts when you click it (Sugo asks first if a timer is running) or the next time you open Sugo (on macOS, quitting also puts it in place). A failed or damaged download changes nothing. This needs the AppImage or the app to be in a folder you can write to; otherwise Sugo only tells you that a new release is out.
 - **Settings → General → Updates** (AppImage and macOS app) has **Check for updates automatically**: turn it off and Sugo only looks when you ask, with **Settings → About → Check for Updates**.
-- **Settings → General → Updates → Update channel** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/MineraleYT/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
+- **Settings → General → Updates → Update channel** (AppImage and macOS app) chooses the update channel: **Stable**, the tested releases, or **Nightly**, test builds of what is coming, newer and sometimes with new bugs, published as [pre-releases](https://github.com/sugoHQ/sugo/releases). Going back from Nightly to Stable keeps the nightly build until a newer release comes out.
 - **Settings → About → Check for Updates** tells you whether a newer version exists; the AppImage and the macOS app can install it from there, the other packages link to the release (a Flatpak or a distribution's package is updated the way it was installed). A successful check with nothing new shows a green check on the button for a few seconds.
 - **Settings → Advanced → Troubleshooting & Diagnostics** copies a report with the version, your environment and the latest log lines. Your home directory, user name, passwords and addresses with credentials are replaced with placeholders. Attach it to a bug report.

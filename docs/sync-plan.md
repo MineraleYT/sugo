@@ -29,7 +29,7 @@ sostituisce.
 
 | # | Domanda | Decisione |
 |---|---|---|
-| S1 | Dove vive il server (Worker, pagina di accesso, schema D1) | **Deciso:** repository privato `MineraleYT/sugo-sync` (TypeScript, `wrangler`), in locale in `~/Documents/Coding/sugo-sync`. Il client GPL parla solo un'API documentata. |
+| S1 | Dove vive il server (Worker, pagina di accesso, schema D1) | **Deciso:** repository privato `sugoHQ/sugo-sync` (TypeScript, `wrangler`), in locale in `~/Documents/Coding/sugo-sync`. Il client GPL parla solo un'API documentata. |
 | S2 | Provider degli account | **Clerk** (email con codice, Google, GitHub). Il Worker emette i propri token per i dispositivi; il token di Clerk non entra mai nell'app. |
 | S3 | Dominio | **Deciso:** `sugo.stream` (sito e pagina di accesso) e `api.sugo.stream` (Worker). L'URL dell'API è una costante del client, sovrascrivibile con `SUGO_SYNC_URL` per i test e l'ambiente `dev`. |
 | S4 | Senza portachiavi di sistema | **Deciso:** stessa regola su Linux e macOS, **il sync non si attiva** ("Sugo Sync needs the system keyring") invece di tenere la chiave in un file. Su Mac richiede `MacKeychainStore` (piano macOS 5.1). |
