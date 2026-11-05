@@ -4,6 +4,8 @@
 #include <QJsonObject>
 #include <QTest>
 
+#include <algorithm>
+
 #include "PresetModel.h"
 #include "PresetSyncFormat.h"
 
@@ -302,6 +304,80 @@ private Q_SLOTS:
         QVERIFY(parsed.ok);
         QCOMPARE(parsed.data.presets.at(0).updatedAt, qint64(9007199254740992LL));
         QCOMPARE(parsed.data.presets.at(0).createdAt, qint64(0));
+    }
+
+    void aFarFutureTimeCountsAsNow()
+    {
+        // A device with a clock far ahead (or bad data) would win every later comparison. A time
+        // more than a day ahead counts as the merge's time, and the merge writes that time to both
+        // sides, so the far-future one does not come back.
+        constexpr qint64 farAhead = 4000000000000000LL; // year ~128700
+        const Data local{{factoryDefault(), preset(QStringLiteral("a"), QStringLiteral("Local"), kNow - 10)}, {}};
+        const Data remote{{factoryDefault(), preset(QStringLiteral("a"), QStringLiteral("Remote"), farAhead, kOther)}, {}};
+        const PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(local, remote, kMe, kNow);
+        QCOMPARE(names(merged.result.presets), (QStringList{QStringLiteral("Pomodoro"), QStringLiteral("Remote")}));
+        QCOMPARE(merged.result.presets.at(1).updatedAt, kNow);
+        QCOMPARE(merged.result.presets.at(1).updatedBy, kOther);
+        QVERIFY(merged.changedLocal);
+        QVERIFY(merged.changedRemote); // the far-future time is replaced on the server too
+
+        // A change made here after it (PresetModel::changeTime: after the time it had) wins against
+        // what was uploaded.
+        TimerPreset edited = merged.result.presets.at(1);
+        edited.name = QStringLiteral("Edited");
+        edited.updatedAt = std::max(kNow + 60000, edited.updatedAt + 1);
+        edited.updatedBy.clear();
+        const Data afterEdit{{factoryDefault(), edited}, {}};
+        PresetSyncFormat::MergeResult again = PresetSyncFormat::merge(afterEdit, merged.result, kMe, kNow + 120000);
+        QCOMPARE(again.result.presets.at(1).name, QStringLiteral("Edited"));
+        QVERIFY(!again.changedLocal);
+        QVERIFY(again.changedRemote);
+    }
+
+    void aFarFutureTimeKeptHereIsReplacedToo()
+    {
+        // Taken in before this check: the same far-future time on both sides is brought back to
+        // now, and a change made here since (one millisecond after it) still wins.
+        constexpr qint64 farAhead = 4000000000000000LL;
+        const Data remote{{preset(QStringLiteral("a"), QStringLiteral("Remote"), farAhead, kOther)}, {}};
+        PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(remote, remote, kMe, kNow);
+        QCOMPARE(merged.result.presets.at(0).updatedAt, kNow);
+        QVERIFY(merged.changedLocal);
+        QVERIFY(merged.changedRemote);
+
+        const Data edited{{preset(QStringLiteral("a"), QStringLiteral("Edited"), farAhead + 1)}, {}};
+        merged = PresetSyncFormat::merge(edited, remote, kMe, kNow);
+        QCOMPARE(merged.result.presets.at(0).name, QStringLiteral("Edited"));
+        QCOMPARE(merged.result.presets.at(0).updatedAt, kNow);
+    }
+
+    void aFarFutureDeletionCountsAsNowAndExpires()
+    {
+        constexpr qint64 farAhead = 4000000000000000LL;
+        const Data remote{{factoryDefault()}, {tombstone(QStringLiteral("gone"), farAhead, kOther)}};
+        PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(Data{{factoryDefault()}, {}}, remote, kMe, kNow);
+        QCOMPARE(merged.result.tombstones, (QList<PresetTombstone>{tombstone(QStringLiteral("gone"), kNow, kOther)}));
+        QVERIFY(merged.changedRemote);
+        // An edit made after it brings the timer back.
+        merged = PresetSyncFormat::merge(Data{{factoryDefault(), preset(QStringLiteral("gone"), QStringLiteral("Back"), kNow + 1000)}, {}},
+                                         merged.result, kMe, kNow + 2000);
+        QCOMPARE(names(merged.result.presets), (QStringList{QStringLiteral("Pomodoro"), QStringLiteral("Back")}));
+        // Kept on its own, it is dropped after the tombstones' lifetime like any other.
+        const qint64 later = kNow + PresetSyncFormat::TombstoneLifetimeMs + kDay;
+        merged = PresetSyncFormat::merge(Data{{factoryDefault()}, {tombstone(QStringLiteral("gone"), kNow, kOther)}}, Data{{factoryDefault()}, {}}, kMe, later);
+        QVERIFY(merged.result.tombstones.isEmpty());
+    }
+
+    void aTimeLessThanADayAheadIsKept()
+    {
+        // A clock a little ahead is not bad data: its time is used as it is.
+        const qint64 ahead = kNow + 3600 * 1000;
+        const Data local{{preset(QStringLiteral("a"), QStringLiteral("Local"), kNow)}, {}};
+        const Data remote{{preset(QStringLiteral("a"), QStringLiteral("Remote"), ahead, kOther)}, {}};
+        const PresetSyncFormat::MergeResult merged = PresetSyncFormat::merge(local, remote, kMe, kNow);
+        QCOMPARE(merged.result.presets.at(0).name, QStringLiteral("Remote"));
+        QCOMPARE(merged.result.presets.at(0).updatedAt, ahead);
+        QVERIFY(!merged.changedRemote);
     }
 
     void editAgainstDeletion()

@@ -25,6 +25,8 @@ constexpr int Format = 1;
 
 /// Tombstones older than this are dropped (as PresetRepository::TombstoneLifetimeMs).
 constexpr qint64 TombstoneLifetimeMs = 180LL * 24 * 3600 * 1000;
+/// A change or deletion time further than this ahead of the merge's `nowMs` counts as `nowMs`.
+constexpr qint64 MaxTimeAheadMs = 24LL * 3600 * 1000;
 
 /// One side of a sync: its timers in display order and its remembered deletions.
 struct Data {
@@ -63,7 +65,9 @@ ParseResult fromJson(const QByteArray &json);
  *
  * For each uuid the newest version wins: a preset by updatedAt, a deletion by deletedAt; equal
  * times go to the higher author id (in byte order), and a deletion beats an edit made at the same
- * time by the same author. The built-in preset is never deleted. Tombstones older than
+ * time by the same author. A time more than MaxTimeAheadMs ahead of `nowMs` (a clock far off,
+ * bad data) counts as `nowMs` and is written back as `nowMs`, so it does not win every later
+ * merge; two such times keep their order. The built-in preset is never deleted. Tombstones older than
  * TombstoneLifetimeMs before `nowMs` are dropped. Order: the local one; presets new to this
  * computer follow at the end by createdAt.
  *
