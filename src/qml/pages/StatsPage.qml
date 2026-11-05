@@ -4,8 +4,8 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import io.github.mineraleyt.sugo
 
-/// How much was done: the period's total and how it compares, one chart, where the time went,
-/// and the streak.
+/// How much was done: the period's figures (the total and how it compares, sessions, breaks,
+/// the streak), one chart, where the time went, and the task notes.
 QQC2.Page {
     id: page
 
@@ -53,57 +53,83 @@ QQC2.Page {
             return i18nc("change against the year before", "%1%2% vs the year before", sign, change);
         }
     }
-    readonly property int change: StatsModel.previousWorkSeconds > 0
-        ? Math.round((StatsModel.workSeconds - StatsModel.previousWorkSeconds) * 100 / StatsModel.previousWorkSeconds) : 0
-
-    /// The bucket with the most work ("Thursday", "14:00", "March"), or "".
-    readonly property string bestBucket: {
-        let best = null;
-        for (const bucket of StatsModel.buckets) {
-            if (bucket.workSeconds > 0 && (!best || bucket.workSeconds > best.workSeconds)) {
-                best = bucket;
-            }
-        }
-        return best ? best.name : "";
-    }
-    readonly property string bestLabel: StatsModel.period === StatsModel.Period.Day ? i18n("Best hour")
-                                      : StatsModel.period === StatsModel.Period.Year ? i18n("Best month") : i18n("Best day")
-
-    /// A small number with its label under it.
-    component Figure: ColumnLayout {
+    /// One cell of the figures strip: a number, its label, and a quieter line under them.
+    /// `index` places it in the strip, for the lines between the cells.
+    component Figure: Item {
         id: figure
+        property int index
         property string value
+        /// A word after the value, in the same size ("days").
+        property string unit
         property string label
         property string note
-        spacing: Theme.hairline * 2
-        Text {
-            text: figure.value
-            color: Theme.foreground
-            font.pixelSize: Theme.fontFigure
-            font.weight: Font.Medium
-            font.features: { "tnum": 1 }
+        readonly property int columns: figures.columns
+        Layout.fillWidth: true
+        // The first cell is a little wider, for the total and its comparison.
+        Layout.preferredWidth: !page.compact && index === 0 ? 7 : 5
+        implicitHeight: figureColumn.implicitHeight + Theme.spaceLg * 2
+
+        // The lines between the cells.
+        Rectangle {
+            visible: figure.index % figure.columns > 0
+            width: Theme.hairline
+            height: parent.height
+            color: Theme.border
         }
-        Text {
-            text: figure.label
-            color: Theme.muted
-            font.pixelSize: Theme.fontCaption
+        Rectangle {
+            visible: figure.index >= figure.columns
+            width: parent.width
+            height: Theme.hairline
+            color: Theme.border
         }
-        // Faded rather than hidden: its line stays, so the chart below does not move when a
-        // period has a note and the next has none.
-        Text {
-            opacity: figure.note.length > 0 ? 1 : 0
-            text: figure.note.length > 0 ? figure.note : " "
-            color: Theme.subtle
-            font.pixelSize: Theme.fontSmall
+
+        ColumnLayout {
+            id: figureColumn
+            anchors.fill: parent
+            anchors.topMargin: Theme.spaceLg
+            anchors.bottomMargin: Theme.spaceLg
+            anchors.leftMargin: Theme.spaceLg + Theme.hairline * 2
+            anchors.rightMargin: Theme.spaceLg + Theme.hairline * 2
+            spacing: Theme.hairline * 2
+
+            Text {
+                text: figure.unit.length > 0 ? figure.value + " " + figure.unit : figure.value
+                color: Theme.foreground
+                font.pixelSize: Theme.fontHeading
+                font.weight: Font.Medium
+                font.letterSpacing: -Theme.hairline / 2
+                font.features: { "tnum": 1 }
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            Text {
+                text: figure.label
+                color: Theme.muted
+                font.pixelSize: Theme.fontCaption
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            // Faded rather than hidden: its line stays, so nothing below moves when a period
+            // has a note and the next has none.
+            Text {
+                opacity: figure.note.length > 0 ? 1 : 0
+                text: figure.note.length > 0 ? figure.note : " "
+                color: Theme.subtle
+                font.pixelSize: Theme.fontSmall
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
         }
     }
 
-    /// A bordered surface with a title.
+    /// A bordered surface with a quiet title, and maybe something at the right of it.
     component Panel: Rectangle {
         id: panel
         default property alias content: panelColumn.data
         property string title
         property alias headerExtra: panelExtra.data
+        /// Panels side by side give their headers the same height, so their rows line up.
+        property real headerHeight: 0
         implicitHeight: panelColumn.implicitHeight + Theme.spaceLg * 2
         radius: Theme.radiusLg
         color: Theme.card
@@ -113,19 +139,24 @@ QQC2.Page {
         ColumnLayout {
             id: panelColumn
             anchors.fill: parent
-            anchors.margins: Theme.spaceLg
-            anchors.leftMargin: Theme.spaceXl
-            anchors.rightMargin: Theme.spaceXl
-            spacing: Theme.spaceMd
+            anchors.topMargin: Theme.spaceLg
+            anchors.bottomMargin: Theme.spaceLg
+            anchors.leftMargin: Theme.spaceLg + Theme.hairline * 2
+            anchors.rightMargin: Theme.spaceLg + Theme.hairline * 2
+            spacing: Theme.spaceMd + Theme.hairline * 2
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.minimumHeight: panel.headerHeight
+                spacing: Theme.spaceMd
                 Text {
                     text: panel.title
-                    color: Theme.foreground
-                    font.pixelSize: Theme.fontTitle
-                    font.weight: Font.DemiBold
+                    color: Theme.muted
+                    font.pixelSize: Theme.fontCaption
+                    font.weight: Font.Medium
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                 }
                 RowLayout {
                     id: panelExtra
@@ -135,11 +166,16 @@ QQC2.Page {
         }
     }
 
+    /// A narrow window: smaller margins, the figures two by two, the panels one under the other.
+    readonly property bool compact: width < Theme.compactBreakpoint
+    readonly property real paddingX: compact ? Theme.pagePaddingCompact : Theme.pagePaddingX
+    readonly property real paddingY: compact ? Theme.pagePaddingCompact : Theme.pagePaddingY
+
     Flickable {
         id: flickable
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight + Theme.space2xl * 2
+        contentHeight: column.implicitHeight + page.paddingY * 2
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         QQC2.ScrollBar.vertical: QQC2.ScrollBar {}
@@ -147,20 +183,21 @@ QQC2.Page {
         ColumnLayout {
             id: column
             x: (flickable.width - width) / 2
-            y: Theme.space2xl
-            width: Math.min(flickable.width - Theme.space2xl * 2, Theme.contentMaxWidth)
-            spacing: Theme.space2xl
+            y: page.paddingY
+            width: Math.min(flickable.width - page.paddingX * 2, Theme.statsMaxWidth)
+            spacing: page.compact ? Theme.spaceLg : Theme.spaceXl
 
             // Which stretch of time: back, the period, forward; and how long a stretch.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: Theme.spaceXs
+                spacing: Theme.spaceSm
 
                 SButton {
                     kind: "ghost"
                     iconOnly: true
                     iconName: "chevron-left"
                     text: i18n("Previous")
+                    implicitHeight: Theme.iconButton
                     onClicked: StatsModel.previousPeriod()
                 }
                 // Its own width at most (the spacer takes the rest), cut short when the row is
@@ -168,20 +205,19 @@ QQC2.Page {
                 Text {
                     text: StatsModel.title
                     color: Theme.foreground
-                    font.pixelSize: Theme.fontTitle + 1
+                    font.pixelSize: Theme.fontTitle
                     font.weight: Font.Medium
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.maximumWidth: implicitWidth
-                    Layout.leftMargin: Theme.spaceXs
-                    Layout.rightMargin: Theme.spaceXs
                 }
                 SButton {
                     kind: "ghost"
                     iconOnly: true
                     iconName: "chevron-right"
                     text: i18n("Next")
+                    implicitHeight: Theme.iconButton
                     enabled: StatsModel.canGoNext
                     onClicked: StatsModel.nextPeriod()
                 }
@@ -189,6 +225,7 @@ QQC2.Page {
                     visible: !StatsModel.isCurrent
                     kind: "ghost"
                     text: i18n("Today")
+                    implicitHeight: Theme.iconButton
                     onClicked: StatsModel.today()
                 }
                 Item {
@@ -201,82 +238,134 @@ QQC2.Page {
                 }
             }
 
-            // The total, how it compares, and three numbers.
-            RowLayout {
+            // The total and how it compares, the sessions, the breaks and the streak, in one strip
+            // (two by two in a narrow window).
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: Theme.space3xl
+                implicitHeight: figures.implicitHeight
+                radius: Theme.radiusLg
+                color: Theme.card
+                border.width: Theme.hairline
+                border.color: Theme.border
 
-                ColumnLayout {
-                    spacing: Theme.spaceXs
-                    Text {
-                        text: StatsModel.formatDuration(StatsModel.workSeconds)
-                        color: Theme.foreground
-                        font.pixelSize: Theme.fontDisplay + Theme.spaceSm
-                        font.weight: Font.Medium
-                        font.letterSpacing: -Theme.hairline
-                        font.features: { "tnum": 1 }
+                GridLayout {
+                    id: figures
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    columns: page.compact ? 2 : 4
+                    columnSpacing: 0
+                    rowSpacing: 0
+
+                    Figure {
+                        index: 0
+                        value: StatsModel.formatDuration(StatsModel.workSeconds)
+                        label: i18n("Focused")
+                        note: page.comparison
                     }
-                    RowLayout {
-                        spacing: Theme.spaceSm
-                        Text {
-                            text: i18n("Focused")
-                            color: Theme.muted
-                            font.pixelSize: Theme.fontCaption
-                        }
-                        Text {
-                            visible: page.comparison.length > 0
-                            text: page.comparison
-                            color: page.change > 0 ? Theme.positive : page.change < 0 ? Theme.danger : Theme.muted
-                            font.pixelSize: Theme.fontCaption
-                        }
+                    Figure {
+                        index: 1
+                        value: String(StatsModel.completedWorkSessions)
+                        label: i18n("Sessions")
+                        note: StatsModel.interruptedWorkSessions > 0
+                              ? i18np("+%1 interrupted", "+%1 interrupted", StatsModel.interruptedWorkSessions) : ""
                     }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                Figure {
-                    value: String(StatsModel.completedWorkSessions)
-                    label: i18n("Sessions")
-                    note: StatsModel.interruptedWorkSessions > 0
-                          ? i18np("+%1 interrupted", "+%1 interrupted", StatsModel.interruptedWorkSessions) : ""
-                }
-                Figure {
-                    value: StatsModel.formatDuration(StatsModel.breakSeconds)
-                    label: i18n("Breaks")
-                }
-                // Always there ("—" until there is a best one), so the figures beside it stay put.
-                Figure {
-                    value: page.bestBucket.length > 0 ? page.bestBucket : "—"
-                    label: page.bestLabel
+                    Figure {
+                        index: 2
+                        value: StatsModel.formatDuration(StatsModel.breakSeconds)
+                        label: i18n("Breaks")
+                    }
+                    // Days in a row, whatever the period shown.
+                    Figure {
+                        index: 3
+                        value: String(StatsModel.currentStreak)
+                        unit: i18np("day", "days", StatsModel.currentStreak)
+                        label: i18n("Streak")
+                        note: i18n("Best %1", StatsModel.bestStreak)
+                    }
                 }
             }
 
-            // One chart: work per hour, day or month, in the brand gradient; breaks as a thin cap.
+            // One chart: work per hour, day or month, in quiet bars; the chosen one in the accent
+            // colour, named with its focus time at the right of the title.
             Panel {
                 Layout.fillWidth: true
                 title: i18n("Activity")
+                headerExtra: Text {
+                    objectName: "chartSelection"
+                    opacity: chart.selectedBucket ? 1 : 0
+                    text: chart.selectedBucket
+                          ? i18nc("the chosen bar of the chart: its hour, day or month · its focus time", "%1 · %2",
+                                  chart.selectedBucket.name, StatsModel.formatDuration(chart.selectedBucket.workSeconds))
+                          : " "
+                    color: Theme.dim
+                    font.pixelSize: Theme.fontCaption
+                    font.weight: Font.Medium
+                    font.features: { "tnum": 1 }
+                }
 
                 Item {
                     id: chart
+                    objectName: "activityChart"
                     Layout.fillWidth: true
-                    implicitHeight: Theme.space4xl * 3.5
+                    implicitHeight: page.compact ? Theme.chartHeightCompact : Theme.chartHeight
 
                     readonly property var buckets: StatsModel.buckets
-                    // The tallest stack (work and the break cap on it), with a little room above.
-                    readonly property real scaleTop: Math.max(1, buckets.reduce((m, b) => Math.max(m, b.workSeconds + b.breakSeconds), 0) * 1.12)
-                    readonly property real labelHeight: Theme.spaceXl + Theme.spaceXs
+                    // The tallest bar, with a little room above.
+                    readonly property real scaleTop: Math.max(1, buckets.reduce((m, b) => Math.max(m, b.workSeconds), 0) * 1.05)
+                    readonly property real labelHeight: Theme.spaceXl
                     readonly property real plotHeight: height - labelHeight - Theme.spaceSm
                     readonly property real slot: buckets.length > 0 ? width / buckets.length : width
+                    readonly property real barWidth: Math.max(Theme.hairline * 2, Math.min(Theme.chartBarMaxWidth, slot * 0.7))
                     // Labels thin out when there are many bars (a month, a day's hours).
                     readonly property int labelEvery: slot < Theme.space3xl ? Math.ceil(Theme.space3xl / Math.max(1, slot)) : 1
 
-                    // Baseline.
-                    Rectangle {
-                        y: chart.plotHeight
-                        width: parent.width
-                        height: Theme.hairline
-                        color: Theme.border
+                    /// The bar chosen by a click or the arrow keys, or -1 for the default one.
+                    property int chosenIndex: -1
+                    /// The bar of "now" when the period is under way, else the last one with work.
+                    readonly property int defaultIndex: {
+                        const current = buckets.findIndex(b => b.isCurrent);
+                        if (current >= 0) {
+                            return current;
+                        }
+                        for (let i = buckets.length - 1; i >= 0; --i) {
+                            if (buckets[i].workSeconds > 0) {
+                                return i;
+                            }
+                        }
+                        return -1;
                     }
+                    readonly property int selectedIndex: chosenIndex >= 0 && chosenIndex < buckets.length ? chosenIndex : defaultIndex
+                    readonly property var selectedBucket: selectedIndex >= 0 ? buckets[selectedIndex] : null
+
+                    function choose(index: int): void {
+                        if (buckets.length > 0) {
+                            chosenIndex = Math.max(0, Math.min(buckets.length - 1, index));
+                        }
+                    }
+
+                    // Another period starts with its default bar again.
+                    Connections {
+                        target: StatsModel
+                        function onPeriodChanged() {
+                            chart.chosenIndex = -1;
+                        }
+                    }
+
+                    activeFocusOnTab: buckets.length > 0
+                    Keys.onLeftPressed: choose(selectedIndex - 1)
+                    Keys.onRightPressed: choose(selectedIndex + 1)
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Home) {
+                            choose(0);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_End) {
+                            choose(buckets.length - 1);
+                            event.accepted = true;
+                        }
+                    }
+                    Accessible.role: Accessible.Chart
+                    Accessible.name: i18n("Activity")
+                    Accessible.description: chart.selectedBucket ? chart.selectedBucket.tooltip : ""
 
                     Repeater {
                         model: chart.buckets
@@ -285,51 +374,54 @@ QQC2.Page {
                             id: bucket
                             required property var modelData
                             required property int index
+                            readonly property bool selected: index === chart.selectedIndex
                             x: index * chart.slot
                             width: chart.slot
                             height: chart.height
 
                             readonly property real workHeight: chart.plotHeight * modelData.workSeconds / chart.scaleTop
-                            readonly property real breakHeight: chart.plotHeight * modelData.breakSeconds / chart.scaleTop
 
                             // The tooltip's text, for screen readers too.
                             Accessible.role: Accessible.StaticText
                             Accessible.name: modelData.tooltip
+                            Accessible.selectable: true
+                            Accessible.selected: selected
 
                             HoverHandler {
                                 id: bucketHover
+                                cursorShape: Qt.PointingHandCursor
+                            }
+                            TapHandler {
+                                onTapped: chart.choose(bucket.index)
                             }
                             QQC2.ToolTip.visible: bucketHover.hovered && (modelData.workSeconds > 0 || modelData.breakSeconds > 0)
                             QQC2.ToolTip.text: modelData.tooltip
                             QQC2.ToolTip.delay: Theme.durationShort
 
                             Rectangle {
+                                id: bar
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                width: Math.max(Theme.spaceXs, Math.min(chart.slot * 0.62, Theme.space3xl + Theme.spaceXs))
+                                width: chart.barWidth
                                 y: chart.plotHeight - height
-                                height: Math.max(bucket.modelData.workSeconds > 0 ? Theme.spaceXs : Theme.hairline * 2, bucket.workHeight)
-                                radius: Math.min(width / 2, Theme.radiusSm)
-                                opacity: bucketHover.hovered ? 0.85 : 1
-                                color: Theme.track
-                                gradient: bucket.modelData.workSeconds > 0 ? barGradient : null
-                                Gradient {
-                                    id: barGradient
-                                    GradientStop { position: 0; color: Theme.brand }
-                                    GradientStop { position: 1; color: Theme.brandMagenta }
-                                }
+                                height: Math.max(bucket.modelData.workSeconds > 0 ? Theme.spaceXs : Theme.hairline * 3, bucket.workHeight)
+                                radius: Math.min(width / 2, Theme.radiusXs)
+                                bottomLeftRadius: Math.min(width / 2, Theme.hairline * 2)
+                                bottomRightRadius: bottomLeftRadius
+                                opacity: bucketHover.hovered && !bucket.selected ? 0.8 : 1
+                                color: bucket.selected ? Theme.accent : bucket.modelData.workSeconds > 0 ? Theme.subtle : Theme.track
                                 Behavior on height { NumberAnimation { duration: Theme.durationLong; easing.type: Easing.OutCubic } }
-
-                                // Breaks: a green cap on top of the bar, or on the empty stub when
-                                // there were only breaks (the chart then has data to show).
-                                Rectangle {
-                                    visible: bucket.modelData.breakSeconds > 0
-                                    anchors.bottom: parent.top
-                                    anchors.bottomMargin: Theme.hairline * 2
-                                    width: parent.width
-                                    height: Math.max(Theme.hairline * 2, bucket.breakHeight)
-                                    radius: parent.radius
-                                    color: Theme.alpha(Theme.breakColor, 0.7)
-                                }
+                                Behavior on color { ColorAnimation { duration: Theme.durationShort } }
+                            }
+                            // The keyboard's place.
+                            Rectangle {
+                                visible: bucket.selected && chart.activeFocus
+                                anchors.centerIn: bar
+                                width: bar.width + Theme.spaceXs * 2
+                                height: bar.height + Theme.spaceXs * 2
+                                radius: Theme.radiusSm
+                                color: "transparent"
+                                border.width: Theme.hairline * 2
+                                border.color: Theme.focusRing
                             }
 
                             Text {
@@ -337,9 +429,9 @@ QQC2.Page {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 y: chart.plotHeight + Theme.spaceSm
                                 text: bucket.modelData.label
-                                color: bucket.modelData.isCurrent ? Theme.foreground : Theme.subtle
+                                color: bucket.selected ? Theme.foreground : Theme.muted
                                 font.pixelSize: Theme.fontSmall
-                                font.weight: bucket.modelData.isCurrent ? Font.Medium : Font.Normal
+                                font.weight: bucket.selected ? Font.Medium : Font.Normal
                             }
                         }
                     }
@@ -355,148 +447,167 @@ QQC2.Page {
                 }
             }
 
+            // Side by side, one under the other in a narrow window. Each lists a fixed number of
+            // rows, so the page does not move when a period has more or fewer entries.
             GridLayout {
                 Layout.fillWidth: true
-                columns: column.width >= Theme.contentMaxWidth * 0.8 ? 2 : 1
+                columns: page.compact ? 1 : 2
                 columnSpacing: Theme.spaceLg
                 rowSpacing: Theme.spaceLg
 
                 // Where the time went, by timer, category or task.
                 Panel {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 3
-                    Layout.alignment: Qt.AlignTop
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 6
                     title: i18n("Where the time went")
+                    headerHeight: Theme.controlHeightSm
                     headerExtra: Segmented {
                         model: page.breakdowns
                         current: page.breakdownId
                         onActivated: id => StatsModel.breakdownMode = page.breakdowns.find(b => b.id === id).value
                     }
 
-                    Text {
-                        visible: StatsModel.breakdown.length === 0
-                        text: i18n("Nothing recorded in this period.")
-                        color: Theme.muted
-                        font.pixelSize: Theme.fontBody
-                        Layout.topMargin: Theme.spaceXs
-                    }
+                    Item {
+                        id: breakdownList
+                        Layout.fillWidth: true
+                        implicitHeight: Theme.statsListRows * Theme.statsListRowHeight
+                        // The largest entry fills its bar; the others are measured against it.
+                        readonly property var entries: StatsModel.breakdown.slice(0, Theme.statsListRows)
+                        readonly property real largest: Math.max(1, entries.reduce((m, e) => Math.max(m, e.workSeconds), 0))
 
-                    Repeater {
-                        model: StatsModel.breakdown.slice(0, 8)
+                        Text {
+                            visible: breakdownList.entries.length === 0
+                            height: Theme.statsListRowHeight
+                            verticalAlignment: Text.AlignVCenter
+                            text: i18n("Nothing recorded in this period.")
+                            color: Theme.muted
+                            font.pixelSize: Theme.fontBody
+                        }
 
-                        RowLayout {
-                            id: entry
-                            required property var modelData
-                            Layout.fillWidth: true
-                            spacing: Theme.spaceMd
+                        Column {
+                            width: parent.width
 
-                            Text {
-                                text: entry.modelData.name
-                                color: Theme.foreground
-                                font.pixelSize: Theme.fontBody
-                                elide: Text.ElideRight
-                                Layout.preferredWidth: Theme.space4xl * 2.4
-                            }
-                            Rectangle {
-                                Layout.fillWidth: true
-                                implicitHeight: Theme.spaceXs
-                                radius: height / 2
-                                color: Theme.track
-                                Rectangle {
-                                    width: parent.width * Math.min(1, entry.modelData.percentage / 100)
-                                    height: parent.height
-                                    radius: parent.radius
-                                    gradient: Gradient {
-                                        orientation: Gradient.Horizontal
-                                        GradientStop { position: 0; color: Theme.brandPeach }
-                                        GradientStop { position: 1; color: Theme.brand }
+                            Repeater {
+                                model: breakdownList.entries
+
+                                RowLayout {
+                                    id: entry
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Theme.statsListRowHeight
+                                    spacing: Theme.spaceMd + Theme.hairline * 2
+
+                                    Text {
+                                        text: entry.modelData.name
+                                        color: Theme.foreground
+                                        font.pixelSize: Theme.fontBody
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
+                                    Rectangle {
+                                        Layout.preferredWidth: Theme.breakdownBarWidth
+                                        implicitHeight: Theme.breakdownBarHeight
+                                        radius: height / 2
+                                        color: Theme.track
+                                        Rectangle {
+                                            width: parent.width * Math.min(1, entry.modelData.workSeconds / breakdownList.largest)
+                                            height: parent.height
+                                            radius: parent.radius
+                                            color: Theme.dim
+                                        }
+                                    }
+                                    Text {
+                                        text: entry.modelData.formattedDuration
+                                        color: Theme.muted
+                                        font.pixelSize: Theme.fontCaption
+                                        font.features: { "tnum": 1 }
+                                        horizontalAlignment: Text.AlignRight
+                                        Layout.preferredWidth: Theme.breakdownValueWidth
                                     }
                                 }
-                            }
-                            Text {
-                                text: entry.modelData.formattedDuration
-                                color: Theme.foreground
-                                font.pixelSize: Theme.fontCaption + 1
-                                font.features: { "tnum": 1 }
-                                horizontalAlignment: Text.AlignRight
-                                Layout.preferredWidth: Theme.space4xl + Theme.spaceMd
                             }
                         }
                     }
                 }
 
-                // Days in a row.
+                // The task notes of the period, newest first: when, and what.
                 Panel {
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 2
-                    Layout.alignment: Qt.AlignTop
-                    title: i18n("Streak")
+                    Layout.fillHeight: true
+                    Layout.preferredWidth: 5
+                    headerHeight: Theme.controlHeightSm
+                    title: i18n("Notes")
 
-                    RowLayout {
-                        spacing: Theme.spaceSm
-                        Text {
-                            text: StatsModel.currentStreak
-                            color: Theme.foreground
-                            font.pixelSize: Theme.fontDisplay + Theme.spaceSm
-                            font.weight: Font.Medium
+                    Item {
+                        id: notesList
+                        objectName: "notesList"
+                        Layout.fillWidth: true
+                        implicitHeight: Theme.statsListRows * Theme.statsListRowHeight
+                        readonly property var notes: StatsModel.notes.slice(0, Theme.statsListRows)
+                        // The column of times and days is as wide as its longest label.
+                        readonly property real labelWidth: Math.ceil(labelMetrics.advanceWidth)
+
+                        TextMetrics {
+                            id: labelMetrics
+                            font.pixelSize: Theme.fontBody
+                            font.features: { "tnum": 1 }
+                            text: notesList.notes.reduce((longest, n) => n.label.length > longest.length ? n.label : longest, "")
                         }
+
                         Text {
-                            Layout.alignment: Qt.AlignBaseline
-                            text: i18np("day", "days", StatsModel.currentStreak)
+                            visible: notesList.notes.length === 0
+                            height: Theme.statsListRowHeight
+                            verticalAlignment: Text.AlignVCenter
+                            text: i18n("No notes in this period.")
                             color: Theme.muted
                             font.pixelSize: Theme.fontBody
                         }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                        Text {
-                            Layout.alignment: Qt.AlignBaseline
-                            text: i18n("Best %1", StatsModel.bestStreak)
-                            color: Theme.subtle
-                            font.pixelSize: Theme.fontCaption
-                        }
-                    }
 
-                    // The days of the period with focus time, as a calendar: one column per weekday.
-                    Grid {
-                        id: calendar
-                        visible: StatsModel.period === StatsModel.Period.Week || StatsModel.period === StatsModel.Period.Month
-                        columns: 7
-                        spacing: Theme.spaceXs
-                        // Empty cells before the first day, so each column is one weekday.
-                        readonly property int lead: StatsModel.days.length > 0
-                            ? (StatsModel.days[0].weekday - Qt.locale().firstDayOfWeek + 7) % 7 : 0
+                        Column {
+                            width: parent.width
 
-                        Repeater {
-                            model: calendar.lead
-                            Item {
-                                width: Theme.spaceLg + Theme.spaceXs
-                                height: width
-                            }
-                        }
-                        Repeater {
-                            model: StatsModel.days
-                            Rectangle {
-                                required property var modelData
-                                width: Theme.spaceLg + Theme.spaceXs
-                                height: width
-                                radius: Theme.radiusSm - 1
-                                color: modelData.workSeconds > 0 ? Theme.brand : Theme.track
-                                opacity: modelData.workSeconds > 0 ? Math.min(1, 0.45 + modelData.workSeconds / 7200) : 1
-                                border.width: modelData.isToday ? Theme.hairline : 0
-                                border.color: Theme.foreground
-                                Accessible.role: Accessible.StaticText
-                                Accessible.name: modelData.tooltip
-                                HoverHandler {
-                                    id: dayHover
+                            Repeater {
+                                model: notesList.notes
+
+                                RowLayout {
+                                    id: noteRow
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Theme.statsListRowHeight
+                                    spacing: Theme.spaceMd + Theme.hairline * 2
+                                    Accessible.role: Accessible.StaticText
+                                    Accessible.name: modelData.note
+                                    Accessible.description: modelData.when
+
+                                    HoverHandler {
+                                        id: noteHover
+                                    }
+                                    QQC2.ToolTip.visible: noteHover.hovered
+                                    QQC2.ToolTip.text: modelData.when + "\n" + modelData.note
+                                    QQC2.ToolTip.delay: Theme.toolTipDelay
+
+                                    Text {
+                                        text: noteRow.modelData.label
+                                        color: Theme.subtle
+                                        font.pixelSize: Theme.fontBody
+                                        font.features: { "tnum": 1 }
+                                        Layout.preferredWidth: notesList.labelWidth
+                                    }
+                                    Text {
+                                        text: noteRow.modelData.note
+                                        color: Theme.dim
+                                        font.pixelSize: Theme.fontBody
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
+                                    }
                                 }
-                                QQC2.ToolTip.visible: dayHover.hovered
-                                QQC2.ToolTip.text: modelData.tooltip
-                                QQC2.ToolTip.delay: Theme.durationShort
                             }
                         }
                     }
-
                 }
             }
         }
