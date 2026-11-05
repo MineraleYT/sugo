@@ -9,7 +9,7 @@ Run these checks in a fresh user profile where practical. Record the application
 - [ ] Create a timer with a name, category, icon, work duration, break durations, and long-break interval. Save it and confirm the displayed values.
 - [ ] Edit a user timer, duplicate it, select each resulting timer, and delete the duplicate.
 - [ ] Confirm built-in timers cannot be deleted and can be reset to their defaults.
-- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place.
+- [ ] On a timer's page, hover the disabled Start while another timer runs, then with unsaved changes: a tooltip says why each time. Start and stop that timer: Start/Running keeps its width, and Duplicate and Delete stay in place; change a value: Discard fades in beside the title and nothing else in the header moves.
 - [ ] Start, pause, resume, skip, and stop a work phase. Confirm the remaining time and phase label follow each action.
 - [ ] Give a timer a category of 100 characters and start it in a narrow window: "Focusing · …" is cut with an ellipsis inside its pill, which is never wider than the cycle track.
 - [ ] Use short durations to cross a work-to-break boundary and a long-break boundary. Confirm the session count and next phase.
@@ -76,12 +76,12 @@ Run the sync server locally (`sugo-sync/worker`: `npm run db:migrate:local`, `np
 - [ ] On macOS, after updating an ad hoc signed build while linked: one Keychain question for the sync (its single item), a few seconds after the start; while signed out, starting never asks.
 - [ ] Show the recovery code and copy it; "Create a new one…" warns that the old code stops working and then asks to confirm the new one.
 - [ ] Disconnect the other device: it asks first, and the other copy is signed out with "This device was disconnected". Sign out asks first and says the timers stay; with the server stopped, a toast says to disconnect the device on sugo.stream. The timers are still there afterwards.
-- [ ] In a narrow window (about 400 px) and in light and dark colours, every state of the Sync tab fits, and the category tabs scroll sideways.
+- [ ] In a narrow window (about 400 px) and in light and dark colours, every state of the Sync tab fits, and the categories are chosen in the drop-down list at the top of the settings (the list beside them comes back in a window 640 px wide or more).
 - [ ] Settings → Advanced → diagnostics: the Sync section has the state, error, keyring, linked, last sync, device count and server (default/custom), and no names, ids, codes or tokens.
 
 ## No layout shift
 
-- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Sync (no keyring, the device limit, offline), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
+- [ ] On every page, nothing moves when a message appears, changes or goes away: the welcome tour's setup step (a login entry error), the timer page (paused by the screen lock: the banner appears over the clock), Settings → About (check for updates, an update found, downloading, ready, an error), Settings → Calendar (log in, a failed test), Settings → Sync (no keyring, the device limit, offline), Settings → Advanced (export the diagnostics: a toast; "Copy to Clipboard" → "Copied" keeps the buttons in place), the statistics (periods with and without interrupted sessions), and the window-wide "cannot be saved" warning (laid over the top of the page).
 - [ ] On a timer's page, make silencing notifications available or unavailable while the page is open (macOS: install or remove the Focus shortcuts; Linux: start or stop the notification inhibitor service): the "Silence notifications while working" row and those below do not move.
 
 ## Window and dialogs
