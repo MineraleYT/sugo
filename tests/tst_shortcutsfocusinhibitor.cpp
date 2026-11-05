@@ -237,6 +237,50 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), QStringList{kRunOn}, 5000);
     }
 
+    void namesChangedWhileOnReleaseWithTheOffThatWasPaired_data()
+    {
+        QTest::addColumn<QString>("newOn");
+        QTest::addColumn<QString>("newOff");
+        QTest::addColumn<bool>("whileTurningOn");
+        // "Install Shortcuts" switches to names whose "off" does not exist yet.
+        QTest::newRow("installed shortcuts") << kOn << kOff << false;
+        QTest::newRow("off field cleared") << QStringLiteral("My On") << QString() << false;
+        QTest::newRow("off renamed while turning on") << QStringLiteral("My On") << QStringLiteral("Other") << true;
+    }
+
+    void namesChangedWhileOnReleaseWithTheOffThatWasPaired()
+    {
+        QFETCH(QString, newOn);
+        QFETCH(QString, newOff);
+        QFETCH(bool, whileTurningOn);
+        const QString myOn = QStringLiteral("My On");
+        const QString myOff = QStringLiteral("My Off");
+        fake->setList({QStringLiteral("Other"), myOn, myOff});
+        fake->setFails(kOff, true); // as `shortcuts run` does for a shortcut that is not there
+        fake->setFails(QString(), true);
+        fake->setFails(QStringLiteral("Other"), true);
+        QSignalSpy listed(inhibitor.get(), &ShortcutsFocusInhibitor::shortcutListChanged);
+        inhibitor->setShortcutNames(myOn, myOff);
+        QVERIFY(listed.wait(5000));
+        QVERIFY(inhibitor->isAvailable());
+
+        if (whileTurningOn) {
+            fake->setDelay(QStringLiteral("0.3"));
+        }
+        inhibitor->inhibit(QStringLiteral("work"));
+        if (!whileTurningOn) {
+            QTRY_COMPARE_WITH_TIMEOUT(fake->runs(), QStringList{QStringLiteral("run|My On|")}, 5000);
+            QTest::qWait(100);
+        }
+        inhibitor->setShortcutNames(newOn, newOff);
+        QVERIFY(listed.wait(5000));
+        QVERIFY(inhibitor->isInhibited());
+
+        inhibitor->release();
+        QVERIFY(inhibitor->waitUntilReleased(5000));
+        QCOMPARE(fake->runs(), (QStringList{QStringLiteral("run|My On|"), QStringLiteral("run|My Off|")}));
+    }
+
     void aFailingListMakesItUnavailable()
     {
         QVERIFY(makeReady());
