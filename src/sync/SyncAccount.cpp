@@ -660,7 +660,7 @@ void SyncAccount::askAboutPendingDevices()
         if (code.isEmpty()) {
             continue;
         }
-        m_asked.insert(d.id);
+        m_asked.insert(d.id, d.publicKey);
         Q_EMIT approvalRequested(d.id, d.name, d.platform, code);
     }
 }
@@ -672,6 +672,22 @@ void SyncAccount::approveDevice(const QString &id)
         SyncError e;
         e.kind = SyncError::Kind::NotFound;
         Q_EMIT approvalFailed(id, e);
+        return;
+    }
+    // The user compared the code of the key it was shown for; a server that swaps the key since
+    // must not get K boxed for its own.
+    const auto shown = m_asked.constFind(id);
+    if (shown == m_asked.cend() || shown.value() != it->publicKey) {
+        m_asked.remove(id);
+        SyncError e;
+        e.kind = SyncError::Kind::NotFound;
+        Q_EMIT approvalFailed(id, e);
+        // Asked again with the new code once the caller is done with this answer.
+        QMetaObject::invokeMethod(this, [this]() {
+            if (m_phase == Phase::Ready) {
+                askAboutPendingDevices();
+            }
+        }, Qt::QueuedConnection);
         return;
     }
     const QByteArray sealed = SyncCrypto::box(dataKey(), it->publicKey, m_secrets->values().deviceKey);
