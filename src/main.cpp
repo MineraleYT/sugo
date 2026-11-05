@@ -238,7 +238,12 @@ int main(int argc, char *argv[])
     // Storage. If the file cannot be used, run with a throw-away in-memory database so the
     // timer still works; nothing is saved in that case (the UI shows a warning).
     auto database = std::make_unique<Database>(Database::defaultPath());
-    const bool databaseOpened = database->open();
+    // An empty database next to the one Sugo 1.0.1 to 1.0.x moved aside: take that one back.
+    const bool databaseOpened = database->open() && database->recoverSugo100Database();
+    if (!database->recoveredFromPath().isEmpty()) {
+        qInfo() << "Took back the timers and history of Sugo 1.0.0 from" << database->recoveredFromPath()
+                << "; the empty database that replaced it is kept as" << database->replacedPath();
+    }
     // Kept apart: a file can be moved aside and the new one still fail to open.
     const QString movedAsidePath = database->movedAsidePath();
     const bool movedAsideWasCorrupt = database->movedAsideWasCorrupt();

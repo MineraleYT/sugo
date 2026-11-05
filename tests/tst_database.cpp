@@ -152,6 +152,28 @@ void createSugo100Database(const QString &path)
     }
     QSqlDatabase::removeDatabase(name);
 }
+
+QByteArray fileContents(const QString &path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+/// What Sugo 1.0.1 left: the 1.0.0 database moved aside, a new one with only the built-in timer.
+QString setUpMovedAsideSugo100(const QDir &dir, const QString &stamp = QStringLiteral("20261104-232400"))
+{
+    const QString aside = dir.filePath(QStringLiteral("sugo.db.foreign-") + stamp);
+    createSugo100Database(aside);
+    return aside;
+}
+
+void addBuiltinTimer(const QString &connection)
+{
+    QSqlQuery query(QSqlDatabase::database(connection, false));
+    QVERIFY(query.exec(QStringLiteral(
+        "INSERT INTO preset (uuid, name, work_sec, short_break_sec, long_break_sec, is_builtin, created_at) "
+        "VALUES ('default', 'Pomodoro', 1500, 300, 900, 1, 0)")));
+}
 } // namespace
 
 class DatabaseTest : public QObject
@@ -568,6 +590,124 @@ private Q_SLOTS:
         QVERIFY(db.open());
         QVERIFY(!db.movedAsidePath().isEmpty());
         QVERIFY(!db.movedAsideWasCorrupt());
+    }
+
+    // --- Taking back what Sugo 1.0.1 moved aside ------------------------------
+
+    void sugo100DatabaseMovedAsideIsTakenBack()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        const QString aside = setUpMovedAsideSugo100(QDir(dir.path()));
+        const QByteArray asideBefore = fileContents(aside);
+        {
+            Database db(path); // what 1.0.1 created
+            QVERIFY(db.open());
+            addBuiltinTimer(db.connectionName());
+        }
+
+        Database db(path);
+        QVERIFY2(db.open(), qPrintable(db.lastError()));
+        QVERIFY2(db.recoverSugo100Database(), qPrintable(db.lastError()));
+        QCOMPARE(db.recoveredFromPath(), aside);
+        QVERIFY(QFile::exists(db.replacedPath()));
+        QVERIFY(db.replacedPath().startsWith(path + QStringLiteral(".replaced-")));
+
+        const QString c = db.connectionName();
+        QCOMPARE(scalar(c, QStringLiteral("PRAGMA application_id")).toInt(), Database::kApplicationId);
+        QCOMPARE(db.schemaVersion(), Database::latestSchemaVersion());
+        QCOMPARE(scalar(c, QStringLiteral("SELECT note FROM session")).toString(), QStringLiteral("Chapter 3"));
+        QCOMPARE(scalar(c, QStringLiteral("SELECT name FROM preset WHERE uuid = 'mine'")).toString(), QStringLiteral("Deep work"));
+        QCOMPARE(scalar(c, QStringLiteral("SELECT created_at FROM preset WHERE uuid = 'mine'")).toLongLong(), 1761876000000LL);
+        QSqlQuery query(QSqlDatabase::database(c, false));
+        QVERIFY(query.exec(QStringLiteral("INSERT INTO meta (key, value) VALUES ('written', 'yes')"))); // usable
+
+        // The file moved aside is left exactly as it was; the replaced one keeps its timer.
+        QCOMPARE(fileContents(aside), asideBefore);
+        QVERIFY(!QFile::exists(aside + QStringLiteral("-wal")));
+        {
+            Database replaced(db.replacedPath());
+            QVERIFY(replaced.open());
+            QCOMPARE(scalar(replaced.connectionName(), QStringLiteral("SELECT uuid FROM preset")).toString(),
+                     QStringLiteral("default"));
+        }
+
+        // Once is enough: the database now holds the user's data.
+        Database again(path);
+        QVERIFY(again.open());
+        QVERIFY(again.recoverSugo100Database());
+        QVERIFY(again.recoveredFromPath().isEmpty());
+        QCOMPARE(QDir(dir.path()).entryList({QStringLiteral("*.replaced-*")}, QDir::Files).size(), 1);
+    }
+
+    void nothingIsTakenBackOverTheUsersData()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        setUpMovedAsideSugo100(QDir(dir.path()));
+        const QStringList rows = {
+            QStringLiteral("INSERT INTO session (kind, started_at, ended_at, duration_sec, planned_sec, completed, preset_name) "
+                           "VALUES ('work', 1, 2, 1, 1, 1, 'New')"),
+            QStringLiteral("INSERT INTO preset (uuid, name, work_sec, short_break_sec, long_break_sec, created_at) "
+                           "VALUES ('new', 'New', 1500, 300, 900, 0)"),
+            QStringLiteral("INSERT INTO preset_tombstone (uuid, deleted_at) VALUES ('gone', 1)"),
+        };
+        for (const QString &row : rows) {
+            QFile::remove(path);
+            QFile::remove(path + QStringLiteral("-wal"));
+            QFile::remove(path + QStringLiteral("-shm"));
+            Database db(path);
+            QVERIFY(db.open());
+            QSqlQuery query(QSqlDatabase::database(db.connectionName(), false));
+            QVERIFY2(query.exec(row), qPrintable(row));
+            QVERIFY(db.recoverSugo100Database());
+            QVERIFY(db.recoveredFromPath().isEmpty());
+            QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT count(*) FROM session WHERE note = 'Chapter 3'")).toInt(), 0);
+        }
+        QVERIFY(QDir(dir.path()).entryList({QStringLiteral("*.replaced-*")}, QDir::Files).isEmpty());
+    }
+
+    void nothingIsTakenBackFromSeveralOrForeignFiles()
+    {
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("sugo.db"));
+        // Another program's file, and a 1.0.0 file with nothing the user made.
+        createForeignDatabase(path + QStringLiteral(".foreign-20261101-100000"), QStringLiteral("CREATE TABLE notes (text TEXT)"), 2,
+                              kSugo100ApplicationId);
+        const QString unused = path + QStringLiteral(".foreign-20261102-100000");
+        createSugo100Database(unused);
+        {
+            const QString name = QStringLiteral("unused-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+            {
+                QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+                db.setDatabaseName(unused);
+                QVERIFY(db.open());
+                QSqlQuery query(db);
+                QVERIFY(query.exec(QStringLiteral("DELETE FROM session")));
+                QVERIFY(query.exec(QStringLiteral("DELETE FROM preset WHERE is_builtin = 0")));
+                db.close();
+            }
+            QSqlDatabase::removeDatabase(name);
+        }
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            QVERIFY(db.recoverSugo100Database());
+            QVERIFY(db.recoveredFromPath().isEmpty());
+        }
+
+        // Two 1.0.0 files with data: no way to tell which one the user wants.
+        setUpMovedAsideSugo100(QDir(dir.path()), QStringLiteral("20261103-100000"));
+        setUpMovedAsideSugo100(QDir(dir.path()), QStringLiteral("20261104-100000"));
+        {
+            Database db(path);
+            QVERIFY(db.open());
+            QVERIFY(db.recoverSugo100Database());
+            QVERIFY(db.recoveredFromPath().isEmpty());
+            QCOMPARE(scalar(db.connectionName(), QStringLiteral("SELECT count(*) FROM session")).toInt(), 0);
+        }
+        QVERIFY(QDir(dir.path()).entryList({QStringLiteral("*.replaced-*")}, QDir::Files).isEmpty());
     }
 
     void inMemoryDatabaseIsTemporary()

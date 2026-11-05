@@ -10,6 +10,7 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <QtGlobal>
 
@@ -100,6 +101,45 @@ int pragmaInt(QSqlDatabase &db, const QString &name)
 {
     QSqlQuery query(db);
     return query.exec(QStringLiteral("PRAGMA ") + name) && query.next() ? query.value(0).toInt() : -1;
+}
+
+/// A database file and the journal files that belong to it.
+const QStringList &journalSuffixes()
+{
+    static const QStringList suffixes = {QString(), QStringLiteral("-wal"), QStringLiteral("-shm")};
+    return suffixes;
+}
+
+/// What the user made in a database of the current schema: sessions, timers of their own (the
+/// built-in one is there from the start) and deleted timers. -1 if it cannot be read.
+int userRows(QSqlDatabase &db)
+{
+    QSqlQuery query(db);
+    if (!query.exec(QStringLiteral("SELECT (SELECT count(*) FROM session) + (SELECT count(*) FROM preset WHERE is_builtin = 0) "
+                                   "+ (SELECT count(*) FROM preset_tombstone)"))
+        || !query.next()) {
+        return -1;
+    }
+    return query.value(0).toInt();
+}
+
+/// The application id in a SQLite file's header (big-endian at offset 68), read without SQLite,
+/// so that a file is never opened, let alone changed, just to look at it. -1 if unreadable.
+qint64 headerApplicationId(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return -1;
+    }
+    const QByteArray header = file.read(72);
+    if (header.size() < 72 || !header.startsWith(QByteArrayLiteral("SQLite format 3"))) {
+        return -1;
+    }
+    qint64 id = 0;
+    for (int i = 68; i < 72; ++i) {
+        id = (id << 8) | quint8(header.at(i));
+    }
+    return id;
 }
 } // namespace
 
@@ -245,8 +285,13 @@ bool Database::open()
         }
     }
 
+    return finishOpen();
+}
+
+bool Database::finishOpen()
+{
     QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
-    if (!inMemory) {
+    if (!isTemporary()) {
         // WAL keeps writes cheap and readers unblocked; a crash cannot corrupt the file.
         if (!run(db, QStringLiteral("PRAGMA journal_mode = WAL"), &m_error)
             || !run(db, QStringLiteral("PRAGMA synchronous = NORMAL"), &m_error)) {
@@ -321,25 +366,32 @@ bool Database::moveFileAside(const QString &reason)
 
     const QString target = m_path + QLatin1Char('.') + reason + QLatin1Char('-')
         + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    if (!moveFiles(m_path, target)) {
+        m_error = QStringLiteral("%1 is not a usable Sugo database and cannot be moved aside").arg(m_path);
+        return false;
+    }
+    m_movedAsidePath = target;
+    m_movedAsideCorrupt = reason == QLatin1String("corrupt");
+    return true;
+}
 
+bool Database::moveFiles(const QString &from, const QString &to)
+{
     // The journal files belong to the same database and must travel with it.
     QStringList moved;
-    for (const QString &suffix : {QString(), QStringLiteral("-wal"), QStringLiteral("-shm")}) {
-        if (!QFile::exists(m_path + suffix)) {
+    for (const QString &suffix : journalSuffixes()) {
+        if (!QFile::exists(from + suffix)) {
             continue;
         }
-        if (!QFile::rename(m_path + suffix, target + suffix)) {
+        if (QFile::exists(to + suffix) || !QFile::rename(from + suffix, to + suffix)) {
             // Put back what was moved already: a journal must never be left with another file.
             for (const QString &done : std::as_const(moved)) {
-                QFile::rename(target + done, m_path + done);
+                QFile::rename(to + done, from + done);
             }
-            m_error = QStringLiteral("%1 is not a usable Sugo database and cannot be moved aside").arg(m_path);
             return false;
         }
         moved.append(suffix);
     }
-    m_movedAsidePath = target;
-    m_movedAsideCorrupt = reason == QLatin1String("corrupt");
     return true;
 }
 
@@ -432,5 +484,119 @@ bool Database::migrate(QSqlDatabase &db)
             return false;
         }
     }
+    return true;
+}
+
+bool Database::recoverSugo100Database()
+{
+    if (isTemporary() || !m_movedAsidePath.isEmpty() || !m_recoveredFromPath.isEmpty()) {
+        return true;
+    }
+    {
+        QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
+        if (!db.isOpen() || userRows(db) != 0) {
+            return true; // the user has data here (or it cannot be read): never replace it
+        }
+    }
+
+    // Candidates: the files Sugo moved aside as foreign, whose header carries 1.0.0's id. Each is
+    // copied (with its write-ahead log) into a private directory and converted there.
+    const QFileInfo info(m_path);
+    const QDir dir = info.absoluteDir();
+    QTemporaryDir work;
+    if (!work.isValid()) {
+        return true;
+    }
+    QString found;
+    QString foundCopy;
+    int candidates = 0;
+    const QStringList names = dir.entryList({info.fileName() + QStringLiteral(".foreign-*")}, QDir::Files, QDir::Name);
+    for (const QString &name : names) {
+        if (name.endsWith(QLatin1String("-wal")) || name.endsWith(QLatin1String("-shm"))) {
+            continue;
+        }
+        const QString original = dir.filePath(name);
+        // A file whose header still reads 0 may have its stamp in the write-ahead log.
+        const qint64 headerId = headerApplicationId(original);
+        if (headerId != kSugo100ApplicationId && !(headerId == 0 && QFile::exists(original + QStringLiteral("-wal")))) {
+            continue;
+        }
+        const QString copy = work.filePath(QString::number(candidates + 1) + QStringLiteral(".db"));
+        bool copied = QFile::copy(original, copy);
+        if (copied && QFile::exists(original + QStringLiteral("-wal"))) {
+            copied = QFile::copy(original + QStringLiteral("-wal"), copy + QStringLiteral("-wal"));
+        }
+        if (!copied) {
+            continue;
+        }
+        QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
+        if (QFile::exists(copy + QStringLiteral("-wal"))) {
+            QFile::setPermissions(copy + QStringLiteral("-wal"), QFile::ReadOwner | QFile::WriteOwner);
+        }
+        // Read the id through SQLite now (it sees the log), before Database would stamp the copy.
+        bool isSugo100 = false;
+        {
+            const QString probe = QStringLiteral("sugo-probe-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+            {
+                QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), probe);
+                db.setDatabaseName(copy);
+                if (db.open()) {
+                    const int version = pragmaInt(db, QStringLiteral("user_version"));
+                    isSugo100 = pragmaInt(db, QStringLiteral("application_id")) == kSugo100ApplicationId
+                        && version >= 1 && version <= kSugo100SchemaVersion;
+                }
+                db.close();
+            }
+            QSqlDatabase::removeDatabase(probe);
+        }
+        if (!isSugo100) {
+            continue;
+        }
+        // Closing the converted copy folds its write-ahead log back into the file.
+        Database converted(copy);
+        if (!converted.open() || !converted.movedAsidePath().isEmpty()) {
+            continue; // damaged: leave it to the user
+        }
+        QSqlDatabase db = QSqlDatabase::database(converted.connectionName(), false);
+        if (userRows(db) <= 0) {
+            continue; // nothing worth taking back
+        }
+        ++candidates;
+        found = original;
+        foundCopy = copy;
+    }
+    if (candidates != 1) {
+        return true; // none, or several and no way to tell which one the user wants
+    }
+
+    // Swap: this (empty) database is kept aside, the converted copy takes its place.
+    closeConnection();
+    const QString replaced = m_path + QStringLiteral(".replaced-")
+        + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    bool swapped = moveFiles(m_path, replaced);
+    if (swapped) {
+        swapped = QFile::copy(foundCopy, m_path) && connect() && finishOpen();
+        if (!swapped) {
+            closeConnection();
+            for (const QString &suffix : journalSuffixes()) {
+                QFile::remove(m_path + suffix);
+            }
+            if (!moveFiles(replaced, m_path)) {
+                m_error = QStringLiteral("Cannot put back %1 (kept as %2)").arg(m_path, replaced);
+                return false;
+            }
+        }
+    }
+    if (!swapped) {
+        // Back to the database open() had opened.
+        const QString why = m_error;
+        if (!connect() || !finishOpen()) {
+            return false;
+        }
+        m_error = why;
+        return true;
+    }
+    m_recoveredFromPath = found;
+    m_replacedPath = replaced;
     return true;
 }
