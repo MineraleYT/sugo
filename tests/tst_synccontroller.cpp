@@ -466,6 +466,54 @@ private Q_SLOTS:
         QCOMPARE(puts(), before);
     }
 
+    void selectedTimerDeletedElsewhereWaitsForTheTimer()
+    {
+        Device a(*server);
+        bool busy = false;
+        a.sync->setTimerBusy([&busy]() { return busy; });
+        signInFirst(a);
+        const QString uuid = a.model->create({{QStringLiteral("name"), QStringLiteral("Running")}});
+        a.model->setCurrentUuid(uuid);
+        QTRY_VERIFY(remoteNames(a).contains(QStringLiteral("Running")));
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+        const QByteArray etag = a.settings->value(QStringLiteral("Sync/Etag")).toByteArray();
+
+        // A phase runs here while another device deletes its timer.
+        busy = true;
+        PresetSyncFormat::Data data = remoteData(a);
+        data.presets.removeIf([&uuid](const TimerPreset &p) { return p.uuid == uuid; });
+        data.tombstones.append({uuid, QDateTime::currentMSecsSinceEpoch() + 1000, kOther});
+        remoteWrite(a, data);
+        const int pulled = gets();
+        const int before = puts();
+
+        a.sync->syncNow();
+        QTRY_COMPARE(gets(), pulled + 1);
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+        QCOMPARE(a.model->currentUuid(), uuid);
+        QVERIFY(a.names().contains(QStringLiteral("Running")));
+        QCOMPARE(a.settings->value(QStringLiteral("Sync/Etag")).toByteArray(), etag);
+
+        // A change made meanwhile waits too: an upload would only meet the newer blob.
+        a.model->create({{QStringLiteral("name"), QStringLiteral("Made while running")}});
+        QTest::qWait(20 * kUnitMs); // longer than the push delay
+        QCOMPARE(puts(), before);
+        QVERIFY(a.settings->value(QStringLiteral("Sync/Dirty")).toBool());
+        QCOMPARE(a.model->currentUuid(), uuid);
+
+        // The timer stops: the deletion arrives, and the local change goes out with it.
+        busy = false;
+        a.sync->timerIdle();
+        QTRY_COMPARE(a.model->currentUuid(), PresetModel::DefaultUuid);
+        QVERIFY(!a.names().contains(QStringLiteral("Running")));
+        QVERIFY(a.names().contains(QStringLiteral("Made while running")));
+        QTRY_VERIFY(remoteNames(a).contains(QStringLiteral("Made while running")));
+        QVERIFY(!remoteNames(a).contains(QStringLiteral("Running")));
+        QTRY_COMPARE(a.sync->state(), SyncController::Idle);
+        QCOMPARE(a.settings->value(QStringLiteral("Sync/Etag")).toByteArray(), blob().etag);
+        QVERIFY(!a.settings->contains(QStringLiteral("Sync/Dirty")));
+    }
+
     void restoredBackupIsPublished()
     {
         Device a(*server);
