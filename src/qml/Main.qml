@@ -976,16 +976,6 @@ QQC2.ApplicationWindow {
         pages.forEach(page => page && page.destroy());
     }
 
-    /// The back button: a sub-page with unsaved changes asks first.
-    function goBack(): void {
-        const top = stack.currentItem;
-        if (top && typeof top.requestClose === "function") {
-            top.requestClose();
-        } else {
-            popPage();
-        }
-    }
-
     // --- Navigation ----------------------------------------------------------
 
     readonly property var destinations: ({
