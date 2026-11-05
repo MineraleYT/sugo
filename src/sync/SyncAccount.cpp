@@ -886,6 +886,9 @@ void SyncAccount::disconnectDevice(const QString &id)
 
 void SyncAccount::signOut()
 {
+    if (m_signingOut) {
+        return; // already on its way: a second reset would drop the first request
+    }
     if (m_phase == Phase::SigningIn) {
         abandonSignIn();
         Q_EMIT signedOut(true);
