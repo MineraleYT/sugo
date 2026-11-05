@@ -158,6 +158,7 @@ public:
     int defaultPut = 201;
     int deleteStatus = 204;
     int propfindStatus = 0;            ///< Answers every PROPFIND with this status when not 0.
+    QByteArray forbiddenPropfindPath;  ///< A PROPFIND of this path is answered with 403.
     QString prefix;                    ///< XML namespace prefix of the multistatus.
     int pollsBefore200 = 2;
     int polls = 0;
@@ -255,6 +256,10 @@ private:
         }
         if (req.method == "PROPFIND" && propfindStatus != 0) {
             reply(s, propfindStatus);
+            return;
+        }
+        if (req.method == "PROPFIND" && !forbiddenPropfindPath.isEmpty() && path == forbiddenPropfindPath) {
+            reply(s, 403);
             return;
         }
         if (req.method == "PROPFIND") {
@@ -731,6 +736,25 @@ private Q_SLOTS:
         QCOMPARE(propfind.size(), 2);
         QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
         QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+    }
+
+    void discoveryNextcloudForbiddenAtTheRootLooksUnderTheLoginName()
+    {
+        // The root is kept from this account (an ACL, a proxy rule): not a refused login, and
+        // the calendars are where Nextcloud usually puts the login name's.
+        m_server->forbiddenPropfindPath = "/remote.php/dav/";
+        m_server->expectedAuth = basic(QStringLiteral("alice"), kPassword);
+        m_sync->setServerUrl(m_server->base());
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(kPassword);
+        m_sync->refreshCalendars();
+        QTRY_COMPARE(m_sync->calendars().size(), 2);
+        const auto propfind = m_server->of("PROPFIND");
+        QCOMPARE(propfind.size(), 2);
+        QCOMPARE(propfind.at(0).path, QByteArray("/remote.php/dav/"));
+        QCOMPARE(propfind.at(1).path, QByteArray("/remote.php/dav/calendars/alice/"));
+        QVERIFY(m_sync->lastError().isEmpty());
+        QVERIFY(!m_sync->isSendingPaused());
     }
 
     void discoveryNextcloudRefusedAtThePrincipalStopsThere()
