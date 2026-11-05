@@ -27,6 +27,10 @@ jobs:
     # Only the branch testing becomes a nightly, also when the run is started by hand.
     if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04
+    # actions: read to look up this run (the date of the version).
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.version.outputs.sha }}
@@ -39,6 +43,9 @@ jobs:
       # A pre-release of the version in CMakeLists.txt, the one being prepared; once that version
       # is released (and not bumped yet), of the next patch. So a nightly is always newer than
       # the last release and older than the next one, and nightlies order by date and run number.
+      # The date is the day this run was created (UTC), not the commit's: a later run always has
+      # a later or equal date and a higher run number, so the versions grow in the order the runs
+      # are started, also when testing moves to an older commit; a re-run keeps its version.
       - name: Compute the version
         id: version
         env:
@@ -54,7 +61,8 @@ jobs:
             echo "::error::Cannot tell whether v$base is released: $error"
             exit 1
           fi
-          date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y%m%d)
+          created=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          date=$(date -u -d "$created" +%Y%m%d)
           echo "version=$base-nightly.$date.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
