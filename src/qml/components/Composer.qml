@@ -203,6 +203,7 @@ Rectangle {
                 color: Theme.alpha(Theme.accent, startButton.down ? 0.8 : (startButton.hovered ? 0.9 : 1))
                 scale: startButton.down ? 0.96 : 1
                 Behavior on scale { NumberAnimation { duration: Theme.durationShort } }
+                Behavior on color { ColorAnimation { duration: Theme.durationShort } }
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: -Theme.hairline * 3
