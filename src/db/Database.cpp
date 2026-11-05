@@ -123,6 +123,29 @@ int userRows(QSqlDatabase &db)
     return query.value(0).toInt();
 }
 
+/// The meta key that makes recoverSugo100Database() a one-time look: the name of the file whose
+/// data was taken back, or "checked" if none was.
+const QString kSugo100RecoveryKey = QStringLiteral("sugo100_recovery");
+
+bool hasMeta(QSqlDatabase &db, const QString &key, bool *readable)
+{
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("SELECT 1 FROM meta WHERE key = ?"));
+    query.addBindValue(key);
+    *readable = query.exec();
+    return *readable && query.next();
+}
+
+bool setMeta(QSqlDatabase &db, const QString &key, const QString &value)
+{
+    QSqlQuery query(db);
+    query.prepare(QStringLiteral("INSERT INTO meta (key, value) VALUES (?, ?) "
+                                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
+    query.addBindValue(key);
+    query.addBindValue(value);
+    return query.exec();
+}
+
 /// The application id in a SQLite file's header (big-endian at offset 68), read without SQLite,
 /// so that a file is never opened, let alone changed, just to look at it. -1 if unreadable.
 qint64 headerApplicationId(const QString &path)
@@ -492,20 +515,35 @@ bool Database::recoverSugo100Database()
     if (isTemporary() || !m_movedAsidePath.isEmpty() || !m_recoveredFromPath.isEmpty()) {
         return true;
     }
+    const QFileInfo info(m_path);
+    const QDir dir = info.absoluteDir();
     {
+        // Once per database: data taken back must not come back again after the user cleared it.
+        // A database replaced earlier (sugo.db.replaced-*) also says it was done, should a
+        // restored backup have taken the key away.
         QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
-        if (!db.isOpen() || userRows(db) != 0) {
-            return true; // the user has data here (or it cannot be read): never replace it
+        bool readable = false;
+        if (!db.isOpen() || hasMeta(db, kSugo100RecoveryKey, &readable) || !readable) {
+            return true;
+        }
+        if (!dir.entryList({info.fileName() + QStringLiteral(".replaced-*")}, QDir::Files).isEmpty()
+            || userRows(db) != 0) {
+            // The user has data here (or it cannot be read): never replace it, nor look again.
+            setMeta(db, kSugo100RecoveryKey, QStringLiteral("checked"));
+            return true;
         }
     }
+    const auto checked = [this]() {
+        QSqlDatabase db = QSqlDatabase::database(m_connectionName, false);
+        setMeta(db, kSugo100RecoveryKey, QStringLiteral("checked"));
+        return true;
+    };
 
     // Candidates: the files Sugo moved aside as foreign, whose header carries 1.0.0's id. Each is
     // copied (with its write-ahead log) into a private directory and converted there.
-    const QFileInfo info(m_path);
-    const QDir dir = info.absoluteDir();
     QTemporaryDir work;
     if (!work.isValid()) {
-        return true;
+        return true; // try again next time
     }
     QString found;
     QString foundCopy;
@@ -562,12 +600,16 @@ bool Database::recoverSugo100Database()
         if (userRows(db) <= 0) {
             continue; // nothing worth taking back
         }
+        // Marked in the copy itself, so the database that takes this one's place already says so.
+        if (!setMeta(db, kSugo100RecoveryKey, name)) {
+            continue;
+        }
         ++candidates;
         found = original;
         foundCopy = copy;
     }
     if (candidates != 1) {
-        return true; // none, or several and no way to tell which one the user wants
+        return checked(); // none, or several and no way to tell which one the user wants
     }
 
     // Swap: this (empty) database is kept aside, the converted copy takes its place.
