@@ -23,7 +23,6 @@ qt6_add_qml_module(sugo_core
         qml/components/LineIcon.qml
         qml/components/Kbd.qml
         qml/components/SButton.qml
-        qml/components/StatusPill.qml
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
         qml/components/TrayBadge.qml
