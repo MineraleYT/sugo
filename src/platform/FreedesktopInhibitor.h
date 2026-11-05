@@ -37,7 +37,7 @@ public:
 
 private:
     void sync();
-    void startCall(const QDBusMessage &message, void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *));
+    void startCall(const QDBusMessage &message, int timeoutMs, void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *));
     void onInhibitFinished(QDBusPendingCallWatcher *watcher);
     void onUnInhibitFinished(QDBusPendingCallWatcher *watcher);
     void onOwnerChanged(const QString &service, const QString &oldOwner, const QString &newOwner);

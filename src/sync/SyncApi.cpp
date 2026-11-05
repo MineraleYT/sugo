@@ -21,6 +21,9 @@ namespace
 constexpr int kTransferTimeoutMs = 30000;
 /// An access token is renewed when it has less than this left.
 constexpr qint64 kAccessMarginMs = 60 * 1000;
+/// The longest Retry-After kept, in seconds, as SyncAccount's longest wait: more would overflow the
+/// retry timers' milliseconds and make the retry fire at once.
+constexpr int kMaxRetryAfter = 3600;
 
 QString appVersion()
 {
@@ -513,7 +516,8 @@ void SyncApi::send(const Request &request, const QString &accessToken, Callback 
         r.error = cutOff ? SyncError::fromResponse(0, {}, reply->errorString())
                          : SyncError::fromResponse(r.http, r.body, r.http == 0 ? reply->errorString() : QString());
         if (!r.error.ok()) {
-            r.error.retryAfter = reply->rawHeader("Retry-After").trimmed().toInt();
+            // An HTTP date (or anything unreadable) gives 0: the caller's own delay.
+            r.error.retryAfter = std::clamp(reply->rawHeader("Retry-After").trimmed().toInt(), 0, kMaxRetryAfter);
             r.json = r.error.extra;
         } else if (expectJson && !r.body.isEmpty()) {
             const QJsonDocument doc = QJsonDocument::fromJson(r.body);

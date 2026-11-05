@@ -48,7 +48,7 @@ public:
 
     /// Started timestamps (Unix ms) of completed work sessions with an id greater than `afterId`,
     /// oldest first, so callers can keep a cache up to date. `maxId` (if given) receives the highest id seen, or
-    /// `afterId` when there are no new rows.
+    /// `afterId` when there are no new rows, or when they cannot be read (then the list is empty).
     QList<qint64> completedWorkStartsAfter(qint64 afterId, qint64 *maxId = nullptr) const;
 
     /// The number of sessions, or -1 if it cannot be read.

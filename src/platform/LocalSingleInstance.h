@@ -64,8 +64,14 @@ private:
     void onNewConnection();
     void onReadyRead(QLocalSocket *socket);
     void request(const QString &token);
-    /// Asks the first instance to come to the front. False if it could not be reached.
-    bool activateOther(const QString &token);
+
+    enum class Reply {
+        Ok, ///< The first instance answered and will come to the front.
+        Unreachable, ///< No connection, or it closed without an answer: the instance may be gone.
+        NoAnswer, ///< Connected, but no answer in time: the instance is alive but busy or hung.
+    };
+    /// Asks the first instance to come to the front.
+    Reply activateOther(const QString &token);
 
     QString m_directory;
     QString m_name;

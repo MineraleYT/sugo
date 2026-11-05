@@ -28,6 +28,11 @@ const QString kInterface = QStringLiteral("org.freedesktop.ScreenSaver");
 constexpr int kMaxRetries = 3;
 constexpr int kRetryDelayMs = 1000;
 constexpr int kShutdownWaitMs = 1000;
+// libdbus's DBUS_TIMEOUT_INFINITE. The Inhibit reply is the only place the cookie appears: after
+// a timeout it would be dropped (and a retry would take a second cookie), leaving screen sleep
+// blocked until Sugo quits. So Inhibit waits as long as the service takes; a service that goes
+// away ends the wait (onOwnerChanged()), and shutdown() waits only kShutdownWaitMs.
+constexpr int kNoTimeout = 0x7fffffff;
 } // namespace
 
 PowerInhibitor::PowerInhibitor(const QDBusConnection &bus, QObject *parent)
@@ -138,7 +143,7 @@ void PowerInhibitor::sendInhibit()
 
     m_pending = true;
     const quint64 generation = m_generation;
-    QDBusPendingCall call = m_bus.asyncCall(msg);
+    QDBusPendingCall call = m_bus.asyncCall(msg, kNoTimeout);
     auto *watcher = new QDBusPendingCallWatcher(call, this);
     m_pendingWatcher = watcher;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher *w) {

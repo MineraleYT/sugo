@@ -240,9 +240,16 @@ void MacNotifier::Private::post(QObject *context, const Notification &notificati
                      }
                      const QString message = QString::fromNSString(error.localizedDescription);
                      dispatch_async(dispatch_get_main_queue(), ^{
-                         qCWarning(lcMacNotifier) << "Cannot show a notification:" << message;
-                         if (sharedState->notifier) {
-                             sharedState->notifier->registry.remove(requestId);
+                         MacNotifier::Private *notifier = sharedState->notifier;
+                         if (!notifier) {
+                             return;
+                         }
+                         // Allowed a moment ago, refused now (switched off in between, or the
+                         // system's notification service failed): the menu bar icon shows it.
+                         qCWarning(lcMacNotifier) << "Cannot show a notification; using the menu bar icon:" << message;
+                         const std::optional<MacNotificationRegistry::Unshown> unshown = notifier->registry.takeUnshown(requestId);
+                         if (unshown && notifier->fallback) {
+                             notifier->fallback->notify(unshown->context, unshown->notification);
                          }
                      });
                  }];

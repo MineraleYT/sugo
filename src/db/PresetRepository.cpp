@@ -77,6 +77,12 @@ QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
             qCWarning(lcPresetRepo) << "Ignoring an unreadable value of timer option" << optionQuery.value(1).toString();
         }
     }
+    // A row that cannot be read (a damaged page, an I/O error) ends the loop early: fail rather
+    // than return part of the timers, which the next save would take for deletions.
+    if (optionQuery.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the timer options:" << optionQuery.lastError().text();
+        return {};
+    }
 
     QSqlQuery query(db);
     if (!query.exec(QStringLiteral("SELECT id, uuid, name, category, work_sec, short_break_sec, long_break_sec, "
@@ -102,6 +108,10 @@ QList<TimerPreset> PresetRepository::loadAll(bool *ok) const
         p.updatedBy = query.value(11).toString();
         p.options = optionsById.value(query.value(0).toLongLong());
         result.append(p);
+    }
+    if (query.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the timers:" << query.lastError().text();
+        return {};
     }
     if (ok) {
         *ok = true;
@@ -185,6 +195,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
                 replaced.append(key);
             }
         }
+        if (storedOptions.lastError().isValid()) {
+            return fail(storedOptions);
+        }
         storedOptions.finish();
         for (const QString &key : std::as_const(replaced)) {
             clearOptions.addBindValue(id);
@@ -216,6 +229,9 @@ bool PresetRepository::saveAll(const QList<TimerPreset> &presets, const QList<Pr
             stale.append(uuid);
             staleUpdatedAt.insert(uuid, existing.value(1).toLongLong());
         }
+    }
+    if (existing.lastError().isValid()) {
+        return fail(existing);
     }
     existing.finish();
     for (const QString &uuid : std::as_const(stale)) {
@@ -289,6 +305,10 @@ QList<PresetTombstone> PresetRepository::tombstones(bool *ok) const
     QList<PresetTombstone> result;
     while (query.next()) {
         result.append(PresetTombstone{query.value(0).toString(), query.value(1).toLongLong(), query.value(2).toString()});
+    }
+    if (query.lastError().isValid()) {
+        qCWarning(lcPresetRepo) << "Cannot read the deleted timers:" << query.lastError().text();
+        return {};
     }
     if (ok) {
         *ok = true;

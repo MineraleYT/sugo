@@ -15,6 +15,10 @@ const QString kService = QStringLiteral("org.freedesktop.Notifications");
 const QString kPath = QStringLiteral("/org/freedesktop/Notifications");
 const QString kInterface = QStringLiteral("org.freedesktop.Notifications");
 constexpr int kCallTimeoutMs = 3000;
+// libdbus's DBUS_TIMEOUT_INFINITE. The Inhibit reply is the only place the cookie appears: one
+// that came after a timeout would be dropped, leaving an inhibition nothing could end. So Inhibit
+// waits as long as the server takes; a server that goes away ends the wait (onOwnerChanged()).
+constexpr int kNoTimeout = 0x7fffffff;
 constexpr int kMaxUnInhibitAttempts = 3;
 } // namespace
 
@@ -51,19 +55,20 @@ void FreedesktopInhibitor::sync()
     if (m_wanted && !m_hasCookie) {
         QDBusMessage message = QDBusMessage::createMethodCall(kService, kPath, kInterface, QStringLiteral("Inhibit"));
         message.setArguments({m_appId, m_reason, QVariant::fromValue(QVariantMap())});
-        startCall(message, &FreedesktopInhibitor::onInhibitFinished);
+        startCall(message, kNoTimeout, &FreedesktopInhibitor::onInhibitFinished);
     } else if (!m_wanted && m_hasCookie) {
         QDBusMessage message = QDBusMessage::createMethodCall(kService, kPath, kInterface, QStringLiteral("UnInhibit"));
         message.setArguments({m_cookie});
-        startCall(message, &FreedesktopInhibitor::onUnInhibitFinished);
+        startCall(message, kCallTimeoutMs, &FreedesktopInhibitor::onUnInhibitFinished);
     }
 }
 
-void FreedesktopInhibitor::startCall(const QDBusMessage &message, void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *))
+void FreedesktopInhibitor::startCall(const QDBusMessage &message, int timeoutMs,
+                                     void (FreedesktopInhibitor::*handler)(QDBusPendingCallWatcher *))
 {
     m_busy = true;
     report();
-    auto *watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(message, kCallTimeoutMs), this);
+    auto *watcher = new QDBusPendingCallWatcher(m_bus.asyncCall(message, timeoutMs), this);
     const quint64 generation = m_generation;
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, handler, generation](QDBusPendingCallWatcher *w) {
         if (generation != m_generation) {

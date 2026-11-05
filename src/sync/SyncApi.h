@@ -47,7 +47,7 @@ struct SyncError {
     QString message;       ///< The server's English sentence, or the network error.
     QString reason;        ///< authorization_pending: "device_limit_reached" when it applies.
     int interval = 0;      ///< slow_down: the new polling interval, in seconds.
-    int retryAfter = 0;    ///< Retry-After, in seconds (0: none given).
+    int retryAfter = 0;    ///< Retry-After, in seconds, at most an hour (0: none given or unreadable).
     QJsonObject extra;     ///< The whole error object.
 
     bool ok() const { return kind == Kind::None; }

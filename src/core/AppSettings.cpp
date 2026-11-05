@@ -196,6 +196,16 @@ AppSettings::AppSettings(Settings::Ptr config, std::unique_ptr<Autostart> autost
     if (m_autostart && qEnvironmentVariableIsEmpty("SUGO_DATA_DIR")) {
         m_autostart->repair();
     }
+    // The entry can change after setStartAtLogin() reported a failure: the Background portal's
+    // dialog answered after Sugo stopped waiting.
+    if (m_autostart) {
+        m_autostart->setChangedCallback([this]() {
+            if (!startAtLogin()) {
+                setStartMinimized(false); // as when switched off from here
+            }
+            Q_EMIT startAtLoginChanged();
+        });
+    }
 }
 
 AppSettings::~AppSettings() = default;

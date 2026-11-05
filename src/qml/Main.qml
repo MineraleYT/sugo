@@ -478,7 +478,7 @@ QQC2.ApplicationWindow {
             // put. Its width follows its texts at once, so it is read right after each one.
             const pill = findItem(page, item => item.objectName === "syncStatusPill");
             if (!pill || pill.labels.length < 2) {
-                fail(60, "The Sync tab's status pill, or the texts it can show, is missing");
+                fail(61, "The Sync tab's status pill, or the texts it can show, is missing");
                 return false;
             }
             const pillWidths = [];
@@ -487,7 +487,7 @@ QQC2.ApplicationWindow {
                 pillWidths.push(pill.implicitWidth);
             }
             if (pillWidths.some(width => width !== pillWidths[0])) {
-                fail(60, "The Sync tab's status pill changes width with its text: " + pillWidths.join(", "));
+                fail(61, "The Sync tab's status pill changes width with its text: " + pillWidths.join(", "));
                 return false;
             }
             // Signing out asks first.
@@ -862,6 +862,13 @@ QQC2.ApplicationWindow {
         onTriggered: {
             ++attempts;
             const currentPage = root.pageStack.currentItem;
+            // Started next to a 1.0.0 database that 1.0.1 moved aside (smoke_app.sh sugo100-db):
+            // its timer "mine" is back, and the toast says so.
+            if (currentPage && attempts === 3 && DataManager !== null && DataManager.sugo100RecoveryReplacedPath.length > 0
+                    && (PresetModel.indexOf("mine") < 0 || !toast.message.includes(DataManager.sugo100RecoveryReplacedPath))) {
+                fail(60, "The timers of Sugo 1.0.0 taken back at startup are missing or not reported");
+                return;
+            }
             if (currentPage && attempts >= 3) {
                 let done = true;
                 if (appSmokePage === "settings") {
@@ -1445,6 +1452,11 @@ QQC2.ApplicationWindow {
                 openTimerUuid = PresetModel.currentUuid;
             }
             pushPage(destinations[currentDestination], currentDestination === "preset" ? { uuid: openTimerUuid } : {});
+        }
+        // The timers and history of Sugo 1.0.0, which 1.0.1 had moved aside, were taken back.
+        if (DataManager !== null && DataManager.sugo100RecoveryReplacedPath.length > 0) {
+            showPassiveNotification(i18n("Your timers and history from Sugo 1.0.0 are back. The empty database that had replaced them is kept as %1.",
+                                         DataManager.sugo100RecoveryReplacedPath), "long");
         }
         // "settings/<category>", "welcome/<step>": that part of the page.
         const startPart = appStartPage.split("/")[1] ?? "";

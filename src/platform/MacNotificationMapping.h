@@ -7,6 +7,8 @@
 #include <QString>
 #include <QStringList>
 
+#include <optional>
+
 #include "Notifier.h"
 
 /**
@@ -56,8 +58,17 @@ public:
 
     /// Keeps the handlers of `notification` and returns the identifier of a new request.
     QString add(QObject *context, const Notifier::Notification &notification);
-    /// Forgets a request (it could not be shown).
+    /// Forgets a request.
     void remove(const QString &requestId);
+
+    /// A request that could not be shown, handed back so another notifier can show it.
+    struct Unshown {
+        QObject *context = nullptr;
+        Notifier::Notification notification;
+    };
+    /// Request `requestId` could not be shown: forgets it and returns its notification, unless
+    /// it is unknown (already answered or dropped) or its context no longer exists.
+    std::optional<Unshown> takeUnshown(const QString &requestId);
     /// The user answered request `requestId` with action `actionId` (`text`: what they typed
     /// in the reply field). Runs the handler, if there is one and its context still exists, and
     /// forgets the request. True if a handler ran.
@@ -69,8 +80,7 @@ public:
 private:
     struct Entry {
         QPointer<QObject> context;
-        QHash<QString, Notifier::Handler> actions; ///< By action identifier, the default one included.
-        std::function<void(const QString &)> replied;
+        Notifier::Notification notification; ///< As given: its handlers, and all of it for takeUnshown().
     };
 
     int m_capacity;

@@ -15,7 +15,8 @@ class PresetRepository
 public:
     explicit PresetRepository(const QString &connectionName);
 
-    /// All presets in display order. `ok` (optional) reports query failures.
+    /// All presets in display order. `ok` (optional) reports query failures, a row that cannot be
+    /// read included; the list is then empty, never a part of the presets.
     QList<TimerPreset> loadAll(bool *ok = nullptr) const;
 
     /// How long a deleted timer is remembered for Sugo Sync: 180 days.
@@ -31,7 +32,8 @@ public:
     /// `presets` loses its tombstone. Tombstones older than TombstoneLifetimeMs are dropped.
     bool saveAll(const QList<TimerPreset> &presets, const QList<PresetTombstone> &received = {});
 
-    /// The remembered deletions, oldest first. `ok` (optional) reports query failures.
+    /// The remembered deletions, oldest first. `ok` (optional) reports query failures, a row that
+    /// cannot be read included; the list is then empty.
     QList<PresetTombstone> tombstones(bool *ok = nullptr) const;
 
     /// The wall clock for tombstones and their expiry (tests set their own).

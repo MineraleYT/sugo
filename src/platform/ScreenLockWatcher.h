@@ -11,6 +11,8 @@ class AppSettings;
 class MacSessionEvents;
 #else
 #include <QDBusConnection>
+#include <QHash>
+#include <QString>
 #endif
 class TimerEngine;
 
@@ -19,6 +21,15 @@ class TimerEngine;
  * and org.gnome.ScreenSaver (GNOME).
  * Automatically pauses the active work phase when the screen is locked, and
  * signals when the user returns so they can resume or review their session.
+ *
+ * If the name that reported the lock loses its owner (the locker crashed or restarted), its
+ * unlock will never come: the screen is then taken as unlocked, so the next lock is not dropped
+ * as a repeat. The locker going away most likely means the session is usable again, and a locker
+ * that comes back locked reports a new lock, which pauses nothing (the phase is already paused).
+ * Its unlock is then reported once more while the phase is still paused by the first lock: that
+ * one is the real return of the user, and the window shows a single resume prompt for both.
+ * A new owner of either name is also asked GetActive, in case it started with the screen locked
+ * without announcing it; only a "locked" answer counts, and only from the owner still in place.
  *
  * Also pauses whatever phase is running when the computer goes to sleep (logind's
  * PrepareForSleep, on the system bus). The countdown cannot run while the machine sleeps, and
@@ -73,12 +84,26 @@ Q_SIGNALS:
     /// The computer woke up while the phase it paused is still paused.
     void wokeUpAfterPause();
 
+#ifndef Q_OS_MACOS
+private Q_SLOTS:
+    // ActiveChanged from the owner of each name, which is remembered with the lock.
+    void onFreedesktopActiveChanged(bool active);
+    void onGnomeActiveChanged(bool active);
+#endif
+
 private:
     void setPausedBySleep(bool paused);
+    /// `source`: the D-Bus name that reported the change, or empty (macOS, direct calls).
+    void setScreenLocked(bool locked, const QString &source);
 
 #ifndef Q_OS_MACOS
+    void onLockerGone(const QString &name);
+    void askLockerState(const QString &name, const QString &owner);
+
     QDBusConnection m_bus;
     QDBusConnection m_systemBus;
+    QString m_lockSource; // the name whose owner reported the current lock
+    QHash<QString, QString> m_lockerOwners; // owners seen appearing, by name: whose answer counts
 #endif
     TimerEngine *m_engine = nullptr;
     AppSettings *m_settings = nullptr;

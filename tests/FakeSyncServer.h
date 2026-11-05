@@ -103,6 +103,7 @@ public:
     int interval = 5;          ///< Polling interval of the sign-in, in seconds.
     int accessExpiresIn = 3600;
     int slowDownNext = 0;      ///< The next n polls of a pending code answer slow_down.
+    QByteArray retryAfter = "60"; ///< The Retry-After header of a programmed 429.
     /// Every request is answered by closing the connection, like a server out of reach.
     bool offline = false;
     QList<Failure> failures;
@@ -345,7 +346,7 @@ private:
     void fail(QTcpSocket *s, int status)
     {
         if (status == 429) {
-            error(s, 429, "rate_limited", {}, {{"Retry-After", "60"}});
+            error(s, 429, "rate_limited", {}, {{"Retry-After", retryAfter}});
         } else if (status == 401) {
             error(s, 401, "unauthorized");
         } else {

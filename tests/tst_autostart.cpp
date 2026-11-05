@@ -45,6 +45,33 @@ XdgAutostart make(const QString &dir, const QStringList &command = {QStringLiter
 const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
 
+/// One request of the fake portal: Close() ends its dialog unanswered, like the real portal.
+class FakeRequest : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.portal.Request")
+
+public:
+    explicit FakeRequest(QStringList *closed, QObject *parent)
+        : QObject(parent)
+        , m_closed(closed)
+    {
+    }
+
+    QString handle;
+    bool isClosed = false;
+
+public Q_SLOTS:
+    void Close()
+    {
+        isClosed = true;
+        *m_closed << handle;
+    }
+
+private:
+    QStringList *m_closed;
+};
+
 /// Stand-in for xdg-desktop-portal's Background interface.
 class FakeBackgroundPortal : public QObject, protected QDBusContext
 {
@@ -53,7 +80,10 @@ class FakeBackgroundPortal : public QObject, protected QDBusContext
 
 public:
     QList<QVariantMap> requests;
+    QStringList handles; // of every request, in order
+    QStringList closed; // the requests closed by the client
     uint answer = 0; // 0 granted, 1 cancelled
+    int answerDelayMs = 50; // how long the user takes to answer the dialog
 
 public Q_SLOTS:
     QDBusObjectPath RequestBackground(const QString &parentWindow, const QVariantMap &options)
@@ -64,12 +94,20 @@ public Q_SLOTS:
         sender.replace(QLatin1Char('.'), QLatin1Char('_'));
         const QString handle = kPortalPath + QStringLiteral("/request/") + sender + QLatin1Char('/')
             + options.value(QStringLiteral("handle_token")).toString();
+        handles << handle;
         QDBusConnection bus = connection();
+        auto *request = new FakeRequest(&closed, this);
+        request->handle = handle;
+        bus.registerObject(handle, request, QDBusConnection::ExportAllSlots);
         const uint code = answer;
         const bool autostart = options.value(QStringLiteral("autostart")).toBool();
-        // Answer later, like the real portal after asking the user.
-        QTimer::singleShot(50, this, [bus, handle, code, autostart]() mutable {
-            QDBusMessage signal = QDBusMessage::createSignal(handle, QStringLiteral("org.freedesktop.portal.Request"),
+        // Answer later, like the real portal after asking the user; a closed request never is.
+        QTimer::singleShot(answerDelayMs, request, [bus, request, code, autostart]() mutable {
+            bus.unregisterObject(request->handle);
+            if (request->isClosed) {
+                return;
+            }
+            QDBusMessage signal = QDBusMessage::createSignal(request->handle, QStringLiteral("org.freedesktop.portal.Request"),
                                                              QStringLiteral("Response"));
             signal << code << QVariantMap{{QStringLiteral("background"), true}, {QStringLiteral("autostart"), autostart}};
             bus.send(signal);
@@ -328,11 +366,6 @@ private Q_SLOTS:
         QCOMPARE(portal.requests.size(), 3);
         QCOMPARE(portal.requests.at(2).value(QStringLiteral("autostart")).toBool(), false);
 
-        // No answer in time (the fake answers after 50 ms): a failure, nothing stored.
-        PortalAutostart impatient(client, state, QStringLiteral("reason"), {QStringLiteral("sugo")}, 10);
-        QVERIFY(!impatient.setEnabled(true));
-        QVERIFY(!impatient.isEnabled());
-
         // No portal at all: a plain failure.
         server.unregisterService(kPortalService);
         QVERIFY(!autostart.setEnabled(true));
@@ -341,6 +374,77 @@ private Q_SLOTS:
         server.unregisterObject(kPortalPath);
         QDBusConnection::disconnectFromBus(QStringLiteral("portal-client"));
         QDBusConnection::disconnectFromBus(QStringLiteral("portal-server"));
+#endif
+    }
+
+    void anAnswerAfterTheTimeoutIsStillKept()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("Flatpak and its portal exist on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection server = QDBusConnection::connectToBus(bus.address(), QStringLiteral("late-server"));
+        QDBusConnection client = QDBusConnection::connectToBus(bus.address(), QStringLiteral("late-client"));
+        FakeBackgroundPortal portal;
+        portal.answerDelayMs = 300; // the user answers the dialog after Sugo stopped waiting
+        QVERIFY(server.registerObject(kPortalPath, &portal, QDBusConnection::ExportAllSlots));
+        QVERIFY(server.registerService(kPortalService));
+        QLoggingCategory::setFilterRules(QStringLiteral("sugo.platform.autostart.warning=false"));
+
+        QTemporaryDir tmp;
+        const QString state = tmp.filePath(QStringLiteral("config/portal-autostart"));
+        {
+            PortalAutostart impatient(client, state, QStringLiteral("reason"), {QStringLiteral("sugo")}, 10);
+            int changes = 0;
+            impatient.setChangedCallback([&changes]() { ++changes; });
+            // No answer in time: a failure for now, nothing stored yet.
+            QVERIFY(!impatient.setEnabled(true));
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 0);
+            // The portal wrote the login entry once the user allowed it: Sugo must know, and say so.
+            QTRY_VERIFY(impatient.isEnabled());
+            QCOMPARE(changes, 1);
+
+            // The same for switching it off.
+            QVERIFY(!impatient.setEnabled(false));
+            QVERIFY(impatient.isEnabled());
+            QTRY_VERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+
+            // A late refusal changes nothing.
+            portal.answer = 1;
+            QVERIFY(!impatient.setEnabled(true));
+            QTest::qWait(portal.answerDelayMs + 200);
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+            portal.answer = 0;
+
+            // Only the latest request counts: the one still open is closed, so its dialog cannot
+            // switch on what the user switched off since.
+            QVERIFY(portal.closed.isEmpty());
+            QVERIFY(!impatient.setEnabled(true));
+            portal.answerDelayMs = 600;
+            QVERIFY(!impatient.setEnabled(false));
+            QTRY_COMPARE(portal.closed, QStringList{portal.handles.at(portal.handles.size() - 2)});
+            QTest::qWait(400); // the first request's answer would have come by now
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+            QTest::qWait(400); // the second one's
+            QVERIFY(!impatient.isEnabled());
+            QCOMPARE(changes, 2);
+
+            // Asked again and not answered in time: closed when Sugo stops (quits).
+            QVERIFY(!impatient.setEnabled(true));
+        }
+        QTRY_COMPARE(portal.closed.size(), 2);
+        QCOMPARE(portal.closed.last(), portal.handles.last());
+
+        server.unregisterObject(kPortalPath);
+        QDBusConnection::disconnectFromBus(QStringLiteral("late-client"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("late-server"));
 #endif
     }
 

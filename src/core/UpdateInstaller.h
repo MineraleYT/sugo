@@ -74,6 +74,8 @@ struct MacUpdateTools {
     QString open = QStringLiteral("/usr/bin/open");
     /// The process finish() waits for instead of the one it is given (tests); 0 for none.
     qint64 waitPid = 0;
+    /// Renames the bundles in finish(); empty for QDir::rename (tests make it fail).
+    std::function<bool(const QString &from, const QString &to)> rename;
 };
 
 class MacBundleInstaller : public QObject, public UpdateInstaller
@@ -103,8 +105,15 @@ public:
     /// Whether the Info.plist says this bundle installs updates itself (key SugoInstallsUpdates,
     /// true only in the disk image's build: -DSUGO_INSTALLS_UPDATES=ON).
     static bool installsUpdates(const QString &infoPlist);
+    /// An update cut off between the two renames of finish() (a crash, a power cut, a rollback
+    /// that failed) leaves Sugo only at "<name>.app.old", which the Dock still opens. When the
+    /// program runs from there (`executableDir` is its Contents/MacOS) and "<name>.app" is not
+    /// there, the folder gets its name back once process `pid` has ended: renamed now, it would
+    /// break what Qt still loads from the bundle. True when that was arranged.
+    static bool restoreInterruptedUpdate(const QString &executableDir, qint64 pid);
 
 private:
+    static bool restoreWhenEnded(const QString &backup, const QString &bundle, qint64 pid);
     using Then = std::function<void(bool ok, const QString &output)>;
     void run(const QString &program, const QStringList &arguments, int timeoutMs, Then then);
     void attached();
@@ -114,6 +123,7 @@ private:
     void detach(const std::function<void()> &then);
     void conclude(const QString &error);
     void removeLeftovers();
+    bool rename(const QString &from, const QString &to) const;
 
     QString m_bundle;
     Tools m_tools;

@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -232,9 +233,27 @@ private Q_SLOTS:
 
         const QString user = qEnvironmentVariable("USER");
         if (user.length() > 2) {
-            const QString redacted = Diagnostics::redact(QStringLiteral("started by %1 today").arg(user));
-            QVERIFY(!redacted.contains(user));
+            // Compared whole: a user called "user" is still found inside the "<user>" placeholder.
+            QCOMPARE(Diagnostics::redact(QStringLiteral("started by %1 today").arg(user)), QStringLiteral("started by <user> today"));
         }
+    }
+
+    void testRedactionLeavesItsOwnPlaceholdersAlone()
+    {
+        // A user called "user" (the home folder /home/user): the word is redacted wherever it
+        // stands, but never inside the placeholders the other steps put in.
+        const QByteArray savedUser = qgetenv("USER");
+        const auto restoreUser = qScopeGuard([&savedUser] { qputenv("USER", savedUser); });
+        qputenv("USER", "user");
+        QCOMPARE(Diagnostics::redact(QStringLiteral("/home/john_doe/file by alice@host for user")),
+                 QStringLiteral("/home/<user>/file by <user>@host for <user>"));
+        QCOMPARE(Diagnostics::redact(QStringLiteral("token=abc")), QStringLiteral("token=<redacted>"));
+
+        // An account word that is also a placeholder's.
+        Diagnostics::setAccountRedactions({QStringLiteral("redacted"), QStringLiteral("account")});
+        QCOMPARE(Diagnostics::redact(QStringLiteral("token: abc\naccount redacted")),
+                 QStringLiteral("token: <redacted>\n<account> <account>"));
+        Diagnostics::setAccountRedactions({});
     }
 
     void testRedactsCalendarSecrets()

@@ -93,6 +93,7 @@ void ShortcutsFocusInhibitor::inhibit(const QString &reason)
     Q_UNUSED(reason) // a Focus has no reason to show
     m_wanted = true;
     m_onFailed = false;
+    m_offRetried = false; // the next release gets its own second try
     sync();
 }
 
@@ -106,7 +107,7 @@ void ShortcutsFocusInhibitor::release()
 // calling this again, so a change of mind during a run is picked up as soon as it returns.
 void ShortcutsFocusInhibitor::sync()
 {
-    if (m_busy) {
+    if (m_busy || m_pausing) {
         return;
     }
     if (m_wanted && !m_on && !m_onFailed) {
@@ -132,24 +133,48 @@ void ShortcutsFocusInhibitor::sync()
                        // A run that timed out may still have turned it on.
                        m_on = ok || timedOut;
                        report();
-                       sync(); // release() may have been called meanwhile
+                       if (timedOut) {
+                           // Shortcuts may still be running it: an "off" at once could come first.
+                           pauseThenSync();
+                       } else {
+                           sync(); // release() may have been called meanwhile
+                       }
                    });
     } else if (!m_wanted && m_on) {
         m_busy = true;
         report();
         runProgram({QStringLiteral("run"), m_offShortcut}, m_runTimeoutMs,
-                   [this](bool ok, bool, const QByteArray &, const QString &error) {
+                   [this](bool ok, bool timedOut, const QByteArray &, const QString &error) {
                        m_busy = false;
+                       if (timedOut && !m_offRetried) {
+                           // Unknown outcome (a permission prompt, a hang): the Focus may still be
+                           // on. Try once more after a pause, still counted as on until then.
+                           qCWarning(lcShortcutsInhibitor) << "Cannot turn the Focus off:" << error << "- trying again";
+                           m_offRetried = true;
+                           pauseThenSync();
+                           return;
+                       }
                        if (!ok) {
-                           // No retry: a shortcut that fails now will fail again, and quitting
+                           // No more tries: a shortcut that fails now will fail again, and quitting
                            // must not wait for it. The user can still turn the Focus off.
                            qCWarning(lcShortcutsInhibitor) << "Cannot turn the Focus off:" << error;
                        }
                        m_on = false;
+                       m_offRetried = false;
                        report();
                        sync(); // inhibit() may have been called meanwhile
                    });
     }
+}
+
+// After a timed-out run: no run for retryDelayMs, then whatever is wanted by then.
+void ShortcutsFocusInhibitor::pauseThenSync()
+{
+    m_pausing = true;
+    QTimer::singleShot(m_retryDelayMs, this, [this]() {
+        m_pausing = false;
+        sync();
+    });
 }
 
 void ShortcutsFocusInhibitor::runProgram(const QStringList &arguments, int timeoutMs, Done done)
