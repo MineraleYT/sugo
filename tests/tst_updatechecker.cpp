@@ -375,9 +375,12 @@ private Q_SLOTS:
 
     void releaseUrlMustPointIntoTheProjectOnGitHub()
     {
-        const QString fallback = QStringLiteral("https://github.com/MineraleYT/sugo/releases");
-        const QString good = QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v1.1.0");
+        const QString fallback = QStringLiteral("https://github.com/sugoHQ/sugo/releases");
+        const QString good = QStringLiteral("https://github.com/sugoHQ/sugo/releases/tag/v1.1.0");
+        const QString before = QStringLiteral("https://github.com/MineraleYT/sugo/releases/tag/v1.1.0"); // before the move
         QCOMPARE(UpdateChecker::safeReleaseUrl(good), good);
+        QCOMPARE(UpdateChecker::safeReleaseUrl(before), before);
+        QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("https://github.com/sugoHQ/sugo-evil/releases")), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QString()), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("http://github.com/MineraleYT/sugo/releases/tag/v1")), fallback);
         QCOMPARE(UpdateChecker::safeReleaseUrl(QStringLiteral("https://evil.example/MineraleYT/sugo/releases")), fallback);
@@ -390,9 +393,9 @@ private Q_SLOTS:
     void feedsOfTheChannels()
     {
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("stable")),
-                 QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/latest/download/stable.json")));
+                 QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/latest/download/stable.json")));
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("nightly")),
-                 QUrl(QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/nightly/nightly.json")));
+                 QUrl(QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/nightly/nightly.json")));
         QCOMPARE(UpdateChecker::feedUrl(QStringLiteral("anything")), UpdateChecker::feedUrl(QStringLiteral("stable")));
     }
 
@@ -681,15 +684,17 @@ private Q_SLOTS:
         qputenv("SUGO_OVERRIDE_VERSION", "1.0.0");
         LocalRelease release;
         const QString lookalike = QStringLiteral("https://github.com/MineraleYT/sugo-evil/releases/download/x/Sugo.AppImage");
-        const QString genuine = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
-        for (const QString &url : {lookalike, genuine}) {
+        const QString lookalikeHQ = QStringLiteral("https://github.com/sugoHQ/sugo-evil/releases/download/x/Sugo.AppImage");
+        const QString genuine = QStringLiteral("https://github.com/sugoHQ/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
+        const QString before = QStringLiteral("https://github.com/MineraleYT/sugo/releases/download/v2.0.0/Sugo-x86_64.AppImage");
+        for (const QString &url : {lookalike, lookalikeHQ, genuine, before}) {
             release.announce(QStringLiteral("2.0.0"), {{QStringLiteral("url"), url}});
             UpdateChecker checker;
             checker.setAppImagePathForTesting(release.appImage);
             checker.setFeedUrlForTesting(QUrl::fromLocalFile(release.feed)); // the real download prefix
             checker.checkForUpdates();
             QTRY_VERIFY(checker.status() != UpdateChecker::Status::Checking);
-            QCOMPARE(checker.status(), url == genuine ? UpdateChecker::Status::UpdateAvailable : UpdateChecker::Status::Error);
+            QCOMPARE(checker.status(), url == genuine || url == before ? UpdateChecker::Status::UpdateAvailable : UpdateChecker::Status::Error);
         }
         qunsetenv("SUGO_OVERRIDE_VERSION");
     }
