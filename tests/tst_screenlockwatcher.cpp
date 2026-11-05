@@ -279,6 +279,51 @@ private Q_SLOTS:
 #endif
     }
 
+    void aLockerThatRestartedWhileLockedCanLockAgain()
+    {
+#ifndef Q_OS_LINUX
+        QSKIP("The screen saver is watched over D-Bus on Linux only");
+#else
+        PrivateDBus bus;
+        if (!bus.start()) {
+            QSKIP("dbus-daemon is not available");
+        }
+        QDBusConnection session = QDBusConnection::connectToBus(bus.address(), QStringLiteral("restart-session"));
+        const auto locked = [] {
+            QDBusMessage signal = QDBusMessage::createSignal(QStringLiteral("/org/freedesktop/ScreenSaver"),
+                                                             QStringLiteral("org.freedesktop.ScreenSaver"),
+                                                             QStringLiteral("ActiveChanged"));
+            signal << true;
+            return signal;
+        };
+
+        ScreenLockWatcher lockWatcher(session);
+        lockWatcher.attach(engine.get(), settings.get());
+        engine->start();
+        {
+            QDBusConnection locker = QDBusConnection::connectToBus(bus.address(), QStringLiteral("locker"));
+            QVERIFY(locker.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
+            QVERIFY(locker.send(locked()));
+            QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        }
+        engine->resume();
+        QCOMPARE(engine->state(), TimerEngine::State::Working);
+
+        // The locker crashes while the screen is locked: its connection is gone (no copy of it
+        // is left here) and ActiveChanged(false) never comes. It starts again, and the next lock
+        // must pause the work phase as the first one did.
+        QDBusConnection::disconnectFromBus(QStringLiteral("locker"));
+        QDBusConnection restarted = QDBusConnection::connectToBus(bus.address(), QStringLiteral("locker-restarted"));
+        QVERIFY(restarted.registerService(QStringLiteral("org.freedesktop.ScreenSaver")));
+        QVERIFY(restarted.send(locked()));
+        QTRY_COMPARE(engine->state(), TimerEngine::State::Paused);
+        QVERIFY(lockWatcher.isPausedByScreenLock());
+
+        QDBusConnection::disconnectFromBus(QStringLiteral("locker-restarted"));
+        QDBusConnection::disconnectFromBus(QStringLiteral("restart-session"));
+#endif
+    }
+
     void availableFollowsTheBackend()
     {
         const ScreenLockWatcher offline(ScreenLockWatcher::Source::Nothing);
