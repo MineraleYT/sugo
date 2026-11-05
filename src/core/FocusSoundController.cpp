@@ -27,6 +27,9 @@ constexpr int kAheadSamples = kSampleRate / 2; // keep 500 ms queued ahead of pl
 constexpr int kFeedIntervalMs = 50;
 constexpr int kMaxRestarts = 3;
 constexpr int kRestartDelayMs = 1000;
+/// A player program that ends on its own sooner than this after starting cannot play here (pw-play
+/// with no PipeWire daemon): the next one is tried instead of restarting it.
+constexpr qint64 kQuickExitMs = 2000;
 constexpr float kFadeInStep = 1.0f / (kSampleRate * 2);          // 2 s from silence to full
 constexpr float kFadeOutStep = 1.0f / (kSampleRate * 3 / 2);     // 1.5 s from full to silence
 constexpr int kAheadMs = kAheadSamples * 1000 / kSampleRate;
@@ -41,14 +44,15 @@ float whiteSample()
 
 /// A player the controller feeds mono s16 PCM at kSampleRate. start() returns at once; the
 /// player reports later, through onStarted or onFailed (which also tells that a running player
-/// went away).
+/// went away). onFailed's argument tells that the player cannot play on this system at all: it
+/// failed to start or ended on its own right after starting, so another one should be tried.
 class FocusSoundOutput : public QObject
 {
 public:
     using QObject::QObject;
 
     std::function<void()> onStarted;
-    std::function<void()> onFailed;
+    std::function<void(bool unusable)> onFailed;
 
     virtual void start() = 0;
     virtual bool isRunning() const = 0;
@@ -77,6 +81,7 @@ public:
     {
         m_process = new QProcess(this);
         connect(m_process, &QProcess::started, this, [this]() {
+            m_startClock.start();
             if (!m_discarded && onStarted) {
                 onStarted();
             }
@@ -85,16 +90,20 @@ public:
             if (!m_discarded && error == QProcess::FailedToStart) {
                 qCWarning(lcFocusSound) << "Failed to start" << m_program;
                 if (onFailed) {
-                    onFailed();
+                    onFailed(true);
                 }
             }
         });
-        connect(m_process, &QProcess::finished, this, [this]() {
+        connect(m_process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus status) {
             if (!m_discarded) {
-                // The player went away on its own (audio server gone, ...).
-                qCWarning(lcFocusSound) << "Audio player exited unexpectedly";
+                // The player went away on its own. Right after starting, by itself (not killed),
+                // it cannot play here (pw-play with no PipeWire daemon); later, the audio server
+                // went away or the player was killed, and a restart may help.
+                const bool unusable = status == QProcess::NormalExit && m_startClock.isValid() && m_startClock.elapsed() < kQuickExitMs;
+                qCWarning(lcFocusSound).nospace() << "Audio player " << m_program << " exited unexpectedly ("
+                                                  << (status == QProcess::NormalExit ? "exit code " : "crashed, signal ") << exitCode << ")";
                 if (onFailed) {
-                    onFailed();
+                    onFailed(unusable);
                 }
             }
         });
@@ -127,6 +136,7 @@ private:
     QString m_program;
     QStringList m_arguments;
     QProcess *m_process = nullptr;
+    QElapsedTimer m_startClock; ///< Started when the process started.
     bool m_discarded = false;
 };
 
@@ -239,8 +249,9 @@ private:
     void fail()
     {
         m_running = false;
+        // Qt Multimedia is the last resort: there is nothing to move on to.
         if (!m_discarded && onFailed) {
-            onFailed();
+            onFailed(false);
         }
     }
 
@@ -427,8 +438,9 @@ void FocusSoundController::startPlayback()
 {
     discardOutput();
 
-    const Backend backend = m_forcedBackend.value_or(chooseBackend([](const QString &program) {
-        return !QStandardPaths::findExecutable(program).isEmpty();
+    // Players found unusable this session are passed over as if they were not installed.
+    const Backend backend = m_forcedBackend.value_or(chooseBackend([this](const QString &program) {
+        return !m_unusablePlayers.contains(program) && !QStandardPaths::findExecutable(program).isEmpty();
     }));
     FocusSoundOutput *output = nullptr;
     switch (backend) {
@@ -452,7 +464,7 @@ void FocusSoundController::startPlayback()
     case Backend::AudioSink:
 #ifndef Q_OS_MACOS
         if (!m_forcedBackend) {
-            qCInfo(lcFocusSound) << "Neither pw-play nor aplay found: playing through Qt Multimedia";
+            qCInfo(lcFocusSound) << "Neither pw-play nor aplay found or usable: playing through Qt Multimedia";
         }
 #endif
         output = new AudioSinkOutput(this);
@@ -460,14 +472,17 @@ void FocusSoundController::startPlayback()
     }
 
     m_output = output;
+    const QString program = backend == Backend::PwPlay ? QStringLiteral("pw-play")
+        : backend == Backend::Aplay                    ? QStringLiteral("aplay")
+                                                       : QString();
     output->onStarted = [this, output]() {
         if (output == m_output) {
             onPlayerStarted();
         }
     };
-    output->onFailed = [this, output]() {
+    output->onFailed = [this, output, program](bool unusable) {
         if (output == m_output) {
-            onPlayerFailed();
+            onPlayerFailed(unusable ? program : QString());
         }
     };
     output->start();
@@ -487,14 +502,26 @@ void FocusSoundController::onPlayerStarted()
     m_feedTimer.start();
 }
 
-void FocusSoundController::onPlayerFailed()
+void FocusSoundController::onPlayerFailed(const QString &unusableProgram)
 {
     discardOutput();
+    if (!unusableProgram.isEmpty() && !m_forcedBackend) {
+        // It cannot play here: the next player, straight away, and this one not again.
+        qCWarning(lcFocusSound) << unusableProgram << "cannot play on this system: trying the next player";
+        m_unusablePlayers.append(unusableProgram);
+        restartPlayback(0);
+        return;
+    }
     if (m_restarts >= kMaxRestarts) {
         return;
     }
     ++m_restarts;
-    QTimer::singleShot(kRestartDelayMs, this, [this]() {
+    restartPlayback(kRestartDelayMs);
+}
+
+void FocusSoundController::restartPlayback(int delayMs)
+{
+    QTimer::singleShot(delayMs, this, [this]() {
         if (m_output) {
             return;
         }
