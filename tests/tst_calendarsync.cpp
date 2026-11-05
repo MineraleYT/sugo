@@ -1064,6 +1064,35 @@ private Q_SLOTS:
         checkNoSecrets();
     }
 
+    void testConnection403IsTheCalendarRefusingNotTheLogin()
+    {
+        // A calendar shared read-only answers the test event with 403: the login is fine, so
+        // sending is not paused and the message is the one a refused event gets.
+        configureCustom();
+        m_sync->setRetryDelaysForTesting({600000});
+        m_server->defaultPut = 403;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        QVERIFY(!m_sync->isSendingPaused());
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("does not accept new events")));
+        QVERIFY(m_sync->lastError().contains(QStringLiteral("403")));
+        QVERIFY(!m_sync->lastError().startsWith(QStringLiteral("Login rejected")));
+        QVERIFY(!m_sync->statusText().startsWith(QStringLiteral("Login rejected")));
+        checkNoSecrets();
+
+        // A finished session is still tried (and waits, refused like the test event).
+        m_sync->enqueueWorkSession(record());
+        QTRY_COMPARE(m_server->count("PUT"), 2);
+        QCOMPARE(m_sync->pendingCount(), 1);
+        QVERIFY(!m_sync->isSendingPaused());
+
+        // Once the calendar takes events, it goes without a new password.
+        m_server->defaultPut = 201;
+        m_sync->testConnection();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+    }
+
     void networkErrorIsReported()
     {
         configureCustom();
