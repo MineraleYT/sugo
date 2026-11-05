@@ -106,7 +106,7 @@ bool SecretServiceStore::renewSession()
     return ensureSession();
 }
 
-std::optional<QList<QDBusObjectPath>> SecretServiceStore::search(const QString &key)
+std::optional<SecretServiceStore::Matches> SecretServiceStore::search(const QString &key)
 {
     QDBusMessage call = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("SearchItems"));
     const SecretServiceAttributes attributes{{QStringLiteral("application"), m_applicationId}, {QStringLiteral("key"), key}};
@@ -116,12 +116,7 @@ std::optional<QList<QDBusObjectPath>> SecretServiceStore::search(const QString &
         qCWarning(lcSecretStore) << "Searching the keyring failed:" << reply.errorMessage();
         return std::nullopt;
     }
-    const auto unlocked = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(0));
-    const auto locked = qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(1));
-    if (!locked.isEmpty() && !unlock(locked)) {
-        return std::nullopt;
-    }
-    return unlocked + locked;
+    return Matches{qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(0)), qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().at(1))};
 }
 
 bool SecretServiceStore::unlock(const QList<QDBusObjectPath> &objects)
@@ -210,15 +205,24 @@ std::optional<QString> SecretServiceStore::read(const QString &key)
         // second prompt on top of it.
         return std::nullopt;
     }
-    const auto items = search(key);
-    if (!items) {
+    const auto matches = search(key);
+    if (!matches) {
         return std::nullopt;
     }
-    if (items->isEmpty()) {
+    // A readable copy is enough: a locked one (say a stale copy in a second keyring) is only
+    // unlocked when there is no other, and a refused unlock then does not hide the readable one.
+    QDBusObjectPath item;
+    if (!matches->unlocked.isEmpty()) {
+        item = matches->unlocked.first();
+    } else if (matches->locked.isEmpty()) {
         return QString();
+    } else if (unlock(matches->locked)) {
+        item = matches->locked.first();
+    } else {
+        return std::nullopt;
     }
     const auto getSecret = [&]() {
-        QDBusMessage call = QDBusMessage::createMethodCall(kService, items->first().path(), kItemInterface, QStringLiteral("GetSecret"));
+        QDBusMessage call = QDBusMessage::createMethodCall(kService, item.path(), kItemInterface, QStringLiteral("GetSecret"));
         call << QVariant::fromValue(m_session);
         return m_bus.call(call, QDBus::Block, kCallTimeoutMs);
     };
@@ -247,8 +251,15 @@ bool SecretServiceStore::write(const QString &key, const QString &secret)
         return false; // as in read(): no second prompt while one is open
     }
     if (secret.isEmpty()) {
-        const auto items = search(key);
-        return items && deleteItems(*items);
+        const auto matches = search(key);
+        if (!matches) {
+            return false;
+        }
+        // What can be reached is removed even if a locked copy stays: the removal still fails
+        // then, as the secret may be read from that copy later.
+        const bool removedUnlocked = deleteItems(matches->unlocked);
+        const bool removedLocked = matches->locked.isEmpty() || (unlock(matches->locked) && deleteItems(matches->locked));
+        return removedUnlocked && removedLocked;
     }
 
     QDBusMessage alias = QDBusMessage::createMethodCall(kService, kServicePath, kServiceInterface, QStringLiteral("ReadAlias"));

@@ -58,7 +58,12 @@ public:
 private:
     bool ensureSession();
     bool renewSession();
-    std::optional<QList<QDBusObjectPath>> search(const QString &key);
+    /// The items of `key`, as the service reported them: readable now, or in a locked collection.
+    struct Matches {
+        QList<QDBusObjectPath> unlocked;
+        QList<QDBusObjectPath> locked;
+    };
+    std::optional<Matches> search(const QString &key);
     bool unlock(const QList<QDBusObjectPath> &objects);
     bool runPrompt(const QDBusObjectPath &prompt);
     bool deleteItems(const QList<QDBusObjectPath> &items);
