@@ -138,6 +138,8 @@ struct LocalMacRelease {
     QTemporaryDir dir;
     QString applications = dir.filePath(QStringLiteral("Applications"));
     QString bundle = applications + QStringLiteral("/Sugo.app");
+    /// Where install() leaves the new version for the restart.
+    QString fresh = applications + QStringLiteral("/.Sugo.app.new");
     QString tools = dir.filePath(QStringLiteral("tools"));
     QString dmg = dir.filePath(QStringLiteral("download/Sugo-macOS-universal.dmg"));
     QString feed = dir.filePath(QStringLiteral("feed.json"));
@@ -232,11 +234,11 @@ struct LocalMacRelease {
 
     QString executable(const QString &app) const { return QString::fromUtf8(readFile(app + QStringLiteral("/Contents/MacOS/Sugo"))); }
 
-    /// What install() leaves for the restart: the new version checked, at "Sugo.app.new".
+    /// What install() leaves for the restart: the new version checked, at ".Sugo.app.new".
     bool stageUpdate() const
     {
         const QString staged = dir.filePath(QStringLiteral("staged"));
-        return makeBundle(staged, newContent) && QDir().rename(staged + QStringLiteral("/Sugo.app"), bundle + QStringLiteral(".new"));
+        return makeBundle(staged, newContent) && QDir().rename(staged + QStringLiteral("/Sugo.app"), fresh);
     }
 
     /// Stand-ins whose renames fail when `fails(from, to)`.
@@ -801,8 +803,8 @@ private Q_SLOTS:
         QCOMPARE(checker.progress(), 1.0);
         // The running bundle is untouched; the checked copy waits next to it.
         QCOMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
-        QCOMPARE(release.executable(release.bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
-        QCOMPARE(release.leftovers(), QStringList{QStringLiteral("Sugo.app.new")});
+        QCOMPARE(release.executable(release.fresh), QStringLiteral("new Sugo"));
+        QCOMPARE(release.leftovers(), QStringList{QStringLiteral(".Sugo.app.new")});
 
         const QStringList calls = release.calls();
         const QString mount = release.mountPoint();
@@ -812,8 +814,8 @@ private Q_SLOTS:
         const QStringList expected{
             QStringLiteral("hdiutil attach -nobrowse -readonly -noautoopen -mountpoint %1 %2").arg(mount, release.applications + QStringLiteral("/.Sugo.app.update.dmg")),
             QStringLiteral("codesign --verify --deep --strict %1").arg(app),
-            QStringLiteral("ditto %1 %2.new").arg(app, release.bundle),
-            QStringLiteral("xattr -cr %1.new").arg(release.bundle),
+            QStringLiteral("ditto %1 %2").arg(app, release.fresh),
+            QStringLiteral("xattr -cr %1").arg(release.fresh),
             QStringLiteral("hdiutil detach %1").arg(mount),
         };
         QCOMPARE(calls, expected);
@@ -849,14 +851,14 @@ private Q_SLOTS:
     {
         LocalMacRelease release;
         QVERIFY(release.stageUpdate());
-        const QString fresh = release.bundle + QStringLiteral(".new");
+        const QString fresh = release.fresh;
         MacBundleInstaller installer(release.bundle, release.failingRenames([fresh](const QString &from, const QString &) {
             return from == fresh;
         }));
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot install the update: .*the installed version was kept$")));
         QVERIFY(!installer.finish(true, 0));
         QCOMPARE(release.executable(release.bundle), QStringLiteral("old Sugo"));
-        QCOMPARE(release.leftovers(), QStringList{QStringLiteral("Sugo.app.new")});
+        QCOMPARE(release.leftovers(), QStringList{QStringLiteral(".Sugo.app.new")});
         QTest::qWait(300);
         QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(release.bundle)));
     }
@@ -872,13 +874,13 @@ private Q_SLOTS:
         }));
         const QString backup = bundle + QStringLiteral(".old");
         QTest::ignoreMessage(QtCriticalMsg, qPrintable(QStringLiteral("Cannot install the update, nor put the installed version back: Sugo is now %1 "
-                                                                      "(rename it to %2 ), the update %2.new")
-                                                           .arg(backup, bundle)));
+                                                                      "(rename it to %2 ), the update %3")
+                                                           .arg(backup, bundle, release.fresh)));
         QVERIFY(!installer.finish(true, 0));
         // Never removed, it is the only copy: renamed back once the program has ended.
         QTRY_COMPARE(release.executable(bundle), QStringLiteral("old Sugo"));
         QVERIFY(!QFileInfo::exists(backup));
-        QCOMPARE(release.executable(bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
+        QCOMPARE(release.executable(release.fresh), QStringLiteral("new Sugo"));
         QVERIFY(!release.calls().contains(QStringLiteral("open -n %1").arg(bundle)));
     }
 
@@ -902,7 +904,7 @@ private Q_SLOTS:
         const QString backup = release.bundle + QStringLiteral(".old");
         QVERIFY(QDir().rename(release.bundle, backup));
         QVERIFY(release.stageUpdate());
-        QVERIFY(QDir().rename(release.bundle + QStringLiteral(".new"), release.bundle));
+        QVERIFY(QDir().rename(release.fresh, release.bundle));
         const qint64 ended = endedProcessId();
         QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(backup + QStringLiteral("/Contents/MacOS"), ended));
         QVERIFY(!MacBundleInstaller::restoreInterruptedUpdate(release.bundle + QStringLiteral("/Contents/MacOS"), ended));
@@ -930,7 +932,7 @@ private Q_SLOTS:
         QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("^Cannot install the update: .* is not there any more")));
         QVERIFY(!installer.finish(true, 0));
         QCOMPARE(release.executable(backup), QStringLiteral("old Sugo"));
-        QCOMPARE(release.executable(release.bundle + QStringLiteral(".new")), QStringLiteral("new Sugo"));
+        QCOMPARE(release.executable(release.fresh), QStringLiteral("new Sugo"));
         QVERIFY(!QFileInfo::exists(release.bundle));
     }
 
@@ -1089,8 +1091,8 @@ private Q_SLOTS:
         checker.installUpdate();
         QTRY_VERIFY_WITH_TIMEOUT(checker.status() != UpdateChecker::Status::Downloading, 120000);
         QVERIFY2(checker.status() == UpdateChecker::Status::ReadyToRestart, qPrintable(checker.errorMessage()));
-        QCOMPARE(release.leftovers(), QStringList{QStringLiteral("Sugo.app.new")});
-        QVERIFY(run(QStringLiteral("/usr/bin/codesign"), {QStringLiteral("--verify"), QStringLiteral("--deep"), QStringLiteral("--strict"), release.bundle + QStringLiteral(".new")}));
+        QCOMPARE(release.leftovers(), QStringList{QStringLiteral(".Sugo.app.new")});
+        QVERIFY(run(QStringLiteral("/usr/bin/codesign"), {QStringLiteral("--verify"), QStringLiteral("--deep"), QStringLiteral("--strict"), release.fresh}));
         checker.setRestartOnQuit(true);
         QVERIFY(checker.launchUpdated());
         QCOMPARE(readFile(release.bundle + QStringLiteral("/Contents/MacOS/Sugo")), readFile(executable)); // the signed copy

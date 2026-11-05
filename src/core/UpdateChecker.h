@@ -36,7 +36,7 @@ class QSaveFile;
  * On macOS the feed's "macos" object ({ "url", "sha256", "size" }) describes the disk image
  * instead. An app bundle in a folder the user can write to (/Applications for an administrator)
  * downloads it next to itself, checks it the same way, then opens it and copies its Sugo.app,
- * once its identifier and signature are right, next to itself as "Sugo.app.new", which takes the
+ * once its identifier and signature are right, next to itself as ".Sugo.app.new" (hidden), which takes the
  * bundle's place when the program quits (MacBundleInstaller). A feed without "macos" is only
  * reported, as for the other packages.
  *

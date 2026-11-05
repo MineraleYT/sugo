@@ -318,6 +318,14 @@ void MacBundleInstaller::detach(const std::function<void()> &then)
     });
 }
 
+QString MacBundleInstaller::newBundlePath() const
+{
+    // Next to the bundle, on its volume, so that finish() can rename it in place; hidden, or
+    // Spotlight and launchers such as Raycast list "Sugo.app.new" and keep that name afterwards.
+    const QFileInfo bundle(m_bundle);
+    return bundle.absolutePath() + QStringLiteral("/.") + bundle.fileName() + QStringLiteral(".new");
+}
+
 void MacBundleInstaller::detachCutOffAttach(const std::function<void()> &then)
 {
     // Whatever the answer: when nothing was attached, there is nothing to detach either, and the

@@ -20,7 +20,7 @@ class QSaveFile;
  *
  * - AppImageInstaller: the downloaded file replaces the AppImage at once.
  * - MacBundleInstaller: the disk image is opened, its Sugo.app checked and copied next to the
- *   running bundle as "Sugo.app.new"; it takes the bundle's place when the program quits.
+ *   running bundle as ".Sugo.app.new" (hidden); it takes the bundle's place when the program quits.
  */
 class UpdateInstaller
 {
@@ -106,8 +106,9 @@ public:
     void cancel() override;
     bool finish(bool launch, qint64 pid) override;
 
-    /// Where the checked copy of the new version waits for the restart: "<bundle>.new".
-    QString newBundlePath() const { return m_bundle + QStringLiteral(".new"); }
+    /// Where the checked copy of the new version waits for the restart: ".<bundle>.new" in the
+    /// bundle's folder, hidden so that Spotlight and launchers do not list it as an app.
+    QString newBundlePath() const;
 
     /// The CFBundleIdentifier of an XML property list, or an empty string.
     static QString bundleIdentifier(const QString &infoPlist);
