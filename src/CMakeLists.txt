@@ -28,6 +28,7 @@ qt6_add_qml_module(sugo_core
         qml/components/Toast.qml
         qml/components/TimerIcon.qml
         qml/components/TrayBadge.qml
+        qml/components/TimerMenu.qml
         qml/components/TitleBar.qml
         qml/components/ConfirmDialog.qml
         qml/components/Banner.qml

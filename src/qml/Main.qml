@@ -577,30 +577,52 @@ QQC2.ApplicationWindow {
                 PresetModel.create({ name: "Smoke" });
                 return false;
             case 1: {
-                // A timer chosen in the search becomes the one in use, and the timer page shows it.
-                root.chooseTimer(PresetModel.uuidAt(1));
-                if (PresetModel.currentIndex !== 1 || root.currentDestination !== "preset") {
-                    fail(40, "Choosing a timer did not select it and open its page");
+                // The composer's timer button names the timer in use and opens the timer menu.
+                const composer = findItem(page, item => item.objectName === "composer");
+                if (!composer || composer.timerButton.text !== PresetModel.currentName) {
+                    fail(40, "The composer's timer button does not name the timer in use");
                     return true;
                 }
-                root.navigate("timer");
-                page = root.pageStack.currentItem;
-                if (page.title !== PresetModel.currentName) {
-                    fail(40, "The timer page shows \"" + page.title + "\" instead of \"" + PresetModel.currentName + "\"");
+                composer.timerButton.clicked();
+                if (!composer.timerMenu.visible) {
+                    fail(40, "The composer's timer button did not open the timer menu");
                     return true;
                 }
-                // Its timer button names the timer and lists the timers to choose from.
-                const chooser = findItem(page, item => item.objectName === "composerTimerButton");
-                if (!chooser || chooser.text !== PresetModel.currentName) {
-                    fail(40, "The timer page's button does not name the timer in use");
+                return false; // laid out on the next tick
+            }
+            case 2: {
+                // The menu opens above its button, 4 px away, their left edges together.
+                const composer = findItem(page, item => item.objectName === "composer");
+                const menu = composer.timerMenu;
+                if (Math.abs(menu.y + menu.height + Theme.menuOffset) > 1 || Math.abs(menu.x) > 1
+                        || menu.width < Theme.menuMinWidth || menu.width > Theme.menuMaxWidth) {
+                    fail(63, "The timer menu is not above its button, 4 px away and left-aligned: x " + menu.x
+                         + ", bottom " + (menu.y + menu.height) + ", width " + menu.width);
                     return true;
                 }
-                chooser.clicked();
-                if (!commandPalette.visible || commandPalette.commands.length !== PresetModel.count + 1) {
-                    fail(40, "The timer page's button did not list the timers");
+                // Choosing a timer there makes it the one in use, and the page stays.
+                const entry = findItem(menu.contentItem, item => item.objectName === "timerMenuEntry-1");
+                if (!entry) {
+                    fail(40, "The timer menu does not list the timers");
                     return true;
                 }
-                commandPalette.close();
+                entry.clicked();
+                if (PresetModel.currentIndex !== 1 || root.currentDestination !== "timer"
+                        || composer.timerButton.text !== PresetModel.currentName) {
+                    fail(40, "Choosing a timer in the timer menu did not select it alone: index " + PresetModel.currentIndex
+                         + ", page " + root.currentDestination);
+                    return true;
+                }
+                // A running timer cannot be switched.
+                TimerEngine.start();
+                if (composer.timerButton.enabled) {
+                    fail(40, "The timer button can switch timers while the timer runs");
+                    return true;
+                }
+                TimerEngine.stop();
+                return false;
+            }
+            case 3: {
                 // A phase that has only just started stops at once.
                 TimerEngine.start();
                 page.requestStop();
@@ -1055,20 +1077,16 @@ QQC2.ApplicationWindow {
         navigate("preset", "");
     }
 
-    /// A timer chosen in the search: it becomes the one in use (unless a phase runs) and its page opens.
+    /// A timer chosen in the timer menu or the search becomes the one in use; the page shown stays.
+    /// Not while a phase runs: then the toast says why.
     function chooseTimer(uuid: string): void {
-        const top = pageStack.currentItem;
-        if (top && typeof top.commitFields === "function") {
-            top.commitFields();
-        }
-        if (top && top.modified === true && top.leaving !== true && typeof top.requestClose === "function") {
-            top.requestClose(() => root.chooseTimer(uuid));
+        if (TimerEngine.active) {
+            if (uuid !== PresetModel.currentUuid) {
+                showPassiveNotification(i18n("Stop the timer to switch to a different timer."));
+            }
             return;
         }
-        if (!TimerEngine.active) {
-            PresetModel.currentUuid = uuid;
-        }
-        openTimer(uuid);
+        PresetModel.currentUuid = uuid;
     }
 
     // Stop and Skip end the phase at once, unless that would cut short a work session that has
@@ -1150,7 +1168,7 @@ QQC2.ApplicationWindow {
         return list.concat(root.timerCommands());
     }
 
-    /// The timers, for the search: one chosen becomes the one in use and its page opens.
+    /// The timers, for the search: one chosen becomes the one in use.
     function timerCommands(): var {
         const list = [];
         for (let i = 0; i < PresetModel.count; ++i) {
@@ -1165,12 +1183,6 @@ QQC2.ApplicationWindow {
 
     function openSearch(): void {
         commandPalette.commands = root.paletteCommands();
-        commandPalette.open();
-    }
-
-    /// The search with only the timers and New timer (the timer button of the focus page).
-    function openTimerSearch(): void {
-        commandPalette.commands = root.timerCommands().concat([{ text: i18n("New timer"), icon: "plus", run: () => root.newTimer() }]);
         commandPalette.open();
     }
 

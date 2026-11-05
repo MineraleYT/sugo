@@ -9,7 +9,8 @@ import io.github.mineraleyt.sugo
  * and whether notifications are silenced while working; on the right Stop and Skip (there only
  * while a phase runs, without moving anything when they come) and Start/Pause.
  *
- * `app` is the window (Main.qml): the controls ask it to stop or skip, which may ask first.
+ * `app` is the window (Main.qml): the controls ask it to stop or skip (which may ask first) and
+ * to choose a timer.
  */
 Rectangle {
     id: composer
@@ -19,12 +20,12 @@ Rectangle {
     property var app: null
     /// A narrow window: the labels of the start mode and of Quiet are left out.
     property bool compact: false
-    /// The timer button, for the timer menu.
+    /// The timer button and its menu.
     readonly property alias timerButton: timerButton
-    /// The start mode button, for its menu.
+    readonly property alias timerMenu: timerMenu
+    /// The start mode button.
     readonly property alias autoStartButton: autoStartButton
 
-    signal timerMenuRequested()
     signal autoStartMenuRequested()
 
     readonly property bool isIdle: TimerEngine.state === TimerEngine.State.Idle
@@ -58,6 +59,21 @@ Rectangle {
         return p.x >= 0 && p.y >= 0 && p.x < item.width && p.y < item.height;
     }
 
+    TimerMenu {
+        id: timerMenu
+        anchorItem: timerButton
+        app: composer.app
+        // A timer cannot be switched while it runs (Space, the tray).
+        Connections {
+            target: TimerEngine
+            function onStateChanged() {
+                if (TimerEngine.active) {
+                    timerMenu.close();
+                }
+            }
+        }
+    }
+
     RowLayout {
         id: controls
         anchors.fill: parent
@@ -79,7 +95,8 @@ Rectangle {
             enabled: !TimerEngine.active
             toolTipText: TimerEngine.active ? i18n("Stop the timer to switch to a different timer.") : ""
             Accessible.description: toolTipText
-            onClicked: composer.timerMenuRequested()
+            open: timerMenu.visible
+            onClicked: timerMenu.toggle()
         }
 
         // How the phases start: by hand, the breaks by themselves, or all of them.

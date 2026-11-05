@@ -370,7 +370,6 @@ QQC2.Page {
             Layout.fillWidth: true
             app: applicationWindow()
             compact: page.compact
-            onTimerMenuRequested: applicationWindow().openTimerSearch()
         }
 
         // Today: the work sessions finished, the time focused and the streak (not in a narrow window).
