@@ -38,6 +38,16 @@
     <id>io.github.mineraleyt.sugo</id>
   </replaces>
   <releases>
+    <release version="1.0.3" date="2026-11-05">
+      <description>
+        <p>Sugo has moved to its new home, github.com/sugoHQ/sugo, and its app ID is now stream.sugo.app.</p>
+        <ul>
+          <li>Updates are taken from the new address too</li>
+          <li>Start at login is carried over to the new app ID, except in the Flatpak, where it has to be turned on again</li>
+          <li>The Flatpak installs as a new app and imports the data and settings of the old one at its first start</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.2" date="2026-11-05">
       <description>
         <p>A new look: a title bar with the timer, statistics and settings, and a composer to choose the timer and start it.</p>
