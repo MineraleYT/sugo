@@ -155,6 +155,14 @@ QString calendarColor(const QString &value)
     const QColor color = QColor::fromString(rgb);
     return color.isValid() ? color.name(QColor::HexRgb) : QString();
 }
+
+/// A 403 to an event (a real one or the test's): the server knows who we are, but the calendar
+/// does not take new events (shared read-only, a full quota). Not a rejected login.
+QString calendarRefusesEvents()
+{
+    return i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
+                "or choose another calendar.");
+}
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -1360,9 +1368,7 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
     // 403: the server knows who we are, but the calendar does not take new events (shared
     // read-only, a full quota). The password is not the problem, so sending is not paused on it:
     // the events wait, and go once the calendar accepts them or another one is chosen.
-    setLastError(r.http == 403 ? i18n("This calendar does not accept new events (HTTP 403): check that you can write to it, "
-                                      "or choose another calendar.")
-                               : describeFailure(r));
+    setLastError(r.http == 403 ? calendarRefusesEvents() : describeFailure(r));
     refreshIdleStatus();
     scheduleRetry();
 }
@@ -1415,8 +1421,9 @@ void CalendarSync::testConnection()
 
     auto fail = [this](const Result &r) {
         --m_busy;
-        const QString message = describeFailure(r);
-        if (r.http == 401 || r.http == 403) {
+        // As for a real event (onSendFinished()): only a 401 is the login, and pauses sending.
+        const QString message = r.http == 403 ? calendarRefusesEvents() : describeFailure(r);
+        if (r.http == 401) {
             m_paused = true;
         }
         setLastError(message);
