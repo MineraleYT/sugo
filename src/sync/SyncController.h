@@ -46,6 +46,9 @@ class SyncSecrets;
  * - A blob this version cannot read (newer format: FormatTooNew; wrong key or damaged:
  *   UnreadableData) is never overwritten. Network failures are tried again after 1, 5 and
  *   15 minutes; the program works as usual meanwhile.
+ * - A merge the database does not store (disk full, locked) keeps the old ETag and Dirty:
+ *   LocalSaveFailed, and the blob is downloaded and merged again on the same retry delays, so
+ *   an upload never takes the unsaved state for what the server holds.
  *
  * The keyring is read once per run, a few seconds after attach(), and only when the settings say
  * this computer is linked: never while signed out.
@@ -104,6 +107,7 @@ public:
         KeyringWriteFailed,
         RateLimited,
         Server,             ///< The server failed, or the blob kept changing during an upload.
+        LocalSaveFailed,    ///< Downloaded timers could not be stored here; downloaded again later.
     };
     Q_ENUM(ErrorKind)
 
@@ -254,7 +258,8 @@ private:
     void pull(bool unconditional);
     void push();
     void takeRemote(const SyncReply &reply);
-    void applyLocally(const QList<TimerPreset> &presets, const QList<PresetTombstone> &tombstones);
+    /// False if the database did not store them (the caller keeps the old ETag and Dirty).
+    bool applyLocally(const QList<TimerPreset> &presets, const QList<PresetTombstone> &tombstones);
     /// Applying `presets` would take away the selected timer while the timer is busy.
     bool wouldStopTimer(const QList<TimerPreset> &presets) const;
     void succeeded();

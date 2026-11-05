@@ -491,6 +491,7 @@ private Q_SLOTS:
         QTRY_VERIFY(!a.names().contains(QStringLiteral("Doomed")));
         QTRY_VERIFY(a.persistence->isSaveFailing());
         QTRY_COMPARE(a.sync->state(), SyncController::Error);
+        QCOMPARE(a.sync->errorKind(), SyncController::LocalSaveFailed);
 
         // A restart finds the old timers in the database.
         QVERIFY(setQueryOnly(false));
