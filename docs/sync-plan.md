@@ -165,8 +165,10 @@ JSON in chiaro:
 
 - **Invio:** 3 s dopo l'ultimo salvataggio riuscito (`PresetPersistence`), un solo `PUT` con
   `If-Match: <etag>`. Con `412` si scarica, si unisce, si riprova (massimo 3 volte, poi più tardi).
-- **Ricezione:** all'avvio, quando la finestra torna attiva (al massimo una volta al minuto) e ogni 30 minuti,
-  `GET` con `If-None-Match`: `304` non costa quasi nulla.
+- **Ricezione:** all'avvio, quando la finestra torna attiva (al massimo una volta al minuto) e ogni 5 minuti,
+  `GET` con `If-None-Match`: `304` non costa quasi nulla. Ogni 5 e non 30: la stessa risposta porta
+  `Sugo-Pending-Devices`, e un dispositivo lasciato acceso (nel vassoio, o con la finestra già davanti, che
+  non torna attiva) deve chiedere presto di approvarne uno nuovo.
 - Dopo un'unione che cambia qualcosa: `PresetModel::setPresets` (nessun nuovo invio se il risultato coincide
   col remoto) e salvataggio nel DB.
 - Senza rete: tutto funziona come oggi, l'invio aspetta.

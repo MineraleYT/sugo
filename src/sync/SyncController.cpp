@@ -39,7 +39,9 @@ QString key(const char *name)
 constexpr int kLoadDelay = 3;      ///< After attach(), before the keyring is read.
 constexpr int kPushDelay = 3;      ///< After a save, before the upload.
 constexpr int kPullAtMostEvery = 60; ///< Window activations closer than this do not pull.
-constexpr int kPullEvery = 30 * 60;
+/// Also how soon a device left on (in the tray, or with the window already in front) sees a new
+/// device asking for approval: Sugo-Pending-Devices comes with every pull, mostly a 304.
+constexpr int kPullEvery = 5 * 60;
 constexpr int kConflictRetry = 5 * 60;
 constexpr int kMaxConflicts = 3;
 constexpr int kRetryDelays[] = {60, 5 * 60, 15 * 60};
