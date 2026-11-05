@@ -1017,6 +1017,10 @@ QString CalendarSync::describeFailure(const Result &result) const
         text = i18n("Login rejected: check username and app password");
     } else if (result.http == 404) {
         text = i18n("Calendar not found");
+    } else if (result.http == 409) {
+        text = i18n("Calendar not found (HTTP 409): it may have been deleted or renamed");
+    } else if (result.http == 423) {
+        text = i18n("The calendar is locked by another client (HTTP 423)");
     } else if (result.http > 0) {
         text = i18n("Server answered HTTP %1", result.http);
     } else {
@@ -1348,8 +1352,14 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
         setStatus(Failed, message);
         return;
     }
-    if (r.http >= 400 && r.http < 500 && r.http != 403 && r.http != 404 && r.http != 408 && r.http != 429) {
-        // This event will never be accepted; do not let it hold back the others.
+    // Refusals about the calendar rather than the event keep the queue and are tried again:
+    // 403 (read-only, quota), 404 (calendar not there), 408/429 (slow down), 409 (RFC 4918: the
+    // collection the event goes into does not exist, a calendar deleted or renamed) and 423
+    // (locked by another client). Skipping on those would drop every queued event in turn.
+    const bool aboutTheCalendar = r.http == 403 || r.http == 404 || r.http == 408 || r.http == 409 || r.http == 423
+        || r.http == 429;
+    if (r.http >= 400 && r.http < 500 && !aboutTheCalendar) {
+        // This event will never be accepted (400, 412, 413, 415...); do not let it hold back the others.
         m_queue.removeAt(index);
         setLastError(i18n("The server refused an event (HTTP %1); it was skipped.", r.http));
         queueChanged();
