@@ -8,12 +8,12 @@ QQC2.TextField {
     id: field
 
     implicitWidth: Theme.space4xl * 4
-    implicitHeight: Theme.controlHeight
+    implicitHeight: Theme.controlHeightSm
     leftPadding: Theme.spaceMd + Theme.hairline * 2
     rightPadding: leftPadding
     color: Theme.foreground
     placeholderTextColor: Theme.subtle
-    selectionColor: Theme.alpha(Theme.brand, 0.35)
+    selectionColor: Theme.alpha(Theme.accent, 0.35)
     selectedTextColor: Theme.foreground
     font.pixelSize: Theme.fontBody
     hoverEnabled: true

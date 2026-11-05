@@ -40,7 +40,7 @@ QQC2.Control {
     readonly property string displayText: fromText.length > 0 && value === from ? fromText : String(value)
 
     implicitWidth: Math.max(Theme.space4xl * 1.7, row.implicitWidth + leftPadding + rightPadding)
-    implicitHeight: Theme.controlHeight
+    implicitHeight: Theme.controlHeightSm
     leftPadding: Theme.spaceMd + Theme.hairline * 2
     rightPadding: Theme.spaceMd + Theme.hairline * 2
     hoverEnabled: true
@@ -63,7 +63,7 @@ QQC2.Control {
             Layout.fillWidth: true
             text: field.displayText
             color: field.enabled ? Theme.foreground : Theme.subtle
-            selectionColor: Theme.alpha(Theme.brand, 0.35)
+            selectionColor: Theme.alpha(Theme.accent, 0.35)
             selectedTextColor: Theme.foreground
             font.pixelSize: Theme.fontBody
             font.weight: Font.Medium
