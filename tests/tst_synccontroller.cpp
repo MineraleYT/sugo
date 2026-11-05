@@ -623,6 +623,22 @@ private Q_SLOTS:
         QCOMPARE(b.sync->state(), SyncController::WaitingForApproval);
     }
 
+    void pendingDeviceIsFoundWithoutTheWindow()
+    {
+        // A device left on, its window never activated: the periodic pull finds the new one within
+        // 5 minutes (here 300 * kUnitMs), not half an hour later.
+        Device a(*server);
+        Device b(*server);
+        signInFirst(a);
+        QSignalSpy asked(a.sync.get(), &SyncController::approvalRequested);
+        b.sync->signIn(QStringLiteral("B"));
+        QTRY_VERIFY(!b.sync->userCode().isEmpty());
+        QVERIFY(server->approve(b.sync->userCode(), kUser).startsWith(QLatin1String("dev_")));
+        QTRY_VERIFY(!b.sync->verificationCode().isEmpty());
+        QVERIFY(asked.wait(400 * kUnitMs));
+        QCOMPARE(a.sync->pendingApproval().value(QStringLiteral("verificationCode")).toString(), b.sync->verificationCode());
+    }
+
     void approvalIsNotifiedOnlyWhileTheWindowIsHidden()
     {
         server->deviceLimit = 3;

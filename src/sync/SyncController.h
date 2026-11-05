@@ -35,7 +35,7 @@ class SyncSecrets;
  * The timers travel as one encrypted blob (PresetSyncFormat, SyncCrypto). One operation runs at
  * a time:
  * - Pull: when the device becomes ready, when the window is activated (at most once a minute),
- *   every 30 minutes and on syncNow(), with If-None-Match. A new blob is decrypted, merged with
+ *   every 5 minutes and on syncNow(), with If-None-Match. A new blob is decrypted, merged with
  *   the local timers, applied here if it changes them, and uploaded again if the merge changes
  *   it. 404: there is no blob yet, the first upload follows.
  * - Push: 3 s after PresetPersistence::saved() (not for what a merge applied), with If-Match,
