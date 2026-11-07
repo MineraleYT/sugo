@@ -63,6 +63,7 @@
 #include "TimerCommands.h"
 #include "TimerEngine.h"
 #include "TrayController.h"
+#include "TrayIconStyle.h"
 #include "UnixSignals.h"
 #include "PowerInhibitor.h"
 #include "ScreenLockWatcher.h"
@@ -482,6 +483,13 @@ int main(int argc, char *argv[])
     stats->setProtectWeekendStreak(settings->protectWeekendStreak());
     QObject::connect(settings, &AppSettings::protectWeekendStreakChanged, stats, [settings, stats]() {
         stats->setProtectWeekendStreak(settings->protectWeekendStreak());
+    });
+    // The running-timer badge (menu bar icon and its pictures in the interface) is painted in
+    // the accent colour, of which TrayIconStyle holds the shades.
+    auto *trayStyle = engine.singletonInstance<TrayIconStyle *>(QStringLiteral("stream.sugo.app"), QStringLiteral("TrayIconStyle"));
+    trayStyle->setAccentColor(settings->accentColor());
+    QObject::connect(settings, &AppSettings::accentColorChanged, trayStyle, [settings, trayStyle]() {
+        trayStyle->setAccentColor(settings->accentColor());
     });
     auto *tray = new TrayController(timer, presets, settings, &services);
     // The inventory (platform parity test) lists the tray's settings too, which an offscreen run

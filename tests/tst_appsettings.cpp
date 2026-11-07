@@ -11,6 +11,7 @@
 #include <QTest>
 
 #include "Settings.h"
+#include "TrayIconStyle.h"
 
 #include <memory>
 
@@ -707,6 +708,27 @@ private Q_SLOTS:
         }
         QCOMPARE(stored("AccentColor"), QStringLiteral("blue"));
         QCOMPARE(make()->accentColor(), QStringLiteral("blue"));
+    }
+
+    void badgeColorsFollowTheAccent()
+    {
+        // The badge (menu bar icon and its pictures in the interface) is painted in the accent:
+        // the shades of every id are the one palette of the interface (Theme.qml) too.
+        QCOMPARE(TrayIconStyle::workBadgeColor(QStringLiteral("red")), QColor(0xff, 0x4d, 0x4d)); // red's dark shade
+        QCOMPARE(TrayIconStyle::breakBadgeColor(QStringLiteral("red")), TrayIconColors::rest()); // the break green
+        QCOMPARE(TrayIconStyle::workBadgeColor(QStringLiteral("teal")), QColor(0x2d, 0xd4, 0xbf)); // teal's dark shade
+        QCOMPARE(TrayIconStyle::breakBadgeColor(QStringLiteral("teal")), QColor(0x60, 0xa5, 0xfa)); // blue on a green accent
+        QCOMPARE(TrayIconStyle::workBadgeColor(QStringLiteral("nonsense")),
+                 TrayIconStyle::workBadgeColor(QStringLiteral("red"))); // red for an unknown id
+
+        TrayIconStyle style;
+        QSignalSpy spy(&style, &TrayIconStyle::accentColorChanged);
+        style.setAccentColor(QStringLiteral("blue"));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(style.workColor(), TrayIconStyle::workBadgeColor(QStringLiteral("blue")));
+        QCOMPARE(style.breakColor(), TrayIconColors::rest());
+        style.setAccentColor(QStringLiteral("blue"));
+        QCOMPARE(spy.count(), 1);
     }
 
     void everyAccentColorHasAName()
