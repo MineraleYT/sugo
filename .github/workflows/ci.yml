@@ -35,16 +35,13 @@ concurrency:
 permissions:
   contents: read
 
-# The jobs run on Blacksmith runners (blacksmith.sh): the label names the size, 4 vCPU for the Linux
-# jobs (what GitHub's ubuntu-24.04 has) and the smallest macOS size for the macOS one. The Blacksmith
-# GitHub App must be installed on the organization, or a job waits for a runner that never comes.
 jobs:
   # Skips the jobs a change cannot affect: documentation runs nothing, a macOS-only change only the
   # macOS job, a Linux-only one (D-Bus services, metadata) only the Linux jobs. The file lists are
   # in .github/scripts/ci-changes.sh; when the changed files cannot be known, everything runs.
   changes:
     name: Changes
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       linux: ${{ steps.detect.outputs.linux }}
@@ -70,7 +67,7 @@ jobs:
   # i.e. the first time after the Dockerfile changes; otherwise a check of a few seconds.
   image:
     name: CI image
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -106,7 +103,7 @@ jobs:
   build-and-test:
     needs: [changes, image]
     if: needs.changes.outputs.linux == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # Reading the image: under an organization a new package is private.
     permissions:
       contents: read
@@ -168,7 +165,7 @@ jobs:
     name: Build with Clang
     needs: [changes, image]
     if: needs.changes.outputs.clang == 'true'
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # Reading the image: under an organization a new package is private.
     permissions:
       contents: read
@@ -211,12 +208,12 @@ jobs:
   # Native arm64 build and tests with Qt from qt.io, extra-cmake-modules and libsodium from source,
   # at the versions packaging/macos/build.sh and build-libsodium.sh pin. Not blocking yet: a
   # failure here does not fail CI (nor stop the nightly build) while the port settles.
-  # On Blacksmith's macOS 27 image (in preview), the system the port is tried on.
+  # On GitHub's xcode-27 image (macOS 27, in preview), the system the port is tried on.
   build-and-test-macos:
     name: Build and test on macOS
     needs: changes
     if: needs.changes.outputs.macos == 'true'
-    runs-on: blacksmith-6vcpu-macos-27
+    runs-on: xcode-27
     continue-on-error: true
     env:
       CCACHE_VERSION: 4.14.2
