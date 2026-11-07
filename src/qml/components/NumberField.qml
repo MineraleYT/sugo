@@ -40,8 +40,10 @@ QQC2.Control {
         setValue(match ? Math.max(from, Math.min(to, parseInt(match[1], 10))) : value);
     }
 
-    /// One step up (1) or down (-1), as the arrow keys and the mouse wheel do.
+    /// One step up (1) or down (-1), as the arrow keys and the mouse wheel do: from what is typed
+    /// (brought into range), not from the value it had.
     function step(delta: int): void {
+        commit();
         setValue(value + delta);
     }
 
