@@ -1629,9 +1629,10 @@ private Q_SLOTS:
         // The same when the server address itself moves to another host.
         m_sync->setPassword(QStringLiteral("old-password"));
         QVERIFY(m_sync->hasPassword());
+        passwordChanged.clear(); // setPassword() told the view too
         m_sync->setServerUrl(QStringLiteral("https://terzo.example"));
         QVERIFY(!m_sync->hasPassword());
-        QCOMPARE(passwordChanged.count(), 2);
+        QCOMPARE(passwordChanged.count(), 1);
     }
 
     void passwordIsNotSentWhenTheServerChangedUnderTheCalendar()
