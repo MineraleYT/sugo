@@ -7,6 +7,7 @@
 #include <QLockFile>
 #include <QLoggingCategory>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QSysInfo>
 #include <QTemporaryDir>
 #include <QTest>
@@ -197,6 +198,25 @@ private Q_SLOTS:
         QVERIFY(n.size() > 5);
         QVERIFY(!LocalSingleInstance::defaultDirectory().isEmpty());
     }
+
+#ifdef Q_OS_MACOS
+    void theDefaultDirectoryIsNotOneTheSystemCleans()
+    {
+        // The lock must not live in $TMPDIR: the system empties it, and the launch that then
+        // finds no lock becomes a second primary on the same database.
+        const QByteArray saved = qgetenv("SUGO_DATA_DIR");
+        qunsetenv("SUGO_DATA_DIR");
+        const QString directory = QDir::cleanPath(LocalSingleInstance::defaultDirectory());
+        if (!saved.isNull()) {
+            qputenv("SUGO_DATA_DIR", saved);
+        }
+
+        const QString support = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+        QVERIFY(!support.isEmpty());
+        QVERIFY2(directory.startsWith(support + QLatin1Char('/')), qPrintable(directory));
+        QVERIFY2(!directory.startsWith(QDir::cleanPath(QDir::tempPath())), qPrintable(directory));
+    }
+#endif
 };
 
 QTEST_MAIN(LocalSingleInstanceTest)
