@@ -171,6 +171,11 @@ int takeBack(SecretHandoffStore &store, const QString &path)
     std::optional<QStringList> stored; // listed once, the first time a write fails
     int written = 0;
     for (auto it = waiting->begin(); it != waiting->end(); ++it) {
+        // A secret the user typed again since (the Keychain was locked when this build first
+        // started, so the file kept the old one) is newer than the one waiting: it wins.
+        if (const auto secret = store.readWithoutAsking(it.key()); secret && !secret->isEmpty()) {
+            continue;
+        }
         if (store.write(it.key(), it.value())) {
             ++written;
             continue;
