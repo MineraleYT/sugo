@@ -281,17 +281,20 @@ QQC2.Page {
 
     // Back to the list of the timers, where the timer is, and what can be done with it. Above the
     // page, so Save stays at hand however far the page is scrolled.
+    // Laid out as the settings' categories: the title where theirs is and the page below it at
+    // the same height, the buttons (taller than the title) centred on it without making the row
+    // taller, so opening a timer from the Timers list moves nothing.
     header: Item {
-        implicitHeight: page.paddingY + headerRow.implicitHeight + Theme.spaceMd
+        implicitHeight: page.paddingY + titleText.implicitHeight + Theme.spaceXs + Theme.spaceSm
 
         RowLayout {
             id: headerRow
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.top: parent.top
             anchors.leftMargin: page.paddingX
             anchors.rightMargin: page.paddingX
-            anchors.bottomMargin: Theme.spaceMd
+            anchors.topMargin: page.paddingY - (implicitHeight - titleText.implicitHeight) / 2
             spacing: Theme.spaceSm
 
             // "‹ Timers": unsaved changes are only thrown away once confirmed.
@@ -344,6 +347,7 @@ QQC2.Page {
                 font.pixelSize: Theme.fontSettingsTitle
             }
             Text {
+                id: titleText
                 visible: !page.compact
                 Layout.fillWidth: true
                 text: page.title
