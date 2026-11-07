@@ -45,7 +45,7 @@ QQC2.Page {
         return isNew ? "" : (PresetModel.get(uuid).name || "");
     }
 
-    /// The header shows "‹ Timers / <name>".
+    /// The header shows "Timers / <name>".
     title: isNew ? i18n("New Timer") : storedName
     background: null
 
@@ -297,12 +297,11 @@ QQC2.Page {
             anchors.topMargin: page.paddingY - (implicitHeight - titleText.implicitHeight) / 2
             spacing: Theme.spaceSm
 
-            // "‹ Timers": unsaved changes are only thrown away once confirmed.
+            // "Timers", back to the list: unsaved changes are only thrown away once confirmed.
             QQC2.AbstractButton {
                 id: backLink
                 objectName: "timersBackLink"
                 implicitHeight: Theme.controlHeight
-                implicitWidth: backRow.implicitWidth + Theme.spaceXs * 2
                 leftPadding: Theme.spaceXs
                 rightPadding: Theme.spaceXs
                 hoverEnabled: true
@@ -317,27 +316,14 @@ QQC2.Page {
                     border.width: backLink.visualFocus ? Theme.hairline : 0
                     border.color: Theme.focusRing
                 }
-                contentItem: Item {
-                    implicitWidth: backRow.implicitWidth
-                    implicitHeight: backRow.implicitHeight
-                    Row {
-                        id: backRow
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: Theme.hairline * 2
-                        LineIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            name: "chevron-left"
-                            size: Theme.iconSm
-                            color: backLink.hovered ? Theme.foreground : Theme.muted
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: backLink.text
-                            color: backLink.hovered ? Theme.foreground : Theme.muted
-                            font.pixelSize: Theme.fontSettingsTitle
-                            font.weight: Font.Medium
-                        }
-                    }
+                // Just the word, drawn as the Timers list draws its title and where it does, so
+                // opening a timer only adds "/ <name>" after it.
+                contentItem: Text {
+                    text: backLink.text
+                    verticalAlignment: Text.AlignVCenter
+                    color: backLink.hovered ? Theme.foreground : Theme.muted
+                    font.pixelSize: Theme.fontSettingsTitle
+                    font.weight: Font.DemiBold
                 }
             }
             Text {
