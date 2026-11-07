@@ -2244,6 +2244,19 @@ private Q_SLOTS:
         QCOMPARE(m_sync->pendingCount(), 100);
         m_sync->onNoteChanged(1, QStringLiteral("late note"));
         QCOMPARE(m_sync->pendingCount(), 100);
+
+        // A note for an event already sent never pushes out one that never got there.
+        m_sync.reset();
+        m_server->defaultPut = 201;
+        m_sync = makeSync();
+        // A hundred events go one after another: more than the default 5 s on a slow runner.
+        QTRY_COMPARE_WITH_TIMEOUT(m_sync->pendingCount(), 0, 60000);
+        const QList<QByteArray> stored = m_server->stored.keys();
+        for (int i = 2; i <= 101; ++i) {
+            const QByteArray uid = "sugo-" + QByteArray::number(i) + '-';
+            QVERIFY2(std::any_of(stored.cbegin(), stored.cend(), [&uid](const QByteArray &path) { return path.contains(uid); }),
+                     uid.constData());
+        }
     }
 
     void leftoverTestEventIsRemovedLater()
