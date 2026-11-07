@@ -196,7 +196,9 @@ QtObject {
     readonly property int clockSize: 128
     readonly property int clockSizeCompact: 88
     readonly property int cycleTrackWidth: 420
-    readonly property int cycleTrackHeight: 30
+    readonly property int cycleTrackHeight: 6
+    // The cycle in the composer: taller than the timer page's track, to resize its phases by their edges.
+    readonly property int cyclePreviewHeight: 12
     readonly property int cycleTrackGap: 3
     readonly property int composerWidth: 520
     readonly property int composerPadding: 10
