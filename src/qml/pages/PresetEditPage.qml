@@ -588,7 +588,7 @@ QQC2.Page {
                         objectName: "cyclePreview"
                         Layout.fillWidth: true
                         // Taller than the track, to grab it.
-                        implicitHeight: Theme.spaceXl
+                        implicitHeight: Theme.spaceLg
                         // A long set (up to 99 work phases) still fits: the gaps take at most half the
                         // row, the blocks' minimum width shrinks to their share of the rest, and the
                         // row clips what rounding leaves over.
