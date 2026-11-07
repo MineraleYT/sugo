@@ -212,17 +212,6 @@ QQC2.Page {
         resetDialog.open();
     }
 
-    function start(): void {
-        commitFields();
-        // Changes are saved first (Start is disabled meanwhile).
-        if (TimerEngine.active || modified) {
-            return;
-        }
-        PresetModel.currentUuid = uuid;
-        TimerEngine.start();
-        applicationWindow().navigate("timer");
-    }
-
     ConfirmDialog {
         id: discardDialog
         property var then: null
@@ -284,7 +273,7 @@ QQC2.Page {
 
     /// The window is too narrow for the list of the settings' categories beside the page.
     readonly property bool narrow: page.Window.width > 0 && page.Window.width < Theme.settingsNavBreakpoint
-    /// Too narrow for the timer's name in the header, and for the label of Start.
+    /// Too narrow for the timer's name in the header.
     readonly property bool compact: width < Theme.compactBreakpoint
     // The page's padding: less in a narrow window.
     readonly property real paddingX: narrow ? Theme.settingsBodyPaddingCompactX : Theme.settingsBodyPaddingX
@@ -369,48 +358,6 @@ QQC2.Page {
                 Layout.fillWidth: true
             }
 
-            // The changes to drop: a lit undo arrow, faded rather than hidden, so nothing moves.
-            SButton {
-                readonly property bool shown: page.isNew || page.modified
-                kind: "ghost"
-                iconOnly: true
-                iconName: "undo"
-                lit: shown
-                text: page.isNew ? i18n("Cancel") : i18n("Revert")
-                opacity: shown ? 1 : 0
-                enabled: shown
-                onClicked: page.requestClose()
-                Behavior on opacity { NumberAnimation { duration: Theme.durationShort } }
-            }
-            // A disabled button gets no hover events, so the wrapper says why it cannot start.
-            Item {
-                visible: !page.isNew
-                implicitWidth: startButton.implicitWidth
-                implicitHeight: startButton.implicitHeight
-                HoverHandler {
-                    id: startHover
-                }
-                QQC2.ToolTip.visible: !startButton.enabled && startHover.hovered && startButton.blockedBy.length > 0
-                QQC2.ToolTip.text: startButton.blockedBy
-                QQC2.ToolTip.delay: Theme.toolTipDelay
-                SButton {
-                    id: startButton
-                    readonly property bool running: page.isCurrent && TimerEngine.active
-                    /// Why Start is disabled ("Running" says it for this timer).
-                    readonly property string blockedBy: running ? ""
-                        : TimerEngine.active ? i18n("Stop the timer to switch to a different timer.")
-                        : page.modified ? i18n("Save your changes to start this timer.")
-                        : ""
-                    anchors.fill: parent
-                    kind: running ? "ghost" : "secondary"
-                    iconOnly: page.compact
-                    iconName: running ? "dot" : "play"
-                    text: running ? i18n("Running") : i18n("Start")
-                    labels: [i18n("Start"), i18n("Running")]
-                    enabled: !TimerEngine.active && !page.modified
-                    onClicked: page.start()
-                }
-            }
             SButton {
                 visible: !page.isNew
                 kind: "ghost"
@@ -445,13 +392,36 @@ QQC2.Page {
                     onClicked: deleteDialog.open()
                 }
             }
-            // The per-timer actions stand apart from the action the page is for.
+            // The timer's own actions stand apart from what is done with its changes.
             Rectangle {
                 visible: !page.isNew
                 Layout.preferredWidth: Theme.hairline
                 Layout.preferredHeight: Theme.controlHeight - Theme.spaceMd * 2
                 Layout.alignment: Qt.AlignVCenter
                 color: Theme.border
+            }
+            // The changes, together: back to the default values (a built-in timer only), back to
+            // what is stored, and Save.
+            SButton {
+                objectName: "resetButton"
+                visible: page.preset.builtin === true
+                kind: "ghost"
+                iconOnly: true
+                iconName: "refresh"
+                text: i18n("Reset to Defaults")
+                onClicked: page.requestReset()
+            }
+            // Always there, lit only when there is something to take back, so nothing moves.
+            SButton {
+                objectName: "revertButton"
+                readonly property bool active: page.isNew || page.modified
+                kind: "ghost"
+                iconOnly: true
+                iconName: "undo"
+                lit: active
+                text: page.isNew ? i18n("Cancel") : i18n("Revert")
+                enabled: active
+                onClicked: page.requestClose()
             }
             SButton {
                 kind: "primary"
@@ -910,15 +880,6 @@ QQC2.Page {
                         checked: page.shown.notifyOnEnd
                     }
                 }
-            }
-
-            SButton {
-                visible: page.preset.builtin === true
-                Layout.topMargin: Theme.spaceLg
-                kind: "ghost"
-                iconName: "undo"
-                text: i18n("Reset to Defaults")
-                onClicked: page.requestReset()
             }
         }
     }
