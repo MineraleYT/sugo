@@ -1300,7 +1300,9 @@ void CalendarSync::onNoteChanged(qint64 sessionId, const QString &note)
     }
     for (Pending &sent : m_sent) {
         if (sent.record.id == sessionId) {
-            if (sent.record.note == note) {
+            // With the queue full, the note waits rather than push out an event never sent:
+            // the sent copy keeps its old note, so the next change of it is tried again.
+            if (sent.record.note == note || m_queue.size() >= kMaxQueue) {
                 return;
             }
             sent.record.note = note;
