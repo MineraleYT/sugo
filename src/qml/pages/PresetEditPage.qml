@@ -369,18 +369,18 @@ QQC2.Page {
                 Layout.fillWidth: true
             }
 
-            // Only while there is something to drop; faded rather than hidden, so nothing moves.
-            // Its room, when it is faded, is the end of the title's.
+            // The changes to drop: a lit undo arrow, faded rather than hidden, so nothing moves.
             SButton {
                 readonly property bool shown: page.isNew || page.modified
                 kind: "ghost"
-                text: page.isNew ? i18n("Cancel") : i18n("Discard")
+                iconOnly: true
+                iconName: "undo"
+                lit: shown
+                text: page.isNew ? i18n("Cancel") : i18n("Revert")
                 opacity: shown ? 1 : 0
                 enabled: shown
                 onClicked: page.requestClose()
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durationShort }
-                }
+                Behavior on opacity { NumberAnimation { duration: Theme.durationShort } }
             }
             // A disabled button gets no hover events, so the wrapper says why it cannot start.
             Item {
@@ -445,8 +445,18 @@ QQC2.Page {
                     onClicked: deleteDialog.open()
                 }
             }
+            // The per-timer actions stand apart from the action the page is for.
+            Rectangle {
+                visible: !page.isNew
+                Layout.preferredWidth: Theme.hairline
+                Layout.preferredHeight: Theme.controlHeight - Theme.spaceMd * 2
+                Layout.alignment: Qt.AlignVCenter
+                color: Theme.border
+            }
             SButton {
                 kind: "primary"
+                iconOnly: true
+                iconName: "save"
                 text: page.isNew ? i18n("Create Timer") : i18n("Save")
                 enabled: page.canSave
                 onClicked: page.save()
