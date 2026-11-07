@@ -1439,6 +1439,27 @@ private Q_SLOTS:
         QCOMPARE(m_sync->pendingCount(), 0);
     }
 
+    void noteUpdateAfterRestartResendsSameUid()
+    {
+        configureCustom();
+        m_sync->setIncludeNote(true);
+        m_sync->enqueueWorkSession(record(9));
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QCOMPARE(m_server->count("PUT"), 1);
+        QVERIFY(!m_server->of("PUT").first().body.contains("DESCRIPTION"));
+
+        // What was sent is remembered across a restart, so the note still reaches the event.
+        m_sync.reset();
+        m_sync = makeSync();
+        m_sync->onNoteChanged(9, QStringLiteral("wrote the report, finally"));
+        QCOMPARE(m_sync->pendingCount(), 1);
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        const auto puts = m_server->of("PUT");
+        QCOMPARE(puts.size(), 2);
+        QCOMPARE(puts.at(1).path, puts.at(0).path);
+        QVERIFY(puts.at(1).body.contains("DESCRIPTION:wrote the report\\, finally"));
+    }
+
     void noteUpdatesQueuedItem()
     {
         configureCustom();

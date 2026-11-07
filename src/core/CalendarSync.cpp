@@ -37,6 +37,7 @@ const char kCalendarName[] = "CalendarName";
 const char kIncludeNote[] = "IncludeNote";
 const char kQueueGroup[] = "CalendarQueue";
 const char kQueuePending[] = "Pending";
+const char kQueueSent[] = "Sent";
 const char kQueueLeftoverTests[] = "LeftoverTests";
 
 /// Settings that belong to one provider; they live in the subgroup named after it.
@@ -653,6 +654,28 @@ void CalendarSync::loadQueue()
             m_queue.append(item);
         }
     }
+    const QJsonArray sent = QJsonDocument::fromJson(m_config->value(settingsKey(group, kQueueSent)).toString().toUtf8()).array();
+    for (const QJsonValue &value : sent) {
+        const QJsonObject o = value.toObject();
+        Pending item;
+        item.uid = o.value(QLatin1String("uid")).toString();
+        item.account = o.value(QLatin1String("account")).toString();
+        SessionRecord &r = item.record;
+        r.id = o.value(QLatin1String("id")).toInteger();
+        r.kind = SessionKind::Work;
+        r.startedAtMs = o.value(QLatin1String("startedAtMs")).toInteger();
+        r.endedAtMs = o.value(QLatin1String("endedAtMs")).toInteger();
+        r.durationSec = o.value(QLatin1String("durationSec")).toInt();
+        r.plannedSec = o.value(QLatin1String("plannedSec")).toInt();
+        r.completed = true;
+        r.presetUuid = o.value(QLatin1String("presetUuid")).toString();
+        r.presetName = o.value(QLatin1String("presetName")).toString();
+        r.category = o.value(QLatin1String("category")).toString();
+        r.note = o.value(QLatin1String("note")).toString();
+        if (!item.uid.isEmpty() && !item.account.isEmpty() && m_sent.size() < kMaxSent) {
+            m_sent.append(item);
+        }
+    }
     const QJsonArray leftovers =
         QJsonDocument::fromJson(m_config->value(settingsKey(group, kQueueLeftoverTests)).toString().toUtf8()).array();
     for (const QJsonValue &value : leftovers) {
@@ -681,6 +704,23 @@ void CalendarSync::saveQueue()
             {QStringLiteral("note"), r.note},
         });
     }
+    QJsonArray sent;
+    for (const Pending &item : std::as_const(m_sent)) {
+        const SessionRecord &r = item.record;
+        sent.append(QJsonObject{
+            {QStringLiteral("uid"), item.uid},
+            {QStringLiteral("account"), item.account},
+            {QStringLiteral("id"), r.id},
+            {QStringLiteral("startedAtMs"), r.startedAtMs},
+            {QStringLiteral("endedAtMs"), r.endedAtMs},
+            {QStringLiteral("durationSec"), r.durationSec},
+            {QStringLiteral("plannedSec"), r.plannedSec},
+            {QStringLiteral("presetUuid"), r.presetUuid},
+            {QStringLiteral("presetName"), r.presetName},
+            {QStringLiteral("category"), r.category},
+            {QStringLiteral("note"), r.note},
+        });
+    }
     QJsonArray leftovers;
     for (const auto &leftover : std::as_const(m_leftoverTests)) {
         leftovers.append(QJsonObject{{QStringLiteral("uid"), leftover.uid},
@@ -692,6 +732,11 @@ void CalendarSync::saveQueue()
         m_config->remove(settingsKey(group, kQueuePending));
     } else {
         m_config->setValue(settingsKey(group, kQueuePending), QString::fromUtf8(QJsonDocument(pending).toJson(QJsonDocument::Compact)));
+    }
+    if (sent.isEmpty()) {
+        m_config->remove(settingsKey(group, kQueueSent));
+    } else {
+        m_config->setValue(settingsKey(group, kQueueSent), QString::fromUtf8(QJsonDocument(sent).toJson(QJsonDocument::Compact)));
     }
     if (leftovers.isEmpty()) {
         m_config->remove(settingsKey(group, kQueueLeftoverTests));
