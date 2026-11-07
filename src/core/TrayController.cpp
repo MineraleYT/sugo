@@ -78,7 +78,7 @@ void strokeProgress(QPainter &p, const QPainterPath &path, const QColor &color, 
 ///   * style 0: a border that fills clockwise as the phase runs and the remaining minutes,
 ///   * style 1: a fill rising from the bottom and the remaining minutes,
 ///   * style 2: the icon's spiral filling from its centre, without numbers.
-QIcon trayIcon(int minutes, int badgeStyle, double progressRatio, bool isWork, bool isPaused,
+QIcon trayIcon(int minutes, int badgeStyle, double progressRatio, bool isPaused,
                const QColor &primary)
 {
     if (minutes < 0) {
@@ -346,7 +346,7 @@ void TrayController::refresh()
         // The phase colour, from the same shades the interface (TrayBadge.qml) reads.
         const QColor primary = isWork ? TrayIconStyle::workBadgeColor(accent)
                                       : TrayIconStyle::breakBadgeColor(accent);
-        const QIcon icon = trayIcon(m_badgeMinutes, badgeStyle, progressStep / 200.0, isWork, isPaused,
+        const QIcon icon = trayIcon(m_badgeMinutes, badgeStyle, progressStep / 200.0, isPaused,
                                     primary);
         m_item->setIcon(icon);
     }
