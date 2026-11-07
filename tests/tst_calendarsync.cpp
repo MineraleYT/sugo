@@ -1605,6 +1605,35 @@ private Q_SLOTS:
         QCOMPARE(m_sync->calendarUrl(), QStringLiteral("https://elsewhere.example.com/cal/x"));
     }
 
+    void anotherHostForgetsThePassword()
+    {
+        // The password belongs to the account, and the account includes the calendar's host:
+        // another host is another server, which must not be sent the old password.
+        m_sync->setProvider(QStringLiteral("caldav"));
+        m_sync->setServerUrl(QStringLiteral("https://dav.example.net"));
+        m_sync->setUsername(QStringLiteral("alice"));
+        m_sync->setPassword(QStringLiteral("old-password"));
+        m_sync->setCalendarUrl(QStringLiteral("https://dav.example.net/cal/personal/"));
+        QVERIFY(m_sync->hasPassword());
+
+        // Another calendar on the same host is the same account: the password stays.
+        m_sync->setCalendarUrl(QStringLiteral("https://dav.example.net/cal/work/"));
+        QVERIFY(m_sync->hasPassword());
+
+        // Another host is another account: the password is forgotten, and the view is told.
+        QSignalSpy passwordChanged(m_sync.get(), &CalendarSync::hasPasswordChanged);
+        m_sync->setCalendarUrl(QStringLiteral("https://altro.example/cal/personal/"));
+        QVERIFY(!m_sync->hasPassword());
+        QCOMPARE(passwordChanged.count(), 1);
+
+        // The same when the server address itself moves to another host.
+        m_sync->setPassword(QStringLiteral("old-password"));
+        QVERIFY(m_sync->hasPassword());
+        m_sync->setServerUrl(QStringLiteral("https://terzo.example"));
+        QVERIFY(!m_sync->hasPassword());
+        QCOMPARE(passwordChanged.count(), 2);
+    }
+
     void passwordIsNotSentWhenTheServerChangedUnderTheCalendar()
     {
         // Nextcloud on the fake server, then the server address is edited to another host:

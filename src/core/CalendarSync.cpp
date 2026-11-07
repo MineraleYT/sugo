@@ -215,6 +215,13 @@ QString forbiddenTooOften()
                 "the connection.",
                 kForbiddenBeforePause);
 }
+
+/// The host a stored password belongs to: the calendar's, or the server's while no calendar is
+/// chosen. Empty when neither is set, i.e. when there is no account to forget yet.
+QString passwordHost(const QString &calendarUrl, const QString &serverUrl)
+{
+    return QUrl(calendarUrl.isEmpty() ? serverUrl : calendarUrl).host().toLower();
+}
 } // namespace
 
 // ---------------------------------------------------------------------------------------------
@@ -810,6 +817,7 @@ void CalendarSync::setServerUrl(const QString &url)
     if (normalized == m_serverUrl) {
         return;
     }
+    const QString oldHost = passwordHost(m_calendarUrl, m_serverUrl);
     m_serverUrl = normalized;
     m_calendars.clear();
     m_calendarsFresh = QDeadlineTimer();
@@ -825,6 +833,15 @@ void CalendarSync::setServerUrl(const QString &url)
     if (hadCalendar) {
         Q_EMIT calendarUrlChanged();
         Q_EMIT calendarNameChanged();
+    }
+    // Another host is another account: the password of the old one is not sent to it.
+    const QString newHost = passwordHost(m_calendarUrl, m_serverUrl);
+    if (!oldHost.isEmpty() && newHost != oldHost) {
+        const bool hadPassword = hasPassword();
+        storePassword(QString());
+        if (hadPassword) {
+            Q_EMIT hasPasswordChanged();
+        }
     }
     credentialsChanged();
 }
@@ -868,12 +885,22 @@ void CalendarSync::setCalendarUrl(const QString &url)
     if (normalized == m_calendarUrl) {
         return;
     }
+    const QString oldHost = passwordHost(m_calendarUrl, m_serverUrl);
     m_calendarUrl = normalized;
     m_calendarName.clear();
     save(kCalendarUrl, normalized);
     save(kCalendarName, QString());
     Q_EMIT calendarUrlChanged();
     Q_EMIT calendarNameChanged();
+    // Another host is another account: the password of the old one is not sent to it.
+    const QString newHost = passwordHost(m_calendarUrl, m_serverUrl);
+    if (!oldHost.isEmpty() && newHost != oldHost) {
+        const bool hadPassword = hasPassword();
+        storePassword(QString());
+        if (hadPassword) {
+            Q_EMIT hasPasswordChanged();
+        }
+    }
     credentialsChanged();
 }
 
