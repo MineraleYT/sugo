@@ -196,7 +196,7 @@ QtObject {
     readonly property int clockSize: 128
     readonly property int clockSizeCompact: 88
     readonly property int cycleTrackWidth: 420
-    readonly property int cycleTrackHeight: 6
+    readonly property int cycleTrackHeight: 10
     readonly property int cycleTrackGap: 3
     readonly property int composerWidth: 520
     readonly property int composerPadding: 10
