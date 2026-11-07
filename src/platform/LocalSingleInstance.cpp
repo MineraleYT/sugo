@@ -111,7 +111,10 @@ QString LocalSingleInstance::defaultDirectory()
         return dataDir;
     }
 #ifdef Q_OS_MACOS
-    return QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    // Next to the database, the settings and the keychain handoff: the lock must outlive the
+    // system's cleanup of temporary files, or a later launch would find no lock and become a
+    // second primary on the same database.
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/sugo");
 #else
     const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
     if (!runtime.isEmpty() && QFileInfo(runtime).isDir()) {
