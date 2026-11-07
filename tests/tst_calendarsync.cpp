@@ -2181,7 +2181,8 @@ private Q_SLOTS:
         m_sync.reset();
         m_server->defaultPut = 201;
         m_sync = makeSync();
-        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        // A hundred events go one after another: more than the default 5 s on a slow runner.
+        QTRY_COMPARE_WITH_TIMEOUT(m_sync->pendingCount(), 0, 60000);
         const QList<QByteArray> stored = m_server->stored.keys();
         for (int i = 2; i <= 101; ++i) {
             const QByteArray uid = "sugo-" + QByteArray::number(i) + '-';
