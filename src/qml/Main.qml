@@ -1014,6 +1014,19 @@ QQC2.ApplicationWindow {
                          + typedWork + ", \"abc7\" over " + restoredWork + " gave " + typedText);
                     return true;
                 }
+                // A step (arrow keys, wheel) starts from what is typed, brought into range: a number
+                // above the maximum, not yet committed, steps down from the maximum.
+                const workInput = findItem(workField, item => item.cursorPosition !== undefined);
+                workInput.text = String(workField.to + 21);
+                workField.step(-1);
+                const steppedWork = workField.value;
+                const steppedText = workInput.text;
+                typedValue(workField, String(workBefore));
+                if (steppedWork !== workField.to - 1 || steppedText !== String(workField.to - 1)) {
+                    fail(64, "A step did not start from the number typed: " + (workField.to + 21) + " and a step down gave "
+                         + steppedWork + " (\"" + steppedText + "\"), expected " + (workField.to - 1));
+                    return true;
+                }
                 // The longest set: its preview lays out on the next tick.
                 const cyclesField = findItem(editor, item => item.objectName === "cyclesField");
                 if (!cyclesField) {
