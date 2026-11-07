@@ -42,7 +42,7 @@
       <description>
         <p>A new look: a title bar with the timer, statistics and settings, and a composer to choose the timer and start it.</p>
         <ul>
-          <li>Choose an accent colour, used by the main buttons, switches, sliders and the cycle track</li>
+          <li>Choose an accent colour, used by the main buttons, switches, sliders, the cycle track and the running badge in the menu bar</li>
           <li>Settings in categories beside the page, with a Timers category listing every timer and an About page</li>
           <li>Statistics with today's work time and sessions, the figures in one strip, quieter charts and the task notes of the shown period</li>
           <li>The update shows as a small icon in the title bar, and the search has the look of the menus</li>
