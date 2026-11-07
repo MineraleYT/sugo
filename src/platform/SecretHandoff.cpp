@@ -129,7 +129,13 @@ int handOver(SecretHandoffStore &store, const QString &path)
         return 0;
     }
     // Those still waiting (a start that could not write them all back) go on waiting with the new ones.
-    Secrets secrets = readFile(path).value_or(Secrets());
+    // A file that cannot be read may be the only copy of those: never replaced, and nothing
+    // moved (the next build asks, as before).
+    std::optional<Secrets> waiting = readFile(path);
+    if (!waiting) {
+        return 0;
+    }
+    Secrets secrets = std::move(*waiting);
     QStringList moved;
     for (const QString &key : *keys) {
         // Unreadable without asking (an item of an older build the user was never asked about,
