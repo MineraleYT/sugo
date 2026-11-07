@@ -176,7 +176,7 @@ QQC2.Page {
                     groups.push(group);
                 }
             }
-            group.timers.push({ uuid: uuid, index: i, name: preset.name || "", summary: timerSummary(preset) });
+            group.timers.push({ uuid: uuid, index: i, name: preset.name || "", summary: timerSummary(preset), icon: preset.iconName || "" });
         }
         if (other.timers.length > 0) {
             groups.push(other);
@@ -863,6 +863,13 @@ QQC2.Page {
         contentItem: RowLayout {
             id: timerRowContent
             spacing: Theme.spaceLg
+            // The timer's own icon, in the accent like the other accents of the interface.
+            TimerIcon {
+                visible: timerRow.timer.icon.length > 0
+                iconName: timerRow.timer.icon
+                size: Theme.iconMd
+                color: Theme.accent
+            }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.hairline

@@ -512,6 +512,7 @@ QQC2.Page {
                                 TimerIcon {
                                     iconName: presetRow.modelData.icon
                                     size: Theme.iconMd + Theme.spaceXs
+                                    color: Theme.accent
                                 }
                                 Text {
                                     text: presetRow.modelData.name

@@ -501,6 +501,7 @@ QQC2.Page {
                             anchors.centerIn: parent
                             iconName: iconBtn.modelData.iconName
                             size: Theme.iconLg - Theme.spaceXs
+                            color: Theme.accent
                         }
                     }
                     onClicked: {
@@ -734,6 +735,7 @@ QQC2.Page {
                                     anchors.verticalCenter: parent.verticalCenter
                                     iconName: page.selectedIcon
                                     size: Theme.iconMd
+                                    color: Theme.accent
                                 }
                                 LineIcon {
                                     anchors.verticalCenter: parent.verticalCenter
