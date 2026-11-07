@@ -21,7 +21,7 @@ permissions:
 jobs:
   build:
     name: Build AppImage (x86_64)
-    runs-on: ubuntu-24.04
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # The oldest system the AppImage is meant for (glibc 2.35), pinned like the actions.
     container:
       # ubuntu:22.04
