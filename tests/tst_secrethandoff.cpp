@@ -314,6 +314,27 @@ private Q_SLOTS:
         QVERIFY(m_keychain->items.isEmpty());
     }
 
+    void aHandOverDoesNotReplaceAFileItCannotRead()
+    {
+        // Still waiting, in a format of a newer Sugo (the user went back to an older one): the
+        // only copy of its secrets, so the handover leaves it, and the Keychain, as they are.
+        QVERIFY(QDir().mkpath(QFileInfo(m_path).absolutePath()));
+        const QByteArray waiting = R"({"format":2,"secrets":{"calendar-caldav":"waiting"}})";
+        QFile file(m_path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(waiting);
+        file.close();
+
+        BuildStore build(m_keychain, QStringLiteral("1.0.1"));
+        QVERIFY(build.write(syncToken, QStringLiteral("token")));
+        QCOMPARE(SecretHandoff::handOver(build, m_path), 0);
+
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QCOMPARE(file.readAll(), waiting);
+        file.close();
+        QCOMPARE(build.readWithoutAsking(syncToken), std::optional<QString>(QStringLiteral("token")));
+    }
+
     void anIsolatedRunHasNoHandoff()
     {
         qputenv("SUGO_DATA_DIR", m_dir->path().toLocal8Bit());
