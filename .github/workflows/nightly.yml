@@ -26,7 +26,7 @@ jobs:
     name: Version of this build
     # Only the branch testing becomes a nightly, also when the run is started by hand.
     if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/testing') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     # actions: read to look up this run (the date of the version) and, for a manual run, CI.
     permissions:
       contents: read
@@ -117,7 +117,7 @@ jobs:
     concurrency:
       group: nightly-publish
       cancel-in-progress: false
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
