@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTcpServer>
@@ -15,6 +16,7 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "CalendarSync.h"
 #include "FakeSecretStore.h"
@@ -175,6 +177,18 @@ public:
     bool noPersonal = false;
     QHash<QByteArray, QByteArray> stored;
     std::function<void(const Request &)> onRequest; ///< Called before each request is answered.
+    std::function<bool(const Request &)> hold;      ///< A request it returns true for waits for releaseHeld().
+    int heldCount() const { return int(m_held.size()); }
+    /// Answers the requests held so far, as they would have been answered now.
+    void releaseHeld()
+    {
+        const auto held = std::exchange(m_held, {});
+        for (const auto &[s, req] : held) {
+            if (s) {
+                respond(s, req);
+            }
+        }
+    }
 
 private:
     void onConnection()
@@ -219,6 +233,10 @@ private:
             requests.append(req);
             if (onRequest) {
                 onRequest(req);
+            }
+            if (hold && hold(req)) {
+                m_held.append({QPointer<QTcpSocket>(s), req});
+                continue;
             }
             respond(s, req);
         }
@@ -324,6 +342,7 @@ private:
 
     QTcpServer m_server;
     QHash<QTcpSocket *, QByteArray> m_buffers;
+    QList<std::pair<QPointer<QTcpSocket>, Request>> m_held;
     QElapsedTimer m_clock;
 };
 
@@ -1065,6 +1084,34 @@ private Q_SLOTS:
         QTest::qWait(100);
         QVERIFY(m_sync->isSendingPaused());
         QCOMPARE(m_server->count("PUT"), 3); // nothing sent again with the credentials in doubt
+    }
+
+    void anEventAcceptedWhilePausedLiftsThePause()
+    {
+        // An event is on its way when three refused tests pause sending; the server then takes
+        // that event: the pause is lifted and the events waiting behind it go too.
+        configureCustom();
+        m_server->hold = [](const FakeServer::Request &req) {
+            return req.method == "PUT" && !req.path.contains("sugo-test-");
+        };
+        m_sync->enqueueWorkSession(record(1));
+        QTRY_COMPARE(m_server->heldCount(), 1);
+        m_server->hold = nullptr;
+        m_sync->enqueueWorkSession(record(2));
+        m_server->defaultPut = 403;
+        for (int i = 0; i < 3; ++i) {
+            m_sync->testConnection();
+            QTRY_COMPARE(m_sync->status(), CalendarSync::Failed);
+        }
+        QVERIFY(m_sync->isSendingPaused());
+        QCOMPARE(m_sync->pendingCount(), 2);
+
+        m_server->defaultPut = 201;
+        m_server->releaseHeld();
+        QTRY_COMPARE(m_sync->pendingCount(), 0);
+        QVERIFY(!m_sync->isSendingPaused());
+        QTRY_COMPARE(m_sync->status(), CalendarSync::Ready);
+        QCOMPARE(m_server->count("PUT"), 5); // the held one, three tests, the second event
     }
 
     void put403IsTheCalendarRefusingNotTheLogin()
