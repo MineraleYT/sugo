@@ -1437,6 +1437,8 @@ void CalendarSync::onSendFinished(const Result &r, bool credentialsChangedMeanwh
             m_queue.removeAt(index);
         }
         m_retryStep = 0;
+        // The server took an event: a pause set meanwhile (refused tests, a lookup) is over.
+        m_paused = false;
         m_forbiddenStreak = 0;
         m_sendFailing = false;
         m_lastSuccess = QDateTime::currentDateTime();
